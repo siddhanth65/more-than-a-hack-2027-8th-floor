@@ -40,3 +40,12 @@ def test_half_runs():
 def test_distance_to_line():
     d = distance_to_line(np.array([[0.0, 0.0], [50.0, 0.0], [0.0, 33.0]]), (105.0, 68.0))
     assert d.tolist() == pytest.approx([34.0, 2.5, 1.0])
+
+
+def test_half_runs_rejects_non_contiguous():
+    with pytest.raises(ValueError):
+        half_runs(np.array([1, 1, 0, 1, 1], np.int8))
+
+
+def test_half_runs_empty():
+    assert half_runs(np.zeros(5, np.int8)) == []

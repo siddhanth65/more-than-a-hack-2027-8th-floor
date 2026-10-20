@@ -44,11 +44,16 @@ def speeds_from_positions(pos, fps):
 
 
 def half_runs(half):
-    """[(half_id, start, stop)] half-open spans of each graded half, in order."""
+    """[(half_id, start, stop)] half-open spans of each graded half, in order.
+
+    Each half must be one contiguous block; raises ValueError otherwise.
+    """
     half = np.asarray(half)
     out = []
     for h in sorted(set(half[half > 0].tolist())):
         idx = np.flatnonzero(half == h)
+        if len(idx) != idx[-1] - idx[0] + 1:
+            raise ValueError(f"half {h} is not contiguous")
         out.append((int(h), int(idx[0]), int(idx[-1]) + 1))
     return out
 
