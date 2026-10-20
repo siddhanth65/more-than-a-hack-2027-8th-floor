@@ -26,11 +26,20 @@ def transition_matrix(p):
 
 
 def cost_matrix(evidence, p):
+    """Each stream is centred per frame over the states it has an opinion on, so a state it is
+    silent about costs the same as its average opinion; this is what makes NaN mean
+    'no opinion' rather than 'free'."""
     F = next(iter(evidence.values())).shape[0]
     C = np.zeros((F, 3), np.float64)
     for k, ev in evidence.items():
         w = p.weights.get(k, 1.0) / max(1.0, p.lengths.get(k, 1.0))
-        C -= w * np.nan_to_num(ev.astype(np.float64), nan=0.0)
+        e = ev.astype(np.float64)
+        fin = np.isfinite(e)
+        n = fin.sum(1)
+        with np.errstate(invalid="ignore", divide="ignore"):
+            mean = np.where(fin, e, 0.0).sum(1) / np.maximum(n, 1)
+        centred = np.where(fin, e - mean[:, None], 0.0)   # NaN = "average opinion" for that frame
+        C -= w * centred
     return C
 
 
