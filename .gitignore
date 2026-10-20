@@ -1,0 +1,11 @@
+data/
+*.mp4
+*.csv
+!docs/**/*.csv
+__pycache__/
+*.pyc
+.venv/
+runs/
+*.parquet
+*.npz
+*.pkl
