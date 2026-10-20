@@ -1,4 +1,4 @@
-"""Standalone DFL/Sportec match parser -> mtah dfl_proxy npz layout (raw, ball_*, no event arrays).
+"""Standalone DFL/Sportec match parser -> mtah dfl_proxy npz layout (raw, ball_*, plus the event arrays truth, poss_only, actor_pid).
 
 Usage: python scripts/parse_dfl_match.py DFL-MAT-J03WR9 RAW_DIR OUT_DIR [syn_id]
 Logic copied from football-synthesizer/tools/tactical/fp1d_dfl.py (build_match), tracking part only.

@@ -76,6 +76,8 @@ def test_run_selection_smoke(tmp_path, monkeypatch):
             "count_ratios", "bar_pass"} <= set(bar)
     assert "seed_sd" in b and "baseline_used" in b
     assert json.loads((out / "drift_reference.json").read_text())
+    assert (out / "config.json").exists() and (out / "dead_model.joblib").exists()   # candidate artefacts at registration
+    assert json.loads((out / "registration.json").read_text())["lengths_mode"] == sel.LENGTHS_MODE
     # resume: a second run reuses the fold tables
     r2 = mod.run_selection(sim_dir, seeds, out)
     assert r2["best_cell"] == best and sorted(r2["resumed_folds"]) == [9001, 9002, 9003]
@@ -237,11 +239,18 @@ def test_sealed_main_defaults_out_to_best_from_and_guards_registration(tmp_path,
     b["spec_bar"]["bar_pass"] = True; (out / "best.json").write_text(json.dumps(b))
     argv = ["select_lomo", "--sim", str(sim_dir), "--seeds", "100", "101", "--sealed", "--best-from", str(out)]
     monkeypatch.setattr(sys, "argv", argv)
+    before = ((out / "config.json").read_bytes(), (out / "dead_model.joblib").read_bytes())
+    trained = []
+    orig_td = mod.train_dead
+    monkeypatch.setattr(mod, "train_dead", lambda *a, **k: trained.append(1) or orig_td(*a, **k))
     mod.main()
+    assert trained == []   # the sealed path loads the registered artefacts, it never retrains
+    assert before == ((out / "config.json").read_bytes(), (out / "dead_model.joblib").read_bytes())
     assert (out / "config.json").exists() and (out / "dead_model.joblib").exists()   # M3: --out defaulted to --best-from
     log = readlog.read_log("sealed")
     reg = json.loads((out / "registration.json").read_text())
     assert len(log) == 1 and log[0]["registration"] == mod.registration_id(reg) and log[0]["match"] == SEALED_MATCH
+    assert log[0]["select_dir"] == out.name   # outside the repo: basename only
     assert log[0]["forced"] is False and log[0]["force_reason"] is None and set(log[0]["sealed"]) == set(b["scores"])
     with pytest.raises(SystemExit, match="already read"):
         mod.main()

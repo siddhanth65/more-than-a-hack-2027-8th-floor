@@ -17,13 +17,14 @@ import pandas as pd
 from mtah import baselines
 from mtah.eval.drift import blackout_mask_from_match, drift_report
 from mtah.eval.scorer import OFFICIAL_PATH, score
+from mtah.evidence.dead import DeadModel
 from mtah.evidence.pathcrf import PathCRFParams
 from mtah.io import readlog
 from mtah.io.metrica_loader import load_tactical
 from mtah.io.tags import load_tags
 from mtah.pipeline import PipelineConfig, compute_evidence, compute_strong, predict
 import mtah.select as sel
-from mtah.select import (REAL_D_SHARE_BAND, apply_cell, choose_plausible, estimate_lengths, is_real_plausible, mean_rank,
+from mtah.select import (LENGTHS_MODE, REAL_D_SHARE_BAND, apply_cell, choose_plausible, estimate_lengths, is_real_plausible, mean_rank,
                          score_cell, train_dead)
 from mtah.sim.dataset import SEALED_MATCH, VARIANTS, list_sim_keys, load_half_sim, lomo_folds, match_id
 
@@ -133,17 +134,19 @@ def compute_bar(allf, halves, best, best_i):
     return bar, base_rows
 
 
-def real_plausibility(sim_dir, seeds, keys, base, grid, ranked, data_dir, out, top_k=REAL_TOP_K):
+def real_plausibility(sim_dir, seeds, keys, base, grid, ranked, data_dir, out, top_k=REAL_TOP_K, shared=None):
     """Decode the top-k cells (by mean rank) on the real match; label-free drift metrics per cell.
 
     Dead models (one per needed policy) and lengths come from ALL non-sealed sim halves, as in the sealed/candidate
-    path. Writes summary_real.csv; returns {cell index: {metric: value, "real_plausible": bool, ...}}."""
+    path. If `shared` is a dict it receives {"lengths", "dead"} so registration reuses them. Writes summary_real.csv; returns {cell index: {metric: value, "real_plausible": bool, ...}}."""
     top = [int(c) for c in ranked["cell"].head(top_k)]
     train = load_sims(sim_dir, seeds, keys)
     lengths = estimate_lengths(train, base, train_dead)
     cfgs = policy_cfgs(base, [grid[i] for i in top], lengths)
     dead = {p: train_dead(train, policy=p) for p in cfgs}
     del train
+    if shared is not None:
+        shared.update(lengths=lengths, dead=dead)
     m = load_tactical(data_dir); tags = load_tags(data_dir); mask = blackout_mask_from_match(m)
     ev = {p: compute_evidence(m, tags, cfg, dead[p], cache_key="real_tactical") for p, cfg in cfgs.items()}
     strong = compute_strong(m, next(iter(cfgs.values())))
@@ -161,6 +164,24 @@ def real_plausibility(sim_dir, seeds, keys, base, grid, ranked, data_dir, out, t
     print(f"REAL-MATCH PLAUSIBILITY (top {len(top)}; plausible = non_blackout_D_share in {list(REAL_D_SHARE_BAND)})")
     print(tab.to_string(index=False), flush=True)
     return plaus
+
+
+def write_candidate_artifacts(out, base, best_cell, lengths, dead):
+    """config.json (selected PipelineConfig + lengths) and dead_model.joblib (chosen policy, all non-sealed keys):
+    the one artefact pair used by make_candidate.py AND the sealed read."""
+    cfg = apply_cell(base, best_cell); cfg.decoder.lengths = lengths
+    dead.save(out / "dead_model.joblib")
+    (out / "config.json").write_text(json.dumps({**cfg.to_dict(), "lengths": lengths}, indent=1))
+
+
+def load_candidate_artifacts(sel_dir):
+    """(cfg, dead, lengths) from a selection dir's config.json + dead_model.joblib."""
+    cp, dp = Path(sel_dir) / "config.json", Path(sel_dir) / "dead_model.joblib"
+    if not cp.exists() or not dp.exists():
+        raise SystemExit(f"{sel_dir} lacks config.json/dead_model.joblib (written at registration); rerun the selection")
+    raw = json.loads(cp.read_text()); lengths = raw.pop("lengths")
+    cfg = PipelineConfig.from_dict(raw); cfg.decoder.lengths = lengths
+    return cfg, DeadModel.load(dp), lengths
 
 
 GRID_PARAM_COLS = ("tau_HA", "tau_D", "w_dead", "aba_s", "w_pathcrf", "dead_policy")
@@ -241,6 +262,7 @@ def run_grid(sim_dir, seeds, keys, base, out, grid, real_data_dir=None, grid_nam
             for v in VARIANTS:
                 row[v] = res[v]["spell_f1"]; row[f"{v}_ratio"] = res[v]["ratio"]
             rows.append(row)
+        meta_path.write_text(json.dumps(fp))   # before any fold CSV: a crash then recomputes instead of refusing
         pd.concat(halves).to_csv(halves_csv, index=False)
         brows = []
         for name, fn in BASELINES.items():
@@ -254,7 +276,6 @@ def run_grid(sim_dir, seeds, keys, base, out, grid, real_data_dir=None, grid_nam
         pd.DataFrame(brows).to_csv(out / f"fold_{held}_baselines.csv", index=False)
         df = pd.DataFrame(rows); df["held"] = held; df["lengths"] = json.dumps(lengths)
         df.to_csv(fold_csv, index=False); fold_tables.append(df)
-        meta_path.write_text(json.dumps(fp))
         grid_rows = df[~df["cell"].isin(list(BASELINES))]
         print(f"fold {held} done; best ctrl_Dfull {grid_rows['ctrl_Dfull'].max():.3f}", flush=True)
     allf = pd.concat(fold_tables)
@@ -263,9 +284,9 @@ def run_grid(sim_dir, seeds, keys, base, out, grid, real_data_dir=None, grid_nam
     cells = gcells.groupby("cell")[list(VARIANTS) + [f"{v}_ratio" for v in VARIANTS]].mean().reset_index()
     ranked = mean_rank(cells, list(VARIANTS)); ranked.to_csv(out / "summary.csv", index=False)
     print(ranked.head(top_k).to_string())
-    plaus = None
+    plaus = None; shared = {}
     if real_data_dir is not None:
-        plaus = real_plausibility(sim_dir, seeds, keys, base, grid, ranked, real_data_dir, out, top_k=top_k)
+        plaus = real_plausibility(sim_dir, seeds, keys, base, grid, ranked, real_data_dir, out, top_k=top_k, shared=shared)
         best_i = choose_plausible(ranked, plaus)
     else:
         best_i = int(ranked.iloc[0]["cell"])
@@ -281,6 +302,15 @@ def run_grid(sim_dir, seeds, keys, base, out, grid, real_data_dir=None, grid_nam
     print("SPEC BAR", json.dumps(bar, indent=1))
     ref = out_of_sample_drift_reference(sim_dir, seeds, keys, base, best_cell, lengths_by_fold, dead_by_fold)
     (out / "drift_reference.json").write_text(json.dumps(ref, indent=1))
+    cbase = base_for_grid([best_cell])   # PathCRF only if the chosen cell weights it
+    policy = best_cell.get("dead_policy", "full")
+    if shared and policy in shared["dead"]:
+        c_lengths, c_dead = shared["lengths"], shared["dead"][policy]   # already trained by the plausibility step
+    else:
+        c_train = load_sims(sim_dir, seeds, keys)
+        c_lengths = estimate_lengths(c_train, cbase, train_dead); c_dead = train_dead(c_train, policy=policy)
+        del c_train
+    write_candidate_artifacts(out, cbase, best_cell, c_lengths, c_dead)
     selection = "mean rank over 4 variants, tie ctrl_Dfull"
     if plaus is not None:
         selection += (f"; highest-ranked real-plausible cell among the top {top_k} "
@@ -295,7 +325,7 @@ def run_grid(sim_dir, seeds, keys, base, out, grid, real_data_dir=None, grid_nam
            "use_pathcrf": bool(base.use_pathcrf), "pathcrf_threads": int(base.pathcrf.threads),
            "real_plausibility": real_json, "chosen_real_plausible": chosen_real_plausible,
            "pathcrf_train_matches": [9001, 9002, 9003, 9004, 9005], "pathcrf_val": 9006, "clean": 9007,
-           "sealed_match": SEALED_MATCH}
+           "sealed_match": SEALED_MATCH, "lengths_mode": LENGTHS_MODE}
     (out / "registration.json").write_text(json.dumps(reg, indent=1))
     (out / "best.json").write_text(json.dumps({"cell": best_cell, "cell_index": best_i, "chosen_rank": chosen_rank,
                                                "scores": {v: best[v] for v in VARIANTS},
@@ -337,6 +367,15 @@ def run_pilot(args, keys, base, grid):
         print(f"  tau_HA={a:>4} tau_D={d:>4} w_dead={w:>3}  n_pred/n_gt={r['ratio']:.3f}  spell_f1={r['spell_f1']:.3f}", flush=True)
 
 
+def _repo_rel(path):
+    """Path relative to the repo root when inside it (tracked log hygiene), else the basename."""
+    p = Path(path).resolve()
+    try:
+        return p.relative_to(ROOT).as_posix()
+    except ValueError:
+        return p.name
+
+
 def registration_id(reg):
     """Identity of a registration: grid name, seeds, and sha256 of registration.json's best_cell/grid_size/seeds."""
     core = {"best_cell": reg.get("best_cell"), "grid_size": reg.get("grid_size"), "seeds": reg.get("seeds")}
@@ -347,8 +386,8 @@ def registration_id(reg):
 def check_sealed_guard(reg_id, force_reason=None, match=SEALED_MATCH):
     """Refuse a second read of the sealed match for the same registration (docs/reads/sealed.jsonl, tracked) unless
     --force-sealed REASON is given. Returns the earlier reads of this registration (empty when it is the first)."""
-    prev = [e for e in readlog.read_log("sealed")
-            if e.get("registration") == reg_id and int(e.get("match", SEALED_MATCH)) == int(match)]
+    prev = [e for e in readlog.read_log("sealed")   # legacy entries without a `match` field are skipped (a1 was a 9006 read)
+            if e.get("registration") == reg_id and "match" in e and int(e["match"]) == int(match)]
     if prev and not force_reason:
         raise SystemExit(f"refusing sealed read: registration {reg_id['grid']} seeds {reg_id['seeds']} "
                          f"sha256 {reg_id['sha256'][:12]} already read {len(prev)}x ({prev[-1].get('time')}); "
@@ -438,16 +477,16 @@ def main():
         reg_id = registration_id(reg)
         failed = check_bar_gate(best, args.force_sealed)
         prev = check_sealed_guard(reg_id, args.force_sealed)
-        base = base_for_grid([best_cell])   # PathCRF only if the chosen cell weights it
-        policy = best_cell.get("dead_policy", "full")
-        train = load_sims(args.sim, args.seeds, keys); dead = train_dead(train, policy=policy)
-        lengths = estimate_lengths(train, base, train_dead)
-        cfg = apply_cell(base, best_cell); cfg.decoder.lengths = lengths
+        cfg, dead, lengths = load_candidate_artifacts(sel_dir)   # byte-identical to what make_candidate.py uses
+        for name in ("config.json", "dead_model.joblib"):
+            if not (out / name).exists() or (out / name).read_bytes() != (sel_dir / name).read_bytes():
+                (out / name).write_bytes((sel_dir / name).read_bytes())
         ref_path = out / "drift_reference.json"
         if not ref_path.exists() and args.best_from and (Path(args.best_from) / "drift_reference.json").exists():
             ref_path.write_text((Path(args.best_from) / "drift_reference.json").read_text())
         if not ref_path.exists():
             print("WARNING: drift_reference.json absent; writing an IN-SAMPLE reference (train halves)")
+            train = load_sims(args.sim, args.seeds, keys)
             rows = [drift_report(predict(s.match, s.tags, cfg, dead, cache_key=f"{s.key}_s{s.seed}"), s.match, s.tags,
                                  blackout_mask_from_match(s.match), code_table=cfg.tag.code_table)
                     for s in train]
@@ -457,13 +496,12 @@ def main():
         res = {v: m["spell_f1"] for v, m in score_cell(sealed, ev, cfg, VARIANTS)[0].items()}
         forced_over = failed + (["repeat_read"] if prev else [])
         rec = {"time": time.strftime("%Y-%m-%d %H:%M"), "git": git_sha(), "match": SEALED_MATCH, "registration": reg_id,
-               "select_dir": str(sel_dir), "cell": best_cell, "seeds": list(args.seeds), "sealed": res,
+               "select_dir": _repo_rel(sel_dir), "cell": best_cell, "seeds": list(args.seeds), "sealed": res,
                "bar_pass": bool(best.get("spec_bar", {}).get("bar_pass", False)),
                "chosen_real_plausible": best.get("chosen_real_plausible"),
                "forced": bool(forced_over), "forced_over": forced_over,
                "force_reason": args.force_sealed if forced_over else None}
         readlog.append_read("sealed", rec)
-        dead.save(out / "dead_model.joblib"); (out / "config.json").write_text(json.dumps({**cfg.to_dict(), "lengths": lengths}, indent=1))
         print("SEALED", json.dumps(res))
 
 

@@ -100,3 +100,14 @@ def test_compute_bar_folds_won_threshold_from_n_folds():
         bar, _ = mod.compute_bar(*_bar_inputs(ok, n_folds=n, won=won), "0")
         assert bar["n_folds"] == n and bar["folds_won_needed"] == n - 1 and bar["folds_won_ctrl_Dfull"] == won
         assert bar["bar_pass"] is want, (n, won, bar)
+
+
+def test_guard_skips_legacy_entries_without_match(monkeypatch):
+    mod = _mod()
+    reg = {"grid": "g", "seeds": [100], "sha256": "x"}
+    monkeypatch.setattr(mod.readlog, "read_log", lambda name: [{"registration": reg, "time": "t"}])   # legacy: no match
+    assert mod.check_sealed_guard(reg, None) == []
+    monkeypatch.setattr(mod.readlog, "read_log",
+                        lambda name: [{"registration": reg, "match": mod.SEALED_MATCH, "time": "t"}])
+    with pytest.raises(SystemExit, match="already read"):
+        mod.check_sealed_guard(reg, None)
