@@ -22,3 +22,12 @@ def test_predict_with_precomputed_strong_matches():
     cfg = PipelineConfig()
     strong = compute_strong(m, cfg)
     assert (predict(m, tags, cfg, None, strong=strong) == predict(m, tags, cfg, None)).all()
+
+
+def test_compute_strong_returns_touches_and_old_pair_tolerated():
+    m = carry_match(F=400)
+    tags = pd.DataFrame(columns=["start", "end", "code", "team", "type", "half"])
+    cfg = PipelineConfig()
+    sH, sA, touches = compute_strong(m, cfg)
+    assert touches.ndim == 2 and touches.shape[1] == 4
+    assert (predict(m, tags, cfg, None, strong=(sH, sA)) == predict(m, tags, cfg, None, strong=(sH, sA, touches))).all()

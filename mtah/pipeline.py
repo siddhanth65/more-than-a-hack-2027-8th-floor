@@ -39,11 +39,13 @@ def compute_evidence(match, tags, cfg, dead_model):
 def compute_strong(match, cfg):
     t = detect_touches(match, cfg.touch)
     return (strong_touch_frames(t, 0, cfg.touch, match.n_frames),
-            strong_touch_frames(t, 1, cfg.touch, match.n_frames))
+            strong_touch_frames(t, 1, cfg.touch, match.n_frames), t)
 
 
 def predict(match, tags, cfg, dead_model, evidence=None, strong=None):
     ev = evidence if evidence is not None else compute_evidence(match, tags, cfg, dead_model)
     lab = decode(ev, match.half, cfg.decoder)
-    sH, sA = strong if strong is not None else compute_strong(match, cfg)
-    return postprocess(lab, match.half, match.fps, cfg.post, strong_H=sH, strong_A=sA)
+    st = strong if strong is not None else compute_strong(match, cfg)
+    sH, sA = st[0], st[1]
+    touches = st[2] if len(st) > 2 else detect_touches(match, cfg.touch)   # tolerate the old 2-tuple
+    return postprocess(lab, match.half, match.fps, cfg.post, strong_H=sH, strong_A=sA, touches=touches)
