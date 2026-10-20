@@ -10,7 +10,7 @@
  "noise_sigma_m": 0.1,
  "noise_rho": 0.95,
  "outage_rate_out_per_player_min": 0.005,
- "outage_rate_in_per_player_min": 0.9,
+ "outage_rate_in_per_player_min": 0.6,
  "outage_median_s": 5.0,
  "outage_sigma_log": 1.2,
  "outage_max_s": 240.0,
@@ -20,5 +20,8 @@
  "dead_hover_lo": 0.5,
  "dead_hover_hi": 2.0,
  "dead_out_keep": 0.1,
- "dead_jitter_m": 0.15
+ "dead_jitter_m": 0.15,
+ "mass_outage_p": 0.2,
+ "mass_outage_frac": 0.45,
+ "mass_outage_min_s": 5.0
 }

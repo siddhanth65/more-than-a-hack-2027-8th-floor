@@ -28,10 +28,14 @@ class CorruptParams:
     noise_rho: float = 0.95
     # long per-slot player outages (see player_outages), much more frequent inside ball blackouts
     outage_rate_out_per_player_min: float = 0.005
-    outage_rate_in_per_player_min: float = 0.9
+    outage_rate_in_per_player_min: float = 0.6
     outage_median_s: float = 5.0
     outage_sigma_log: float = 1.2
     outage_max_s: float = 240.0
+    # mass outages: some long blackouts lose a large fraction of the slots at once (bimodal lower tail)
+    mass_outage_p: float = 0.2
+    mass_outage_frac: float = 0.45
+    mass_outage_min_s: float = 5.0
     # dead-ball realism (see dead_ball_realism)
     dead_motion: bool = True
     dead_v_lo: float = 1.0
@@ -102,6 +106,24 @@ def player_outages(F, S, fps, blackout_mask, params, rng):
     return np.cumsum(inc[:F], axis=0) > 0
 
 
+def mass_outages(present, F, fps, blackout_mask, params, rng):
+    """(F, S) bool: for each blackout run of at least mass_outage_min_s, with probability mass_outage_p lose
+    round(mass_outage_frac * n_present) slots, chosen uniformly among the slots present ((S,) bool, or (F, S) read at the
+    run start), for the whole run (the real tracker's worst blackouts lose about half the players at once)."""
+    present = np.asarray(present, bool)
+    out = np.zeros((F, present.shape[-1]), bool)
+    if params.mass_outage_p <= 0:
+        return out
+    for s, e in runs_of(blackout_mask):
+        if e - s < params.mass_outage_min_s * fps or rng.random() >= params.mass_outage_p:
+            continue
+        idx = np.flatnonzero(present[s] if present.ndim == 2 else present)
+        k = int(round(params.mass_outage_frac * len(idx)))
+        if k:
+            out[s:e, rng.choice(idx, size=k, replace=False)] = True
+    return out
+
+
 def _swap_rows(pos, a, b, start, stop):
     tmp = pos[start:stop, a].copy()
     pos[start:stop, a] = pos[start:stop, b]
@@ -156,6 +178,7 @@ def corrupt(match, blackout_mask, params, rng):
             d = np.hypot(pos[max(0, e - edge):e, :, 0] - match.ball[k, 0], pos[max(0, e - edge):e, :, 1] - match.ball[k, 1])
             drop[max(0, e - edge):e] |= d <= params.edge_dropout_m
     drop |= player_outages(F, S, fps, blackout_mask, params, rng)
+    drop |= mass_outages(~np.isnan(pos[:, :, 0]), F, fps, blackout_mask, params, rng)
     pos[drop] = np.nan
     # AR(1) positional noise
     if params.noise_sigma_m > 0:

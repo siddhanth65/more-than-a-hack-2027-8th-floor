@@ -165,3 +165,48 @@ def test_corrupt_outages_make_long_nan_runs():
     nan = np.isnan(out.pos[..., 0])
     lens = [e - s for j in range(m.n_slots) for s, e in runs_of(nan[:, j])]
     assert max(lens) > 25
+
+
+# ---- mass outages ----
+from mtah.sim.corrupt import mass_outages
+
+
+def _mo(p, mask, present=None, seed=0, **kw):
+    present = np.ones(22, bool) if present is None else present
+    prm = CorruptParams(mass_outage_p=p, **kw)
+    return mass_outages(present, len(mask), 25.0, mask, prm, np.random.default_rng(seed))
+
+
+def _mask(F=25 * 60, s=25 * 10, n=25 * 10):
+    m = np.zeros(F, bool); m[s:s + n] = True
+    return m
+
+
+def test_mass_outage_p0_all_false():
+    assert not _mo(0.0, _mask()).any()
+
+
+def test_mass_outage_p1_exact_count_on_run_only():
+    mask = _mask()
+    out = _mo(1.0, mask)
+    assert out.shape == (len(mask), 22)
+    assert (out[mask].sum(axis=1) == round(0.45 * 22)).all()
+    assert (out[mask] == out[mask][0]).all()      # same slots for the whole run
+    assert not out[~mask].any()
+
+
+def test_mass_outage_short_run_untouched():
+    assert not _mo(1.0, _mask(n=int(4.9 * 25))).any()
+
+
+def test_mass_outage_deterministic():
+    mask = _mask()
+    assert np.array_equal(_mo(1.0, mask, seed=3), _mo(1.0, mask, seed=3))
+    assert not np.array_equal(_mo(1.0, mask, seed=3), _mo(1.0, mask, seed=4))
+
+
+def test_mass_outage_never_picks_absent_slots():
+    present = np.ones(22, bool); present[:6] = False
+    out = _mo(1.0, _mask(), present=present)
+    assert not out[:, :6].any()
+    assert out[_mask()].sum(axis=1)[0] == round(0.45 * 16)
