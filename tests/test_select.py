@@ -89,3 +89,53 @@ def test_apply_cell_sets_dead_policy():
     from mtah.select import GRID, apply_cell
     assert apply_cell(PipelineConfig(), GRID[0]).dead_policy == "full"
     assert apply_cell(PipelineConfig(), {**GRID[0], "dead_policy": "no_ball_cues"}).dead_policy == "no_ball_cues"
+
+
+def test_grid2_size_and_axes():
+    from mtah.select import GRID2, GRIDS
+    assert len(GRID2) == 64 and GRIDS["grid1"] is GRID and GRIDS["grid2"] is GRID2
+    assert {c["dead_policy"] for c in GRID2} == {"full", "no_ball_at_all"}
+    assert {c["w_pathcrf"] for c in GRID2} == {0.0, 0.5, 1.0, 2.0}
+    assert {c["tau_HA"] for c in GRID2} == {10.0, 30.0} and {c["tau_D"] for c in GRID2} == {30.0, 100.0}
+    assert {c["w_dead"] for c in GRID2} == {1.0, 2.0} and {c["aba_s"] for c in GRID2} == {1.0}
+    assert len({tuple(sorted(c.items())) for c in GRID2}) == 64
+
+
+def test_apply_cell_grid2_sets_policy_and_pathcrf_weight():
+    from mtah.select import GRID2
+    cell = next(c for c in GRID2 if c["dead_policy"] == "no_ball_at_all" and c["w_pathcrf"] == 0.5)
+    base = PipelineConfig(); base.use_pathcrf = True
+    cfg = apply_cell(base, cell)
+    assert cfg.dead_policy == "no_ball_at_all" and cfg.decoder.weights["pathcrf"] == 0.5
+    assert cfg.use_pathcrf is True and cfg.post.aba_s == 1.0 and cfg.decoder.tau_HD == cell["tau_D"]
+    assert base.decoder.weights["pathcrf"] == 1.0 and base.dead_policy == "full"   # base untouched
+
+
+def _ranked(cells):
+    return pd.DataFrame({"cell": cells, "mean_rank": np.arange(1, len(cells) + 1, dtype=float)})
+
+
+def test_is_real_plausible_bounds():
+    from mtah.select import is_real_plausible
+    assert is_real_plausible(0.10) and is_real_plausible(0.18) and is_real_plausible(0.14)
+    assert not is_real_plausible(0.099) and not is_real_plausible(0.181) and not is_real_plausible(float("nan"))
+
+
+def test_choose_plausible_picks_highest_ranked_plausible():
+    from mtah.select import choose_plausible
+    plaus = {7: {"real_plausible": False}, 3: {"real_plausible": True}, 5: {"real_plausible": True}}
+    assert choose_plausible(_ranked([7, 3, 5, 1]), plaus) == 3
+
+
+def test_choose_plausible_falls_back_to_rank_one(capsys):
+    from mtah.select import choose_plausible
+    plaus = {7: {"real_plausible": False}, 3: {"real_plausible": False}}
+    assert choose_plausible(_ranked([7, 3, 5]), plaus) == 7
+    assert "WARNING" in capsys.readouterr().out
+
+
+def test_choose_plausible_ignores_unchecked_cells():
+    from mtah.select import choose_plausible
+    # cell 5 was never checked on the real match (not in the top-k): it cannot be chosen over the fallback
+    assert choose_plausible(_ranked([7, 5]), {7: {"real_plausible": False}}) == 7
+    assert choose_plausible(_ranked([7, 5]), {}) == 7

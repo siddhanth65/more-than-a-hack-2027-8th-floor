@@ -78,3 +78,73 @@ def test_run_selection_smoke(tmp_path, monkeypatch):
     # resume: a second run reuses the fold tables
     best2 = mod.run_selection(sim_dir, seeds, out)
     assert best2 == best
+
+
+def _fake_posterior(calls):
+    def fake(match, cache_key, params):
+        calls.append(cache_key)
+        F = match.n_frames
+        p = np.where(np.isnan(match.ball[:, 0]), np.nan, 0.6).astype(np.float32)
+        return {"p_home": p, "p_none": np.zeros(F, np.float32), "imputed_frac": np.zeros(F, np.float32)}
+    return fake
+
+
+def test_run_selection_two_policies_pathcrf_and_real(tmp_path, monkeypatch):
+    """grid2-style cells: per-policy dead models (no policy-mismatch error), PathCRF stream, real-match plausibility."""
+    import mtah.pipeline as pl
+    rng = np.random.default_rng(1)
+    sim_dir = tmp_path / "sim"
+    seeds = [100, 101]
+    for mid in (9001, 9002, 9003):
+        for half in (1, 2):
+            for seed in seeds:
+                save_half(_fake_half(mid, half, seed, rng), sim_dir)
+    grid = [{"tau_HA": 10.0, "tau_D": 30.0, "w_dead": 1.0, "w_pathcrf": 1.0, "dead_policy": "no_ball_at_all", "aba_s": 1.0},
+            {"tau_HA": 10.0, "tau_D": 30.0, "w_dead": 1.0, "w_pathcrf": 0.0, "dead_policy": "full", "aba_s": 1.0},
+            {"tau_HA": 30.0, "tau_D": 100.0, "w_dead": 2.0, "w_pathcrf": 0.5, "dead_policy": "full", "aba_s": 1.0}]
+    calls = []
+    monkeypatch.setattr(pl, "pathcrf_posterior", _fake_posterior(calls))
+    mod = _load_script()
+    policies = []
+    orig = mod.train_dead
+    monkeypatch.setattr(mod, "train_dead", lambda sims, variant="ctrl_Dfull", policy="full": policies.append(policy) or orig(sims, variant, policy))
+    real = _fake_half(9999, 1, 0, rng)
+    monkeypatch.setattr(mod, "load_tactical", lambda d: real.match)
+    monkeypatch.setattr(mod, "load_tags", lambda d: real.tags)
+    out = tmp_path / "out"
+    best = mod.run_selection(sim_dir, seeds, out, grid=grid, real_data_dir="fake-data-dir")
+    assert best in grid
+    assert {"full", "no_ball_at_all"} <= set(policies)
+    assert any(k.startswith("game_9001_1_s") for k in calls) and "real_tactical" in calls
+    summ = pd.read_csv(out / "summary.csv")
+    assert set(summ["cell"]) == {0, 1, 2}
+    real_tab = pd.read_csv(out / "summary_real.csv")
+    assert {"cell", "mean_rank", "non_blackout_D_share", "tag_agreement_implied", "pred_D_share",
+            "spells_per_HA_min", "real_plausible"} <= set(real_tab.columns)
+    assert set(real_tab["cell"]) == {0, 1, 2}
+    b = json.loads((out / "best.json").read_text()); reg = json.loads((out / "registration.json").read_text())
+    assert set(b["real_plausibility"]) == {"0", "1", "2"} and reg["real_plausibility"] == b["real_plausibility"]
+    want = sel.choose_plausible(summ, {int(k): v for k, v in b["real_plausibility"].items()})
+    assert b["cell"] == grid[want] == best
+    for v in b["real_plausibility"].values():
+        assert v["real_plausible"] == sel.is_real_plausible(v["non_blackout_D_share"])
+
+
+def test_base_for_grid_enables_pathcrf_only_when_weighted():
+    mod = _load_script()
+    assert mod.base_for_grid(sel.GRID).use_pathcrf is False
+    assert mod.base_for_grid(sel.GRID2).use_pathcrf is True
+    assert mod.base_for_grid([{**sel.GRID2[0], "w_pathcrf": 0.0}]).use_pathcrf is False
+    assert mod.base_for_grid(sel.GRID2, threads=8).pathcrf.threads == 8
+
+
+def test_sealed_bar_gate(tmp_path):
+    import pytest
+    mod = _load_script()
+    p = tmp_path / "best.json"
+    p.write_text(json.dumps({"spec_bar": {"bar_pass": False}}))
+    with pytest.raises(SystemExit):
+        mod.check_bar_gate(p, None)
+    assert mod.check_bar_gate(p, "registered exploratory read") is False
+    p.write_text(json.dumps({"spec_bar": {"bar_pass": True}}))
+    assert mod.check_bar_gate(p, None) is True

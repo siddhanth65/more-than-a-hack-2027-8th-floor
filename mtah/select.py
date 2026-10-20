@@ -14,6 +14,15 @@ from mtah.sim.dataset import VARIANTS, match_id
 GRID = [{"tau_HA": a, "tau_D": d, "w_dead": w, "aba_s": m}
         for a, d, w, m in itertools.product((3.0, 10.0, 30.0), (3.0, 10.0, 30.0), (0.5, 1.0, 2.0), (0.0, 0.5, 1.0))]
 
+# grid 2: PathCRF stream weight (0 = off) and the dead-model feature policy join the search; aba_s fixed at 1.0
+GRID2 = [{"tau_HA": a, "tau_D": d, "w_dead": w, "w_pathcrf": c, "dead_policy": pol, "aba_s": 1.0}
+         for a, d, w, c, pol in itertools.product((10.0, 30.0), (30.0, 100.0), (1.0, 2.0), (0.0, 0.5, 1.0, 2.0),
+                                                  ("full", "no_ball_at_all"))]
+GRIDS = {"grid1": GRID, "grid2": GRID2}
+
+# label-free real-match plausibility: non-blackout D share of the prediction must lie in this band
+REAL_D_SHARE_BAND = (0.10, 0.18)
+
 
 def apply_cell(cfg, cell):
     cfg = copy.deepcopy(cfg)
@@ -88,3 +97,22 @@ def mean_rank(table, variants):
     ranks = np.column_stack([t[v].rank(ascending=False, method="average") for v in variants])
     t["mean_rank"] = ranks.mean(1)
     return t.sort_values(["mean_rank", "ctrl_Dfull"], ascending=[True, False]).reset_index(drop=True)
+
+
+def is_real_plausible(non_blackout_D_share, band=REAL_D_SHARE_BAND):
+    """True when the real-match non-blackout D share lies in the band (NaN is never plausible)."""
+    v = float(non_blackout_D_share)
+    return bool(np.isfinite(v) and band[0] <= v <= band[1])
+
+
+def choose_plausible(ranked, plaus):
+    """Cell index of the highest-ranked cell flagged real_plausible in `plaus` ({cell: {"real_plausible": bool}}).
+
+    `ranked` is the mean-rank-sorted summary (column "cell", best first). Cells absent from `plaus` were not
+    checked on the real match and are never chosen over the fallback, which is rank 1 (with a WARNING)."""
+    order = [int(c) for c in ranked["cell"]]
+    for c in order:
+        if c in plaus and plaus[c].get("real_plausible"):
+            return c
+    print(f"WARNING: no real-plausible cell among the checked ones {sorted(plaus)}; falling back to rank 1 (cell {order[0]})")
+    return order[0]

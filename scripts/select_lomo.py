@@ -1,5 +1,8 @@
-"""LOMO selection over GRID on the simulated dataset; writes fold tables, summary and registration."""
-import argparse, hashlib, itertools, json, subprocess, sys, time
+"""LOMO selection over a grid (grid1 | grid2) on the simulated dataset; writes fold tables, summary and registration.
+
+With a real-data dir, the top-k cells by mean rank are also decoded on the real match (label-free drift metrics);
+the chosen cell is the highest-ranked one whose real non-blackout D share is plausible (select.REAL_D_SHARE_BAND)."""
+import argparse, hashlib, itertools, json, os, subprocess, sys, time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -12,10 +15,18 @@ import pandas as pd
 from mtah import baselines
 from mtah.eval.drift import blackout_mask_from_match, drift_report
 from mtah.eval.scorer import OFFICIAL_PATH, score
+from mtah.evidence.pathcrf import PathCRFParams
+from mtah.io.metrica_loader import load_tactical
+from mtah.io.tags import load_tags
 from mtah.pipeline import PipelineConfig, compute_evidence, compute_strong, predict
 import mtah.select as sel
-from mtah.select import apply_cell, estimate_lengths, mean_rank, score_cell, train_dead
+from mtah.select import (REAL_D_SHARE_BAND, apply_cell, choose_plausible, estimate_lengths, is_real_plausible, mean_rank,
+                         score_cell, train_dead)
 from mtah.sim.dataset import SEALED_MATCH, VARIANTS, list_sim_keys, load_half_sim, lomo_folds, match_id
+
+DEFAULT_DATA = os.environ.get("MTAH_DATA_DIR", r"HOME/mtah-data")
+REAL_KEYS = ("non_blackout_D_share", "tag_agreement_implied", "pred_D_share", "spells_per_HA_min")
+REAL_TOP_K = 5
 
 
 def git_sha():
@@ -27,6 +38,28 @@ def git_sha():
 
 def load_sims(sim_dir, seeds, keys):
     return [load_half_sim(sim_dir, k, s) for k in keys for s in seeds]
+
+
+def base_for_grid(grid, threads=None):
+    """Base config for a grid: the PathCRF stream is computed iff some cell gives it a positive weight
+    (w_pathcrf = 0 cells then ignore it through the zero weight). `threads` must match the precompute run:
+    the PathCRF cache is keyed on it."""
+    base = PipelineConfig()
+    base.use_pathcrf = any(c.get("w_pathcrf", 0.0) > 0 for c in grid)
+    if threads is not None:
+        base.pathcrf.threads = int(threads)
+    return base
+
+
+def policy_cfgs(base, cells, lengths):
+    """{dead_policy: cfg} with cfg = apply_cell(base, first cell of that policy). Evidence depends on the cell only
+    through dead_policy (weights/taus act in the decoder), so one evidence set per policy serves every cell."""
+    out = {}
+    for c in cells:
+        p = c.get("dead_policy", "full")
+        if p not in out:
+            cfg = apply_cell(base, c); cfg.decoder.lengths = lengths; out[p] = cfg
+    return dict(sorted(out.items()))
 
 
 BASELINES = {"smooth50": lambda m: baselines.smooth_vote(m, 50), "b4": baselines.b4_blackout_dead}
@@ -44,10 +77,13 @@ def _drift_summary(rows):
 def out_of_sample_drift_reference(sim_dir, seeds, keys, base, best_cell, lengths_by_fold, dead_by_fold):
     """Re-decode the best cell on every fold's TEST halves and summarise the drift metrics."""
     rows = []
+    policy = best_cell.get("dead_policy", "full")
     for held, train_keys, test_keys in lomo_folds(keys):
         train = load_sims(sim_dir, seeds, train_keys); test = load_sims(sim_dir, seeds, test_keys)
         lengths = lengths_by_fold.get(held) or estimate_lengths(train, base, train_dead)
-        dead = dead_by_fold.get(held) or train_dead(train)
+        dead = dead_by_fold.get(held, {}).get(policy)
+        if dead is None:
+            dead = train_dead(train, policy=policy)
         cfg = apply_cell(base, best_cell); cfg.decoder.lengths = lengths
         for s in test:
             ev = compute_evidence(s.match, s.tags, cfg, dead, cache_key=f"{s.key}_s{s.seed}")
@@ -79,8 +115,39 @@ def compute_bar(allf, halves, best, best_i):
     return bar, base_rows
 
 
-def run_grid(sim_dir, seeds, keys, base, out, grid):
+def real_plausibility(sim_dir, seeds, keys, base, grid, ranked, data_dir, out, top_k=REAL_TOP_K):
+    """Decode the top-k cells (by mean rank) on the real match; label-free drift metrics per cell.
+
+    Dead models (one per needed policy) and lengths come from ALL non-sealed sim halves, as in the sealed/candidate
+    path. Writes summary_real.csv; returns {cell index: {metric: value, "real_plausible": bool, ...}}."""
+    top = [int(c) for c in ranked["cell"].head(top_k)]
+    train = load_sims(sim_dir, seeds, keys)
+    lengths = estimate_lengths(train, base, train_dead)
+    cfgs = policy_cfgs(base, [grid[i] for i in top], lengths)
+    dead = {p: train_dead(train, policy=p) for p in cfgs}
+    del train
+    m = load_tactical(data_dir); tags = load_tags(data_dir); mask = blackout_mask_from_match(m)
+    ev = {p: compute_evidence(m, tags, cfg, dead[p], cache_key="real_tactical") for p, cfg in cfgs.items()}
+    strong = compute_strong(m, next(iter(cfgs.values())))
+    mr = dict(zip(ranked["cell"].astype(int), ranked["mean_rank"]))
+    rows, plaus = [], {}
+    for rank, i in enumerate(top, 1):
+        cfg = apply_cell(base, grid[i]); cfg.decoder.lengths = lengths
+        lab = predict(m, tags, cfg, None, evidence=ev[cfg.dead_policy], strong=strong)
+        d = drift_report(lab, m, tags, mask, code_table=cfg.tag.code_table)
+        rec = {"rank": rank, "mean_rank": float(mr[i]), **{k: float(d[k]) for k in REAL_KEYS}}
+        rec["real_plausible"] = is_real_plausible(rec["non_blackout_D_share"])
+        plaus[i] = rec
+        rows.append({"cell": i, **grid[i], **rec})
+    tab = pd.DataFrame(rows); tab.to_csv(out / "summary_real.csv", index=False)
+    print(f"REAL-MATCH PLAUSIBILITY (top {len(top)}; plausible = non_blackout_D_share in {list(REAL_D_SHARE_BAND)})")
+    print(tab.to_string(index=False), flush=True)
+    return plaus
+
+
+def run_grid(sim_dir, seeds, keys, base, out, grid, real_data_dir=None, grid_name=None, top_k=REAL_TOP_K):
     fold_tables, lengths_by_fold, dead_by_fold = [], {}, {}
+    policies = sorted({c.get("dead_policy", "full") for c in grid})
     for held, train_keys, test_keys in lomo_folds(keys):
         fold_csv = out / f"fold_{held}.csv"; halves_csv = out / f"fold_{held}_halves.csv"
         if fold_csv.exists() and halves_csv.exists():
@@ -89,16 +156,17 @@ def run_grid(sim_dir, seeds, keys, base, out, grid):
             print(f"fold {held} resumed", flush=True)
             continue
         train = load_sims(sim_dir, seeds, train_keys); test = load_sims(sim_dir, seeds, test_keys)
-        lengths = estimate_lengths(train, base, train_dead)  # inner split: see estimate_lengths
-        dead = train_dead(train)  # final fold dead model: all train halves
+        lengths = estimate_lengths(train, base, train_dead)  # inner split: see estimate_lengths (policy-independent)
+        dead = {p: train_dead(train, policy=p) for p in policies}  # final fold dead models: all train halves, one per policy
         lengths_by_fold[held] = lengths; dead_by_fold[held] = dead
-        cfg0 = apply_cell(base, grid[0]); cfg0.decoder.lengths = lengths
-        test_ev = [compute_evidence(s.match, s.tags, cfg0, dead, cache_key=f"{s.key}_s{s.seed}") for s in test]  # grid-independent (tested)
-        test_strong = [compute_strong(s.match, cfg0) for s in test]  # touches do not depend on the grid
+        cfgs = policy_cfgs(base, grid, lengths)
+        test_ev = {p: [compute_evidence(s.match, s.tags, cfg, dead[p], cache_key=f"{s.key}_s{s.seed}") for s in test]
+                   for p, cfg in cfgs.items()}  # one evidence set per dead policy; otherwise grid-independent (tested)
+        test_strong = [compute_strong(s.match, cfgs[policies[0]]) for s in test]  # touches do not depend on the grid
         rows, halves = [], []
         for i, cell in enumerate(grid):
             cfg = apply_cell(base, cell); cfg.decoder.lengths = lengths
-            res, hdf = score_cell(test, test_ev, cfg, VARIANTS, strongs=test_strong)
+            res, hdf = score_cell(test, test_ev[cfg.dead_policy], cfg, VARIANTS, strongs=test_strong)
             hdf.insert(0, "cell", i); halves.append(hdf)
             row = {"cell": i, **cell}
             for v in VARIANTS:
@@ -124,48 +192,72 @@ def run_grid(sim_dir, seeds, keys, base, out, grid):
     gcells = allf[~is_b].copy(); gcells["cell"] = gcells["cell"].astype(int)
     cells = gcells.groupby("cell")[list(VARIANTS) + [f"{v}_ratio" for v in VARIANTS]].mean().reset_index()
     ranked = mean_rank(cells, list(VARIANTS)); ranked.to_csv(out / "summary.csv", index=False)
-    best = ranked.iloc[0].to_dict(); best_i = int(best["cell"]); best_cell = grid[best_i]
+    print(ranked.head(top_k).to_string())
+    plaus = None
+    if real_data_dir is not None:
+        plaus = real_plausibility(sim_dir, seeds, keys, base, grid, ranked, real_data_dir, out, top_k=top_k)
+        best_i = choose_plausible(ranked, plaus)
+    else:
+        best_i = int(ranked.iloc[0]["cell"])
+    is_best = (ranked["cell"].astype(int) == best_i).to_numpy()
+    best = ranked[is_best].iloc[0].to_dict(); best_cell = grid[best_i]
+    chosen_rank = int(np.flatnonzero(is_best)[0]) + 1
+    print(f"chosen cell {best_i} (mean-rank position {chosen_rank}): {best_cell}")
     allf = allf.copy(); allf["cell"] = allf["cell"].astype(str)
     halves = pd.concat([pd.read_csv(out / f"fold_{h}_halves.csv") for h in sorted(allf["held"].unique())])
     halves["cell"] = halves["cell"].astype(str)
     bar, base_rows = compute_bar(allf, halves, best, str(best_i))
-    print(ranked.head(5).to_string()); print(base_rows.to_string())
+    print(base_rows.to_string())
     print("SPEC BAR", json.dumps(bar, indent=1))
     ref = out_of_sample_drift_reference(sim_dir, seeds, keys, base, best_cell, lengths_by_fold, dead_by_fold)
     (out / "drift_reference.json").write_text(json.dumps(ref, indent=1))
-    reg = {"git": git_sha(), "seeds": seeds, "grid_size": len(grid), "selection": "mean rank over 4 variants, tie ctrl_Dfull",
+    selection = "mean rank over 4 variants, tie ctrl_Dfull"
+    if plaus is not None:
+        selection += (f"; highest-ranked real-plausible cell among the top {top_k} "
+                      f"(real non-blackout D share in {list(REAL_D_SHARE_BAND)}; fallback rank 1)")
+    real_json = None if plaus is None else {str(i): v for i, v in plaus.items()}
+    reg = {"git": git_sha(), "seeds": seeds, "grid": grid_name, "grid_size": len(grid), "selection": selection,
            "scorer_md5": hashlib.md5(OFFICIAL_PATH.read_bytes().replace(b"\r\n", b"\n")).hexdigest(),
-           "best_cell": best_cell, "best": {v: best[v] for v in VARIANTS}, "baselines": base_rows.to_dict(),
+           "best_cell": best_cell, "best_cell_index": best_i, "chosen_rank": chosen_rank,
+           "best": {v: best[v] for v in VARIANTS}, "baselines": base_rows.to_dict(),
            "seed_sd": bar["seed_sd"], "baseline_used": bar["baseline_used"], "spec_bar": bar,
+           "use_pathcrf": bool(base.use_pathcrf), "pathcrf_threads": int(base.pathcrf.threads),
+           "real_plausibility": real_json,
            "pathcrf_train_matches": [9001, 9002, 9003, 9004, 9005], "pathcrf_val": 9006, "clean": 9007,
            "sealed_match": SEALED_MATCH}
     (out / "registration.json").write_text(json.dumps(reg, indent=1))
-    (out / "best.json").write_text(json.dumps({"cell": best_cell, "scores": {v: best[v] for v in VARIANTS},
+    (out / "best.json").write_text(json.dumps({"cell": best_cell, "cell_index": best_i, "chosen_rank": chosen_rank,
+                                               "scores": {v: best[v] for v in VARIANTS},
                                                "ratios": bar["count_ratios"], "seed_sd": bar["seed_sd"],
-                                               "baseline_used": bar["baseline_used"], "spec_bar": bar}, indent=1))
+                                               "baseline_used": bar["baseline_used"], "spec_bar": bar,
+                                               "real_plausibility": real_json}, indent=1))
     return best_cell
 
 
-def run_selection(sim_dir, seeds, out_dir, grid=None, base=None):
-    """Importable LOMO selection loop: fold tables, summary, best/registration, out-of-sample drift reference."""
+def run_selection(sim_dir, seeds, out_dir, grid=None, base=None, real_data_dir=None, grid_name=None):
+    """Importable LOMO selection loop: fold tables, summary, best/registration, out-of-sample drift reference.
+
+    real_data_dir=None skips the real-match plausibility step (the chosen cell is then mean-rank 1)."""
     grid = grid if grid is not None else sel.GRID
+    grid_name = grid_name or next((n for n, g in sel.GRIDS.items() if g is grid), "custom")
     out = Path(out_dir); out.mkdir(parents=True, exist_ok=True)
     keys = [k for k in list_sim_keys(sim_dir) if match_id(k) != SEALED_MATCH]
-    return run_grid(sim_dir, list(seeds), keys, base or PipelineConfig(), out, grid)
+    base = base if base is not None else base_for_grid(grid)
+    return run_grid(sim_dir, list(seeds), keys, base, out, grid, real_data_dir=real_data_dir, grid_name=grid_name)
 
 
-def run_pilot(args, keys, base):
-    """First fold only: print L_k and the eight tau/w_dead corner cells. Writes nothing."""
+def run_pilot(args, keys, base, grid):
+    """First fold only: print L_k and the eight tau/w_dead corner cells around grid[0]. Writes nothing."""
     held, train_keys, test_keys = lomo_folds(keys)[0]
     train = load_sims(args.sim, args.seeds, train_keys); test = load_sims(args.sim, args.seeds, test_keys)
     lengths = estimate_lengths(train, base, train_dead)
     print(f"PILOT fold {held} L_k:", json.dumps(lengths))
-    dead = train_dead(train)
-    cfg0 = apply_cell(base, sel.GRID[0]); cfg0.decoder.lengths = lengths
+    cfg0 = apply_cell(base, grid[0]); cfg0.decoder.lengths = lengths
+    dead = train_dead(train, policy=cfg0.dead_policy)
     ev = [compute_evidence(s.match, s.tags, cfg0, dead, cache_key=f"{s.key}_s{s.seed}") for s in test]
     strong = [compute_strong(s.match, cfg0) for s in test]
     for a, d, w in itertools.product((3.0, 30.0), (3.0, 30.0), (0.5, 2.0)):
-        cell = {"tau_HA": a, "tau_D": d, "w_dead": w, "aba_s": 0.5}
+        cell = {**grid[0], "tau_HA": a, "tau_D": d, "w_dead": w, "aba_s": 0.5 if grid is sel.GRID else grid[0]["aba_s"]}
         cfg = apply_cell(base, cell); cfg.decoder.lengths = lengths
         res, _ = score_cell(test, ev, cfg, ("ctrl_Dfull",), strongs=strong)
         r = res["ctrl_Dfull"]
@@ -185,29 +277,48 @@ def check_sealed_guard(best_cell):
     return log
 
 
+def check_bar_gate(best_json, force_reason):
+    """Sealed reads need spec_bar.bar_pass in best.json, or an explicit --force-sealed REASON (logged)."""
+    bar_pass = bool(json.loads(Path(best_json).read_text()).get("spec_bar", {}).get("bar_pass", False)) \
+        if Path(best_json).exists() else False
+    if not bar_pass and not force_reason:
+        raise SystemExit(f"refusing sealed read: bar_pass is false in {best_json}; pass --force-sealed REASON to override")
+    return bar_pass
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--sim", default=str(ROOT / "runs" / "sim"))
     ap.add_argument("--seeds", type=int, nargs="+", default=[100, 101])
     ap.add_argument("--out", default=str(ROOT / "runs" / "select" / time.strftime("%Y%m%d-%H%M")))
+    ap.add_argument("--grid", choices=sorted(sel.GRIDS), default="grid1")
+    ap.add_argument("--data", default=DEFAULT_DATA, help="real-match data dir for the plausibility step (MTAH_DATA_DIR)")
+    ap.add_argument("--no-real", action="store_true", help="skip the real-match plausibility step (choose mean-rank 1)")
+    ap.add_argument("--pathcrf-threads", type=int, default=PathCRFParams().threads,
+                    help="PathCRF thread count; must equal the precompute run's (the cache is keyed on it)")
     ap.add_argument("--best-from", default=None, help="selection dir whose best.json is reused (skips the grid loop)")
     ap.add_argument("--pilot", action="store_true", help="first fold only: print L_k and the 8 corner cells; writes nothing")
     ap.add_argument("--sealed", action="store_true")
+    ap.add_argument("--force-sealed", default=None, metavar="REASON", help="allow the sealed read although bar_pass is false")
     args = ap.parse_args()
+    grid = sel.GRIDS[args.grid]
     keys = [k for k in list_sim_keys(args.sim) if match_id(k) != SEALED_MATCH]
-    base = PipelineConfig()
     if args.pilot:
-        run_pilot(args, keys, base)
+        run_pilot(args, keys, base_for_grid(grid, args.pathcrf_threads), grid)
         return
     out = Path(args.out); out.mkdir(parents=True, exist_ok=True)
     if args.best_from:
         best_cell = json.loads((Path(args.best_from) / "best.json").read_text())["cell"]
         print("reusing best cell from", args.best_from, best_cell)
     else:
-        best_cell = run_selection(args.sim, args.seeds, out)
+        best_cell = run_selection(args.sim, args.seeds, out, grid=grid, base=base_for_grid(grid, args.pathcrf_threads),
+                                  real_data_dir=None if args.no_real else args.data, grid_name=args.grid)
     if args.sealed:
+        bar_pass = check_bar_gate(Path(args.best_from or out) / "best.json", args.force_sealed)
         log = check_sealed_guard(best_cell)
-        train = load_sims(args.sim, args.seeds, keys); dead = train_dead(train)
+        base = base_for_grid([best_cell], args.pathcrf_threads)   # PathCRF only if the chosen cell weights it
+        policy = best_cell.get("dead_policy", "full")
+        train = load_sims(args.sim, args.seeds, keys); dead = train_dead(train, policy=policy)
         lengths = estimate_lengths(train, base, train_dead)
         cfg = apply_cell(base, best_cell); cfg.decoder.lengths = lengths
         ref_path = out / "drift_reference.json"
@@ -221,7 +332,8 @@ def main():
         sealed = load_sims(args.sim, args.seeds, [k for k in list_sim_keys(args.sim) if match_id(k) == SEALED_MATCH])
         ev = [compute_evidence(s.match, s.tags, cfg, dead, cache_key=f"{s.key}_s{s.seed}") for s in sealed]
         res = {v: m["spell_f1"] for v, m in score_cell(sealed, ev, cfg, VARIANTS)[0].items()}
-        rec = {"time": time.strftime("%Y-%m-%d %H:%M"), "git": git_sha(), "cell": best_cell, "sealed": res}
+        rec = {"time": time.strftime("%Y-%m-%d %H:%M"), "git": git_sha(), "cell": best_cell, "sealed": res,
+               "bar_pass": bar_pass, "force_reason": args.force_sealed}
         with open(log, "a") as f:
             f.write(json.dumps(rec) + "\n")
         dead.save(out / "dead_model.joblib"); (out / "config.json").write_text(json.dumps({**cfg.to_dict(), "lengths": lengths}, indent=1))
