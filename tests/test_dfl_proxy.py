@@ -3,7 +3,7 @@ import json
 import numpy as np
 import pytest
 
-from mtah.io.dfl_proxy import list_halves, load_half
+from mtah.io.dfl_proxy import list_halves, load_events, load_half
 
 
 def make_npz(tmp_path):
@@ -58,3 +58,24 @@ def test_load_half_rejects_non_binary(tmp_path):
     np.savez(p, **z)
     with pytest.raises(ValueError):
         load_half(p, c)
+
+
+def _events_npz(tmp_path, team_col):
+    p, c = make_npz(tmp_path)
+    z = dict(np.load(p))
+    z["truth"] = np.array([[101, team_col, 0, 8], [103, 1, 0, 8]], np.float32)
+    z["poss_only"] = np.array([0, 1], np.int8)
+    np.savez(p, **z)
+    return p, c
+
+
+def test_load_events_ok(tmp_path):
+    p, c = _events_npz(tmp_path, 0)
+    ev = load_events(p, c)
+    assert list(ev["team"]) == ["A", "H"]
+
+
+def test_load_events_rejects_bad_team_column(tmp_path):
+    p, c = _events_npz(tmp_path, 2)
+    with pytest.raises(ValueError):
+        load_events(p, c)
