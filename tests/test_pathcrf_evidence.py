@@ -204,6 +204,15 @@ def _pathcrf_available():
     return Path(p.python).is_file() and Path(p.repo).is_dir()
 
 
+def _proxy_helper():
+    """Label-free nearest-player proxy of scripts/precompute_pathcrf.py (no 9007 truth is consulted)."""
+    import importlib.util
+    path = Path(__file__).resolve().parents[1] / "scripts" / "precompute_pathcrf.py"
+    spec = importlib.util.spec_from_file_location("precompute_pathcrf_helper", path)
+    mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)
+    return mod.nearest_player_proxy
+
+
 @pytest.mark.dfl
 def test_integration_clean_9007_h1_agreement(tmp_path):
     from mtah.evidence.pathcrf import pathcrf_posterior
@@ -211,11 +220,11 @@ def test_integration_clean_9007_h1_agreement(tmp_path):
     npz, census = DFL / "game_9007_H1.npz", DFL / "fp1d_census.json"
     if not (npz.is_file() and census.is_file() and _pathcrf_available()):
         pytest.skip("DFL proxy data or the PathCRF venv is absent")
-    m, labels = load_half(npz, census)
+    m, _labels = load_half(npz, census)  # labels deliberately unused: 9007 is the sealed match
     r = pathcrf_posterior(m, "test_clean_9007_H1", PathCRFParams(cache_dir=str(tmp_path)))
-    ha = np.isin(labels, ("H", "A")) & np.isfinite(r["p_home"])
-    agree = float(((r["p_home"][ha] > 0.5) == (labels[ha] == "H")).mean())
-    assert agree >= 0.88, agree
+    agree, n = _proxy_helper()(m, r["p_home"])
+    assert n > 0
+    assert agree >= 0.85, agree
 
 
 @pytest.mark.dfl
@@ -224,11 +233,10 @@ def test_integration_sim_9007_h1_seed100(tmp_path):
     from mtah.sim.dataset import load_half_sim
     if not ((SIM / "game_9007_H1_s100.json").is_file() and _pathcrf_available()):
         pytest.skip("sim data or the PathCRF venv is absent")
-    sim = load_half_sim(SIM, "game_9007_H1", 100)
+    sim = load_half_sim(SIM, "game_9007_H1", 100)  # truth deliberately unused: 9007 is the sealed match
     r = pathcrf_posterior(sim.match, "test_sim_9007_H1_s100", PathCRFParams(cache_dir=str(tmp_path)))
-    truth = sim.truth["raw_Dfull"]
     nan_share = float(np.isnan(r["p_home"]).mean())
-    ha = np.isin(truth, ("H", "A")) & np.isfinite(r["p_home"])
-    agree = float(((r["p_home"][ha] > 0.5) == (truth[ha] == "H")).mean())
+    agree, n = _proxy_helper()(sim.match, r["p_home"])
     assert nan_share <= 0.05, nan_share
+    assert n > 0
     assert agree >= 0.70, agree

@@ -16,9 +16,9 @@ from pathlib import Path
 import numpy as np
 
 os.environ["TQDM_DISABLE"] = "1"
-POSS = Path("WORKDIR/possession")
+POSS = Path(__file__).resolve().parents[1]
 OUT = POSS / "runs/dfl_extra"
-REPO = "HOME/mtah-ext/pathcrf"
+REPO = os.environ.get("MTAH_PATHCRF_REPO", "HOME/mtah-ext/pathcrf")
 CHUNK = 250
 SEED = 100
 

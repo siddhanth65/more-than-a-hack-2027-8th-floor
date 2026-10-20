@@ -33,10 +33,9 @@ if ($CandidateOnly) {
     $Mod = Join-Path $Root "models\$Name"
     New-Item -ItemType Directory -Force $Sel | Out-Null
     foreach ($f in @("config.json", "dead_model.joblib")) {
-        if (-not (Test-Path (Join-Path $Sel $f))) {
-            if (-not (Test-Path (Join-Path $Mod $f))) { Write-Host "missing $Mod\$f"; exit 1 }
-            Copy-Item (Join-Path $Mod $f) (Join-Path $Sel $f)
-        }
+        if (-not (Test-Path (Join-Path $Mod $f))) { Write-Host "missing $Mod\$f"; exit 1 }
+        Copy-Item -Force (Join-Path $Mod $f) (Join-Path $Sel $f)   # always overwrite with the committed artefact
+        (Get-FileHash -Algorithm MD5 (Join-Path $Sel $f)).Hash.ToLower() + "  runs/select/$Name/$f"
     }
     # config.json may use PathCRF -> same PathCRF checks as the full mode
 }
@@ -62,6 +61,12 @@ if ($CandidateOnly) {
 
 # Full mode. Needs the DFL open-data parse (scripts/build_sim.py --dfl, default on E:) and runs/dfl_extra
 # (match 9007, parsed from J03WR9). PathCRF threads are pinned to 4 inside the code.
+# Raw DFL XML: MTAH_DFL_RAW, default E:\football-synthesizer\data\dfl_open. parse_dfl_match.py produces runs/dfl_extra.
+$DflRaw = $env:MTAH_DFL_RAW
+if (-not $DflRaw) { $DflRaw = "E:\football-synthesizer\data\dfl_open" }
+if (-not (Test-Path $DflRaw)) { Write-Host "raw DFL XML not found at $DflRaw (set MTAH_DFL_RAW)."; exit 1 }
+& $Py scripts\parse_dfl_match.py DFL-MAT-J03WR9 $DflRaw runs/dfl_extra 9007
+if ($LASTEXITCODE -ne 0) { exit 1 }
 & $Py scripts\build_sim.py
 if ($LASTEXITCODE -ne 0) { exit 1 }
 & $Py scripts\build_sim.py --extra-dir runs/dfl_extra --only 9007

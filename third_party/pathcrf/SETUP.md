@@ -42,7 +42,7 @@ interpreter; the commands above give an equivalent self-contained venv. The chec
   - `MTAH_PATHCRF_REPO` - PathCRF checkout (default `HOME/mtah-ext\pathcrf`)
   - `MTAH_PATHCRF_PY` - PathCRF venv python (default `HOME/mtah-ext\pathcrf-venv\Scripts\python.exe`)
 - Enable with `PipelineConfig.use_pathcrf = True` (or a grid cell with `w_pathcrf > 0`).
-- Runtime: about 3.5 min per 45-min half (68 354 frames at 25 fps: 190-205 s measured) on 8 CPU threads, of which ~20 s is
+- Runtime: about 3.5 min per 45-min half (68 354 frames at 25 fps: 190-205 s measured) at the pinned 4 CPU threads (the code pins 4, see below; about 4 min per simulated half measured), of which ~20 s is
   importing torch/torch_geometric and loading the model.
 
 ## Robustness (runs/dfl_extra/pathcrf_robust.json, DFL match 9007, agreement with the ball-owning team on alive frames)
@@ -66,3 +66,12 @@ The torch thread count is pinned to 4 (`PathCRFParams.threads`; `run_infer.py` c
 count, so it is part of the cache key and is not exposed as a CLI option in `scripts/precompute_pathcrf.py` or
 `scripts/select_lomo.py`; this keeps the cached posteriors byte-reproducible. `registration.json` records
 `pathcrf_threads: 4`.
+
+## Disclosure: 9007 label exposure
+
+Match 9007 (DFL J03WR9) is the sealed match of the selection pipeline (`select_lomo` never scores it), but its labels
+were used for PathCRF-side work before the seal: the clean PathCRF evaluation (92.6 % agreement), the PathCRF
+robustness experiment (table above), the choice of the PathCRF output head (`run_infer.py`: "on 15 000 frames of the
+corrupted sim half game_9007_H1 s100 it beat the other soft outputs against the ball-owning team", emission marginal
+chosen), and the ctrl-truth diagnostic (66 % disagreement on 9007 H1). Any sealed a2 result on 9007 must be reported
+with this caveat. The PathCRF integration tests use the label-free nearest-player proxy, not 9007 truth.

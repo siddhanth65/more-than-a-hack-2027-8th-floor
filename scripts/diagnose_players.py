@@ -7,7 +7,6 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
-os.environ.setdefault("MTAH_DATA_DIR", r"HOME/mtah-data")
 from mtah.sim.blackout_sim import runs_of
 from mtah.sim.corrupt import CorruptParams
 from mtah.sim.dataset import load_half_sim, list_sim_keys
@@ -98,7 +97,10 @@ def run(pos, graded, bo, fps):
 def main():
     from mtah.io.metrica_loader import load_tactical
     from mtah.eval.drift import blackout_mask_from_match
-    m = load_tactical(os.environ["MTAH_DATA_DIR"])
+    data_dir = os.environ.get("MTAH_DATA_DIR")
+    if not data_dir:
+        raise SystemExit("MTAH_DATA_DIR must point at the unpacked competition data bundle")
+    m = load_tactical(data_dir)
     real = run(m.pos, np.asarray(m.graded, bool), blackout_mask_from_match(m), m.fps)
     d = ROOT / "runs" / "sim"
     per = {}
@@ -127,4 +129,5 @@ def main():
     print("corrupt:", asdict(cp))
 
 
-main()
+if __name__ == "__main__":
+    main()

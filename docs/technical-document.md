@@ -88,7 +88,7 @@ Missing players must be imputed (without imputation no prediction is produced). 
 - **Loose and contested balls** stay with the last owner. A change of team requires controlled possession; a touch, deflection or aerial duel without control is not a change.
 - **X** is never written. The scorer forward-fills X with the last label in the half, which is a free repeat inside a possession and costly across a hand-over, so a label is always committed.
 - **Controlled-possession notion**: DFL raw truth counts every touch as a possession (about 8.8 per minute), while the competition's ground truth is closer to 3.4 per minute in the public window. We therefore score against four truth variants: raw and `ctrl` (touch-only possessions removed), each on the full and on a narrowed dead definition. `ctrl` is the variant that matches the competition's definition and is the one on which the possession-count ratio is judged.
-- **Restarts**: kick-offs and throw-ins carry no team in the tags; the restart structure (taker position, cluster shapes) feeds the dead-ball model, and the taker's team is inferred after the restart.
+- **Restarts**: kick-offs and throw-ins carry no team in the tags; the restart structure (taker position, cluster shapes) feeds the dead-ball model. Inferring the taker's team after the restart is not implemented.
 
 ## 5. Validation protocol
 
@@ -96,9 +96,9 @@ One real match with no private ground truth cannot be used for tuning, so:
 
 1. **Proxy**: 6 DFL matches plus the sealed 9007, 5 seeds of simulated blackouts each.
 2. **Blackout simulator** fitted to the real gap statistics (79 blackouts, median 20.8 s). Dead-ball behaviour on visible frames was recalibrated to the real tracker (ball static 2 %, out of pitch 3 %, median speed about 5 m/s).
-3. **Corruption model** calibrated label-free to the real tracker: player outages (inside blackouts mean 18.3 players, p10 11.4; real 18.8 and 12), mass outages, identity-swap rate (flip 0.02), teleports about 0.025 per player-minute (real about 0).
-4. **LOMO selection** over grid `grid2` (tau_HA, tau_D, dead weight, PathCRF weight in {0, 0.5, 1, 2}, dead policy). Cells are ranked by mean rank over the four truth variants. Spec bar: beat the best baseline by more than twice the seed SD on the variants, with a possession-count ratio inside the window on `ctrl`.
-5. **Sealed match**: 9007 is read once, after selection is registered; the read is logged.
+3. **Corruption model** calibrated label-free to the real tracker: player outages (inside blackouts mean 18.3 players, p10 11.4; real 18.8 and 12), mass outages, identity-swap rate (`swap_rate_per_team_min` 0.2 per team-minute; `flip_rate_per_min` 0.02 is the team-flip rate), teleports about 0.025 per player-minute (real about 0).
+4. **LOMO selection** over grid `grid2` (tau_HA, tau_D, dead weight, PathCRF weight in {0, 0.5, 1, 2}, dead policy). Cells are ranked by mean rank over the four truth variants. Spec bar: beat the best baseline by more than twice the seed SD on the variants, with a possession-count ratio inside the window, judged on the `ctrl` variants only (raw ratios are recorded).
+5. **Sealed match**: 9007 is read once, after selection is registered; the read is logged. Disclosure: 9007 is sealed for the pipeline (never scored by `select_lomo`), but its labels were used for the PathCRF clean evaluation (92.6 %), the PathCRF robustness experiment, the choice of the PathCRF output head (`run_infer.py`: the emission marginal was picked on 15 000 frames of the corrupted sim half game_9007_H1 s100 against the ball-owning team), and the ctrl-truth diagnostic (66 % disagreement on 9007 H1). The sealed a2 result is reported with this caveat.
 6. **Real-match plausibility (label-free)**: the candidate's non-blackout D share on the real match must lie in [0.10, 0.18] (the public window implies about 0.15 on visible frames). The first candidate (a1) had 0.028 on visible frames with a dead model trained on unrealistic visible-ball dead time; this criterion is what exposed it.
 7. **Public 5-minute window**: reads are budgeted at 3, used only for conventions and plausibility, never for tuning. 2 of 3 are used; the last is reserved for the final candidate.
 
@@ -119,13 +119,14 @@ The public read showed a1 below the baseline on the 5-minute window. The causes 
 
 | table | content | status |
 |---|---|---|
-| selection a2 (grid2, 5 folds, 2 seeds) | best cell, four variant scores, margins over baselines, folds won, seed SD | FILL |
+| selection a2 (grid2, 6 folds 9001-9006, 2 seeds) | best cell, four variant scores, margins over baselines, folds won, seed SD | FILL |
 | sealed match 9007 | raw and ctrl spellF1 of the registered cell | FILL |
 | candidate drift on the real match | spell count, non-blackout D share, tag agreement | FILL |
 | final public window read (3 of 3) | spellF1, macroF1 | FILL |
 
 ## 7. Limitations
 
+- 9007 label exposure: the sealed match was used for PathCRF evaluation, robustness, output-head choice and the ctrl-truth diagnostic (see section 5); the sealed a2 score is therefore not a fully untouched estimate.
 - One real match: no real-data tuning set; the proxy is DFL with simulated blackouts, and DFL possession and dead definitions are not identical to the competition's (hence four truth variants).
 - The simulator under-represents the worst real tracking: real long player outages (p90 about 102 s) versus simulated (p90 about 35 s). PathCRF may be over-rated by the simulation; its accuracy falls to 54 to 68 % under identity switches.
 - Error analysis of a1 on the proxy: only 34 % of true possessions were matched at IoU 0.5; short possessions under 3 s are rarely matched; the largest loss is missed or false team changes on visible-ball frames and the team at blackout starts. Oracle boundaries would add about +0.18, so boundary placement remains the largest lever.
@@ -143,12 +144,12 @@ scripts\reproduce.ps1                     # full chain: simulator, PathCRF cache
 
 - `scripts/reproduce.ps1` checks the mtah venv (Python 3.12, `MTAH_VENV`; pins in `pyproject.toml`), `MTAH_DATA_DIR`, and PathCRF (`MTAH_PATHCRF_REPO`, `MTAH_PATHCRF_PY`), then prints the md5 of the candidate.
 - PathCRF setup, pinned versions and the thread pin: `third_party/pathcrf/SETUP.md`.
-- The full chain needs the DFL open-data parse and `runs/dfl_extra` (match 9007), which are not in the repository; `-CandidateOnly` needs only the competition data and PathCRF.
+- The full chain first runs `scripts/parse_dfl_match.py` (in the repository) on the raw DFL XML (`E:\football-synthesizer\data\dfl_open`, or `MTAH_DFL_RAW`) to produce `runs/dfl_extra` (match 9007); the raw XML is not in the repository; `-CandidateOnly` needs only the competition data and PathCRF.
 - Output file: `runs/candidates/a2.csv` (format checked with the official `validate_submission.py`). md5: `FILL`.
 
 ## 9. Rules compliance
 
 - No hand labels. No private ground truth was used; the ranking metric was only run against the public 5-minute window (3 reads at most, none used for tuning) and DFL proxy truth.
 - No competition data was uploaded to any cloud LLM service; the data stays on the local machine and is not in the repository.
-- The repository regenerates the submission file byte-for-byte from the committed config and dead model.
+- The repository regenerates the submission file byte-for-byte from the committed config and dead model, verified on the same machine, Python and pinned packages (`pyproject.toml`) with the PathCRF thread count pinned to 4. The PathCRF/torch CPU posterior is cached and hashed; identity across machines is not yet shown.
 - External tool: PathCRF (MPL-2.0), unmodified, documented in 3.2. DFL open data is used as proxy under its own terms.
