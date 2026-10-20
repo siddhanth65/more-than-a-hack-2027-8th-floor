@@ -1,11 +1,9 @@
 """Dead-ball evidence: hand-built restart/blackout features + a gradient-boosted classifier."""
-from dataclasses import dataclass
-
 import joblib
 import numpy as np
 from sklearn.ensemble import HistGradientBoostingClassifier
 
-from mtah.io.match import distance_to_line
+from mtah.io.match import distance_to_line, half_runs
 from mtah.sim.blackout_sim import runs_of
 
 DEAD_FEATURES = ("ball_present", "ball_speed", "ball_line_dist", "ball_out", "ball_static_1s",
@@ -24,18 +22,36 @@ def _rolling_mean(x, w):
         return (cv[idx] - cv[lo]) / (cf[idx] - cf[lo])
 
 
-def direction_of_play(match):
-    out = np.zeros(2, np.int8)
+def _span_direction(pos, team):
+    out = np.array([1, -1], np.int8)       # fallback when a team is never tracked in the span
     for k in (0, 1):
-        x = match.pos[:, match.team == k, 0]
-        with np.errstate(all="ignore"):
+        x = pos[:, team == k, 0]
+        rows = ~np.isnan(x).all(1) if x.shape[1] else np.zeros(len(x), bool)
+        if rows.any():
+            x = x[rows]
             mn = np.nanmean(np.nanmin(x, axis=1)); mx = np.nanmean(np.nanmax(x, axis=1))
-        out[k] = 1 if (-mn) > mx else -1   # deepest player on the negative side -> attacks +x
+            out[k] = 1 if (-mn) > mx else -1   # deepest player on the negative side -> attacks +x
+    return out
+
+
+def direction_of_play(match):
+    """(F, 2) int8: +1 if the team attacks +x, per half (frames outside any half take the nearest span's value)."""
+    F = match.n_frames
+    spans = [(a, b) for _, a, b in half_runs(match.half)] or [(0, F)]
+    out = np.zeros((F, 2), np.int8)
+    for a, b in spans:
+        out[a:b] = _span_direction(match.pos[a:b], match.team)
+    covered = np.zeros(F, bool)
+    for a, b in spans:
+        covered[a:b] = True
+    for f in np.flatnonzero(~covered):
+        a, b = min(spans, key=lambda ab: min(abs(f - ab[0]), abs(f - (ab[1] - 1))))
+        out[f] = out[a]
     return out
 
 
 def _sp_code(t):
-    t = (t or "").lower()
+    t = t.lower() if isinstance(t, str) else ""
     for key, code in SP_TYPES.items():
         if t.startswith(key):
             return code
@@ -43,6 +59,8 @@ def _sp_code(t):
 
 
 def dead_features(match, tags, fps=None):
+    """(F, len(DEAD_FEATURES)) float32 table. sp_dist_s: signed seconds to the nearest set-piece start,
+    positive = the next set-piece start is ahead, negative = it already began (clipped to +-60 s)."""
     fps = fps or match.fps; F = match.n_frames; L, W = match.pitch
     X = np.full((F, len(DEAD_FEATURES)), np.nan, np.float32)
     present = match.ball_present
@@ -65,11 +83,13 @@ def dead_features(match, tags, fps=None):
             if j >= 0 and present[j]:
                 X[s:e, 9] = float(ld[k] < ld[j])
     on = ~np.isnan(match.pos[..., 0])
-    with np.errstate(all="ignore"):
-        msp = np.nanmean(np.where(on, match.speed, np.nan), axis=1)
-    recent = _rolling_mean(msp, int(fps)); earlier = _rolling_mean(np.r_[np.full(int(fps), np.nan), msp[:-int(fps)]], int(5 * fps))
-    with np.errstate(all="ignore"):
-        X[:, 10] = recent / earlier
+    cnt = on.sum(1)
+    msp = np.where(cnt > 0, np.where(on, np.nan_to_num(match.speed), 0).sum(1) / np.maximum(cnt, 1), np.nan)
+    if F > int(fps):
+        recent = _rolling_mean(msp, int(fps)); earlier = _rolling_mean(np.r_[np.full(int(fps), np.nan), msp[:-int(fps)]], int(5 * fps))
+        with np.errstate(all="ignore"):
+            ratio = recent / earlier
+        X[:, 10] = np.where(np.isfinite(ratio), ratio, np.nan)
     X[:, 11] = on.sum(1)
     cov = np.zeros(F, bool); team_cov = np.zeros(F, bool); sp_in = np.zeros(F, bool); sp_type = np.zeros(F, np.float32)
     sp_starts = []
@@ -110,7 +130,7 @@ def dead_features(match, tags, fps=None):
     own_half = np.ones(F, bool)
     for k in (0, 1):
         sel = match.team == k
-        own = (px[:, sel] * dop[k] < 0) | ~on[:, sel]     # attacking +x -> own half is x < 0
+        own = (px[:, sel] * dop[:, k:k + 1] < 0) | ~on[:, sel]     # attacking +x -> own half is x < 0
         own_half &= own.all(1)
     X[:, 19] = own_half & (on.sum(1) >= 16)
     return X
