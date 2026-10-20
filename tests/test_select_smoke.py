@@ -63,8 +63,9 @@ def test_run_selection_smoke(tmp_path, monkeypatch):
     monkeypatch.setattr(sel, "GRID", grid)
     mod = _load_script()
     out = tmp_path / "out"
-    best = mod.run_selection(sim_dir, seeds, out)
-    assert best in grid
+    r1 = mod.run_selection(sim_dir, seeds, out)
+    best = r1["best_cell"]
+    assert best in grid and r1["resumed_folds"] == []
     for name in ("summary.csv", "best.json", "registration.json", "drift_reference.json"):
         assert (out / name).exists(), name
     for fold in (9001, 9002, 9003):
@@ -76,8 +77,14 @@ def test_run_selection_smoke(tmp_path, monkeypatch):
     assert "seed_sd" in b and "baseline_used" in b
     assert json.loads((out / "drift_reference.json").read_text())
     # resume: a second run reuses the fold tables
-    best2 = mod.run_selection(sim_dir, seeds, out)
-    assert best2 == best
+    r2 = mod.run_selection(sim_dir, seeds, out)
+    assert r2["best_cell"] == best and sorted(r2["resumed_folds"]) == [9001, 9002, 9003]
+    assert b["seeds"] == seeds and b["git"]
+    # a changed grid must not silently resume
+    import pytest
+    monkeypatch.setattr(sel, "GRID", grid[:1])
+    with pytest.raises(SystemExit):
+        mod.run_selection(sim_dir, seeds, out)
 
 
 def _fake_posterior(calls):
@@ -123,7 +130,7 @@ def test_run_selection_two_policies_pathcrf_and_real(tmp_path, monkeypatch):
         scored.append((cfg.dead_policy, {ev_policy[id(e)] for e in ev})); return orig_sc(test, ev, cfg, *a, **kw)
     monkeypatch.setattr(mod, "score_cell", spy_sc)
     out = tmp_path / "out"
-    best = mod.run_selection(sim_dir, seeds, out, grid=grid, real_data_dir="fake-data-dir")
+    best = mod.run_selection(sim_dir, seeds, out, grid=grid, real_data_dir="fake-data-dir")["best_cell"]
     assert best in grid
     assert scored and {p for p, _ in scored} == {"full", "no_ball_at_all"}
     assert all(used == {p} for p, used in scored), scored   # every cell scored with its own policy's evidence only
@@ -154,13 +161,11 @@ def test_base_for_grid_enables_pathcrf_only_when_weighted():
 def test_sealed_bar_gate(tmp_path):
     import pytest
     mod = _load_script()
-    p = tmp_path / "best.json"
-    p.write_text(json.dumps({"spec_bar": {"bar_pass": False}}))
+    best = {"spec_bar": {"bar_pass": False}}
     with pytest.raises(SystemExit):
-        mod.check_bar_gate(p, None)
-    assert mod.check_bar_gate(p, "registered exploratory read") is False
-    p.write_text(json.dumps({"spec_bar": {"bar_pass": True}}))
-    assert mod.check_bar_gate(p, None) is True
+        mod.check_bar_gate(best, None)
+    assert mod.check_bar_gate(best, "registered exploratory read") is True   # forced
+    assert mod.check_bar_gate({"spec_bar": {"bar_pass": True}}, None) is False
 
 
 def test_resume_rejects_fold_csv_from_other_grid(tmp_path):
@@ -169,20 +174,29 @@ def test_resume_rejects_fold_csv_from_other_grid(tmp_path):
     grid = [{"tau_HA": 10.0, "tau_D": 30.0, "w_dead": 1.0, "w_pathcrf": 0.0, "dead_policy": "full", "aba_s": 1.0},
             {"tau_HA": 30.0, "tau_D": 100.0, "w_dead": 2.0, "w_pathcrf": 0.5, "dead_policy": "no_ball_at_all", "aba_s": 1.0}]
     df = pd.DataFrame([{"cell": i, **c} for i, c in enumerate(grid)] + [{"cell": "smooth50"}])
-    mod.check_resume_grid(df, grid, tmp_path)   # same grid: fine
+    fp = mod.run_fingerprint([100, 101], grid, "grid2")
+    meta = dict(fp)
+    mod.check_resume(meta, df, grid, fp, tmp_path)   # same grid and seeds: fine
     for col, val in (("tau_D", 31.0), ("dead_policy", "full")):
         bad = df.copy(); bad.loc[1, col] = val
         with pytest.raises(SystemExit, match="different grid"):
-            mod.check_resume_grid(bad, grid, tmp_path)
+            mod.check_resume(meta, bad, grid, fp, tmp_path)
     with pytest.raises(SystemExit, match="different grid"):
-        mod.check_resume_grid(df.iloc[[0, 2]], grid, tmp_path)   # a cell missing
+        mod.check_resume(meta, df.iloc[[0, 2]], grid, fp, tmp_path)   # a cell missing
+    with pytest.raises(SystemExit, match="different grid"):
+        mod.check_resume({**meta, "grid_hash": "x"}, df, grid, fp, tmp_path)
+    with pytest.raises(SystemExit, match="seeds"):
+        mod.check_resume({**meta, "seeds": [100, 102]}, df, grid, fp, tmp_path)
+    with pytest.raises(SystemExit, match="fingerprint"):
+        mod.check_resume(None, df, grid, fp, tmp_path)
 
 
 def test_sealed_refuses_seed_mismatch(tmp_path, monkeypatch):
     import pytest
     mod = _load_script()
     (tmp_path / "sim").mkdir()
-    (tmp_path / "best.json").write_text(json.dumps({"cell": sel.GRID[0], "spec_bar": {"bar_pass": True}}))
+    (tmp_path / "best.json").write_text(json.dumps({"cell": sel.GRID[0], "spec_bar": {"bar_pass": True},
+                                                    "git": "abc", "seeds": [100, 102]}))
     (tmp_path / "registration.json").write_text(json.dumps({"seeds": [100, 101]}))
     monkeypatch.setattr(sys, "argv", ["select_lomo", "--sim", str(tmp_path / "sim"), "--seeds", "100", "102", "--sealed",
                                       "--best-from", str(tmp_path), "--out", str(tmp_path)])

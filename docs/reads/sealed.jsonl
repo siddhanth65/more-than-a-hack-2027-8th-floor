@@ -1,0 +1,1 @@
+{"time": "2026-10-20 23:41", "git": "d85c166", "cell": {"tau_HA": 10.0, "tau_D": 100.0, "w_dead": 2.0, "aba_s": 1.0}, "seeds": [100, 101], "sealed": {"raw_Dfull": 0.4446804320207039, "ctrl_Dfull": 0.3752978225213016, "raw_Dnarrow": 0.39539994740308193, "ctrl_Dnarrow": 0.33029443784859436}, "forced": true}

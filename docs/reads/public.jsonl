@@ -1,0 +1,1 @@
+{"time": "2026-10-20 23:42", "git": "450d78f", "candidate": "runs/candidates/a1.csv", "note": "Plan 2a first candidate a1: cell tau 10/100 w_dead 2 aba 1.0 (read 2 of 3)", "spell_f1": 0.2899999999999999, "macro_f1": 0.5642770199861314, "n_pred": 23, "n_gt": 17, "decomposition": {"false_splits": 5, "false_merges": 2, "boundary_only": 5, "matched_07": 3, "unmatched_gt_03": 9}}

@@ -18,6 +18,7 @@ from mtah import baselines
 from mtah.eval.drift import blackout_mask_from_match, drift_report
 from mtah.eval.scorer import OFFICIAL_PATH, score
 from mtah.evidence.pathcrf import PathCRFParams
+from mtah.io import readlog
 from mtah.io.metrica_loader import load_tactical
 from mtah.io.tags import load_tags
 from mtah.pipeline import PipelineConfig, compute_evidence, compute_strong, predict
@@ -156,33 +157,61 @@ def real_plausibility(sim_dir, seeds, keys, base, grid, ranked, data_dir, out, t
 GRID_PARAM_COLS = ("tau_HA", "tau_D", "w_dead", "aba_s", "w_pathcrf", "dead_policy")
 
 
-def check_resume_grid(df, grid, out):
-    """A resumed fold CSV must have been produced with the current grid: parameter columns equal grid[i] for every i."""
-    bad = SystemExit(f"fold CSVs in {out} were produced with a different grid; use a fresh --out")
+def grid_hash(grid):
+    return hashlib.md5(json.dumps(grid, sort_keys=True).encode()).hexdigest()
+
+
+def run_fingerprint(seeds, grid, grid_name=None):
+    """What a fold table was produced with: seeds and grid must match to resume it; git only warns."""
+    return {"git": git_sha(), "seeds": [int(s) for s in seeds], "grid": grid_name, "grid_hash": grid_hash(grid)}
+
+
+def _fold_csv_matches_grid(df, grid):
+    """Parameter columns of a fold CSV equal grid[i] for every cell i (and no cell is missing or extra)."""
     rows = df[~df["cell"].isin(list(BASELINES))].copy()
     if len(rows) != len(grid):
-        raise bad
+        return False
     rows["cell"] = rows["cell"].astype(int)
     rows = rows.set_index("cell")
     for i, cell in enumerate(grid):
         if i not in rows.index:
-            raise bad
+            return False
         for c in GRID_PARAM_COLS:
             if c in rows.columns and c in cell:
                 v = rows.at[i, c]
                 same = (v == cell[c]) if isinstance(cell[c], str) else bool(np.isclose(float(v), float(cell[c])))
                 if not same:
-                    raise bad
+                    return False
+    return True
+
+
+def check_resume(meta, df, grid, fp, out, held=None):
+    """The one resume check. The fold's meta fingerprint must exist and hard-match the seeds and the grid hash, and the
+    fold CSV's parameter columns must equal the grid. A different git sha only warns (an unrelated commit must not
+    force a multi-hour rerun); the registration records the current sha."""
+    where = f"fold {held} in {out}" if held is not None else str(out)
+    if meta is None:
+        raise SystemExit(f"refusing to resume {where}: no fold meta fingerprint (seeds/grid unverifiable); use a fresh --out")
+    if [int(s) for s in meta.get("seeds") or []] != fp["seeds"]:
+        raise SystemExit(f"refusing to resume {where}: seeds {meta.get('seeds')} != current {fp['seeds']}; use a fresh --out")
+    if meta.get("grid_hash") != fp["grid_hash"] or not _fold_csv_matches_grid(df, grid):
+        raise SystemExit(f"refusing to resume {where}: fold CSVs were produced with a different grid; use a fresh --out")
+    if meta.get("git") != fp["git"]:
+        print(f"WARNING: resuming {where} produced at git {meta.get('git')} (now {fp['git']})", flush=True)
 
 
 def run_grid(sim_dir, seeds, keys, base, out, grid, real_data_dir=None, grid_name=None, top_k=REAL_TOP_K):
     fold_tables, lengths_by_fold, dead_by_fold = [], {}, {}
     policies = sorted({c.get("dead_policy", "full") for c in grid})
+    resumed_folds = []
+    fp = run_fingerprint(seeds, grid, grid_name)
     for held, train_keys, test_keys in lomo_folds(keys):
         fold_csv = out / f"fold_{held}.csv"; halves_csv = out / f"fold_{held}_halves.csv"
+        meta_path = out / f"fold_{held}.meta.json"
         if fold_csv.exists() and halves_csv.exists():
-            df = pd.read_csv(fold_csv); check_resume_grid(df, grid, out)
-            fold_tables.append(df)
+            meta = json.loads(meta_path.read_text()) if meta_path.exists() else None
+            df = pd.read_csv(fold_csv); check_resume(meta, df, grid, fp, out, held)
+            fold_tables.append(df); resumed_folds.append(held)
             lengths_by_fold[held] = json.loads(df["lengths"].iloc[0])
             print(f"fold {held} resumed", flush=True)
             continue
@@ -216,6 +245,7 @@ def run_grid(sim_dir, seeds, keys, base, out, grid, real_data_dir=None, grid_nam
         pd.DataFrame(brows).to_csv(out / f"fold_{held}_baselines.csv", index=False)
         df = pd.DataFrame(rows); df["held"] = held; df["lengths"] = json.dumps(lengths)
         df.to_csv(fold_csv, index=False); fold_tables.append(df)
+        meta_path.write_text(json.dumps(fp))
         grid_rows = df[~df["cell"].isin(list(BASELINES))]
         print(f"fold {held} done; best ctrl_Dfull {grid_rows['ctrl_Dfull'].max():.3f}", flush=True)
     allf = pd.concat(fold_tables)
@@ -261,8 +291,9 @@ def run_grid(sim_dir, seeds, keys, base, out, grid, real_data_dir=None, grid_nam
                                                "scores": {v: best[v] for v in VARIANTS},
                                                "ratios": bar["count_ratios"], "seed_sd": bar["seed_sd"],
                                                "baseline_used": bar["baseline_used"], "spec_bar": bar,
-                                               "real_plausibility": real_json}, indent=1))
-    return best_cell
+                                               "real_plausibility": real_json,
+                                               "git": git_sha(), "seeds": list(seeds), "grid": grid_name}, indent=1))
+    return {"best_cell": best_cell, "resumed_folds": resumed_folds, "bar_pass": bar["bar_pass"]}
 
 
 def run_selection(sim_dir, seeds, out_dir, grid=None, base=None, real_data_dir=None, grid_name=None):
@@ -287,7 +318,7 @@ def run_pilot(args, keys, base, grid):
     dead = train_dead(train, policy=cfg0.dead_policy)
     ev = [compute_evidence(s.match, s.tags, cfg0, dead, cache_key=f"{s.key}_s{s.seed}") for s in test]
     strong = [compute_strong(s.match, cfg0) for s in test]
-    for a, d, w in itertools.product((3.0, 30.0), (3.0, 30.0), (0.5, 2.0)):
+    for a, d, w in itertools.product((3.0, 100.0), (3.0, 100.0), (0.5, 2.0)):
         cell = {**grid[0], "tau_HA": a, "tau_D": d, "w_dead": w, "aba_s": 0.5 if grid is sel.GRID else grid[0]["aba_s"]}
         cfg = apply_cell(base, cell); cfg.decoder.lengths = lengths
         res, _ = score_cell(test, ev, cfg, ("ctrl_Dfull",), strongs=strong)
@@ -295,26 +326,34 @@ def run_pilot(args, keys, base, grid):
         print(f"  tau_HA={a:>4} tau_D={d:>4} w_dead={w:>3}  n_pred/n_gt={r['ratio']:.3f}  spell_f1={r['spell_f1']:.3f}", flush=True)
 
 
-def check_sealed_guard(best_cell):
-    log = ROOT / "runs" / "sealed_reads.jsonl"; log.parent.mkdir(parents=True, exist_ok=True)
-    sha = git_sha()
-    if log.exists():
-        for line in log.read_text().splitlines():
-            if not line.strip():
-                continue
-            e = json.loads(line)
-            if e.get("cell") == best_cell and e.get("git") == sha:
-                raise SystemExit(f"refusing sealed read: cell already read at git {sha} ({e.get('time')})")
-    return log
+def check_sealed_guard(best_cell, seeds):
+    for e in readlog.read_log("sealed"):
+        if e.get("cell") == best_cell and e.get("seeds") == list(seeds):
+            raise SystemExit(f"refusing sealed read: cell already read with seeds {list(seeds)} ({e.get('time')})")
 
 
-def check_bar_gate(best_json, force_reason):
-    """Sealed reads need spec_bar.bar_pass in best.json, or an explicit --force-sealed REASON (logged)."""
-    bar_pass = bool(json.loads(Path(best_json).read_text()).get("spec_bar", {}).get("bar_pass", False)) \
-        if Path(best_json).exists() else False
-    if not bar_pass and not force_reason:
-        raise SystemExit(f"refusing sealed read: bar_pass is false in {best_json}; pass --force-sealed REASON to override")
-    return bar_pass
+def check_bar_gate(best, force_reason=None):
+    """Sealed reads need spec_bar.bar_pass in best.json, or an explicit --force-sealed REASON (logged). Returns forced."""
+    bar = best.get("spec_bar") or {}
+    if bar.get("bar_pass"):
+        return False
+    print("SPEC BAR", json.dumps(bar, indent=1))
+    if not force_reason:
+        raise SystemExit("refusing sealed read: spec bar not passed (bar_pass false); pass --force-sealed REASON to override")
+    print(f"!!! WARNING: --force-sealed ({force_reason}): reading the sealed match although the spec bar FAILED !!!")
+    return True
+
+
+def load_best(best_dir, seeds):
+    best = json.loads((Path(best_dir) / "best.json").read_text())
+    missing = [k for k in ("git", "seeds") if k not in best]
+    if missing:
+        raise SystemExit(f"refusing --best-from {best_dir}: best.json lacks {missing}")
+    if list(best["seeds"]) != list(seeds):
+        raise SystemExit(f"refusing --best-from: recorded seeds {best['seeds']} != --seeds {list(seeds)}")
+    if best["git"] != git_sha():
+        print(f"WARNING: best.json was made at git {best['git']}, current is {git_sha()}")
+    return best
 
 
 def main():
@@ -330,7 +369,8 @@ def main():
     ap.add_argument("--best-from", default=None, help="selection dir whose best.json is reused (skips the grid loop)")
     ap.add_argument("--pilot", action="store_true", help="first fold only: print L_k and the 8 corner cells; writes nothing")
     ap.add_argument("--sealed", action="store_true")
-    ap.add_argument("--force-sealed", default=None, metavar="REASON", help="allow the sealed read although bar_pass is false")
+    ap.add_argument("--force-sealed", default=None, metavar="REASON",
+                    help="read the sealed match although a gate failed; the reason is logged in docs/reads/sealed.jsonl")
     args = ap.parse_args()
     grid = sel.GRIDS[args.grid]
     keys = [k for k in list_sim_keys(args.sim) if match_id(k) != SEALED_MATCH]
@@ -339,21 +379,25 @@ def main():
         return
     out = Path(args.out); out.mkdir(parents=True, exist_ok=True)
     if args.best_from:
-        best_cell = json.loads((Path(args.best_from) / "best.json").read_text())["cell"]
+        best = load_best(args.best_from, args.seeds)
+        best_cell = best["cell"]
         print("reusing best cell from", args.best_from, best_cell)
     else:
         best_cell = run_selection(args.sim, args.seeds, out, grid=grid, base=base_for_grid(grid),
-                                  real_data_dir=None if args.no_real else data_dir_or_exit(args.data), grid_name=args.grid)
+                                  real_data_dir=None if args.no_real else data_dir_or_exit(args.data),
+                                  grid_name=args.grid)["best_cell"]
     if args.sealed:
-        reg_path = Path(args.best_from or out) / "registration.json"
+        sel_dir = Path(args.best_from or out)
+        best = load_best(sel_dir, args.seeds)
+        reg_path = sel_dir / "registration.json"
         if not reg_path.exists():
             raise SystemExit(f"{reg_path} missing: cannot verify the registered seeds; refusing the sealed read")
         reg_seeds = json.loads(reg_path.read_text()).get("seeds")
         if reg_seeds != list(args.seeds):
             raise SystemExit(f"--seeds {list(args.seeds)} differ from the registered seeds {reg_seeds} in {reg_path}; "
                              "refusing the sealed read")
-        bar_pass = check_bar_gate(Path(args.best_from or out) / "best.json", args.force_sealed)
-        log = check_sealed_guard(best_cell)
+        forced = check_bar_gate(best, args.force_sealed)
+        check_sealed_guard(best_cell, args.seeds)
         base = base_for_grid([best_cell])   # PathCRF only if the chosen cell weights it
         policy = best_cell.get("dead_policy", "full")
         train = load_sims(args.sim, args.seeds, keys); dead = train_dead(train, policy=policy)
@@ -370,10 +414,11 @@ def main():
         sealed = load_sims(args.sim, args.seeds, [k for k in list_sim_keys(args.sim) if match_id(k) == SEALED_MATCH])
         ev = [compute_evidence(s.match, s.tags, cfg, dead, cache_key=f"{s.key}_s{s.seed}") for s in sealed]
         res = {v: m["spell_f1"] for v, m in score_cell(sealed, ev, cfg, VARIANTS)[0].items()}
-        rec = {"time": time.strftime("%Y-%m-%d %H:%M"), "git": git_sha(), "cell": best_cell, "sealed": res,
-               "bar_pass": bar_pass, "force_reason": args.force_sealed}
-        with open(log, "a") as f:
-            f.write(json.dumps(rec) + "\n")
+        rec = {"time": time.strftime("%Y-%m-%d %H:%M"), "git": git_sha(), "cell": best_cell, "seeds": list(args.seeds),
+               "sealed": res, "bar_pass": bool(best.get("spec_bar", {}).get("bar_pass", False))}
+        if forced:
+            rec["forced"] = True; rec["force_reason"] = args.force_sealed
+        readlog.append_read("sealed", rec)
         dead.save(out / "dead_model.joblib"); (out / "config.json").write_text(json.dumps({**cfg.to_dict(), "lengths": lengths}, indent=1))
         print("SEALED", json.dumps(res))
 

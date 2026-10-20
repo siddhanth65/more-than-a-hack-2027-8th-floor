@@ -13,7 +13,7 @@ V4 = ["raw_Dfull", "ctrl_Dfull", "raw_Dnarrow", "ctrl_Dnarrow"]
 
 
 def test_grid_and_apply_cell():
-    assert len(GRID) == 81
+    assert len(GRID) == 144
     cfg = apply_cell(PipelineConfig(), GRID[0])
     assert cfg.decoder.tau_HD == cfg.decoder.tau_DH == GRID[0]["tau_D"] and cfg.post.aba_s == GRID[0]["aba_s"]
     assert cfg.decoder.weights["dead"] == GRID[0]["w_dead"]
@@ -79,7 +79,7 @@ def test_estimate_lengths_uses_errors_not_signal(monkeypatch, kind, lo, hi):
         e, d = sims[0].ev
         return {"ball": e, "tag": e, "dead": d}
     monkeypatch.setattr(sel, "compute_evidence", fake_ev)
-    L = estimate_lengths(sims, PipelineConfig(), lambda s: None)
+    L = estimate_lengths(sims, PipelineConfig(), lambda s: None, mode="residual")
     for k in ("ball", "tag"):
         assert lo <= L[k] <= hi, (k, L[k])
 
