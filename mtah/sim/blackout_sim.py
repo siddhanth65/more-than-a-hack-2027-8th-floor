@@ -24,6 +24,7 @@ class BlackoutParams:
     live_sigma_log: float = 0.8
     live_max_s: float = 60.0
     merge_s: float = 1.0
+    min_s: float = 5.0  # runs shorter than this are not emitted: the real tracker never loses the ball for 0.5-5 s
 
     def to_dict(self):
         return asdict(self)
@@ -37,6 +38,15 @@ def runs_of(mask):
     m = np.asarray(mask, dtype=np.int8)
     edges = np.diff(np.concatenate(([0], m, [0])))
     return list(zip(np.flatnonzero(edges == 1).tolist(), np.flatnonzero(edges == -1).tolist()))
+
+
+def drop_short_runs(mask, fps, min_s):
+    out = np.array(mask, dtype=bool, copy=True)
+    n = int(min_s * fps)
+    for s, e in runs_of(out):
+        if e - s < n:
+            out[s:e] = False
+    return out
 
 
 def blackout_mask(labels, ball, pitch, fps, params, rng):
@@ -71,7 +81,7 @@ def blackout_mask(labels, ball, pitch, fps, params, rng):
     for (s0, e0), (s1, e1) in zip(runs[:-1], runs[1:]):
         if s1 - e0 < gap:
             mask[e0:s1] = True
-    return mask
+    return drop_short_runs(mask, fps, params.min_s)
 
 
 def apply_blackouts(match, mask):

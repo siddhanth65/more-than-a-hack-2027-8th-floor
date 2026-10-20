@@ -75,3 +75,12 @@ def test_merge_short_gaps():
                        pre_lo_s=0, pre_hi_s=0, post_lo_s=0, post_hi_s=0, live_rate_per_min=0.0, merge_s=1.0)
     mask = blackout_mask(labels, ball, (105.0, 68.0), 25, p, np.random.default_rng(0))
     assert runs_of(mask) == [(0, 510)]
+
+
+def test_min_duration_drops_short_runs():
+    labels = np.full(25 * 60, "H", dtype="<U1"); ball = np.zeros((len(labels), 2), np.float32)
+    p = BlackoutParams(p_mask_near=0.0, p_mask_far=0.0, live_rate_per_min=0.0, min_s=5.0)
+    mask = np.zeros(len(labels), bool); mask[100:150] = True; mask[500:700] = True   # 2 s and 8 s
+    from mtah.sim.blackout_sim import drop_short_runs
+    out = drop_short_runs(mask, 25, 5.0)
+    assert runs_of(out) == [(500, 700)]

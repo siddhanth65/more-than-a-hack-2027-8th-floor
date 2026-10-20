@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def pooled_stats(halves, params, seeds):
-    acc = {k: [] for k in ("per_133min", "masked_share", "median_s", "max_s", "dead_share_inside", "long_share")}
+    acc = {k: [] for k in ("per_133min", "masked_share", "median_s", "p90_s", "max_s", "dead_share_inside", "long_share")}
     for m, labels in halves:
         for seed in seeds:
             mask = blackout_mask(labels, m.ball, m.pitch, m.fps, params, np.random.default_rng(seed))
@@ -35,7 +35,7 @@ def sample(rng):
         p_mask_near=rng.uniform(0.3, 0.95), p_mask_far=rng.uniform(0.05, 0.6),
         c_lo=rng.uniform(0.1, 0.6), c_hi=rng.uniform(0.6, 1.3),
         pre_lo_s=0.3, pre_hi_s=rng.uniform(1.0, 8.0), post_lo_s=0.3, post_hi_s=rng.uniform(1.0, 12.0),
-        live_rate_per_min=rng.uniform(0.0, 1.5), live_median_s=rng.uniform(3.0, 25.0),
+        live_rate_per_min=rng.uniform(0.0, 1.5), live_median_s=rng.uniform(5.0, 25.0),
         live_sigma_log=rng.uniform(0.5, 1.6), live_max_s=rng.uniform(60.0, 240.0),
         merge_s=rng.uniform(1.0, 4.0))
 
@@ -57,13 +57,13 @@ def main():
         L = loss(st, T)
         if best is None or L < best[0]:
             best = (L, params, st)
-            print(f"draw {i}: loss {L:.2f}  {json.dumps({k: round(v, 3) for k, v in st.items()})}")
+            print(f"draw {i}: loss {L:.2f}  {json.dumps({k: round(v, 3) for k, v in st.items()})}", flush=True)
     L, params, st = best
     (ROOT / "configs" / "blackout_sim.json").write_text(json.dumps(params.to_dict(), indent=1))
     (ROOT / "runs").mkdir(exist_ok=True)
     (ROOT / "runs" / "blackout_fit.json").write_text(json.dumps({"loss": L, "stats": st, "targets": T}, indent=1))
     ok = all(abs(st[k] - T[k]) <= T["tolerance"][k] for k in T["tolerance"]) and st["max_s"] >= T["max_s_min"]
-    print("GATES PASS" if ok else "GATES FAIL", json.dumps(st))
+    print("GATES PASS" if ok else "GATES FAIL", json.dumps(st), flush=True)
 
 
 if __name__ == "__main__":
