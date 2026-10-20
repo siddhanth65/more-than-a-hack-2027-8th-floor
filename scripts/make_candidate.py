@@ -27,11 +27,14 @@ def main():
     raw = json.loads((sel / "config.json").read_text()); lengths = raw.pop("lengths")
     cfg = PipelineConfig.from_dict(raw); cfg.decoder.lengths = lengths
     dead = DeadModel.load(sel / "dead_model.joblib")
+    d = Path(args.data) / "tactical"
+    md5s = {n: hashlib.md5((d / f"{STEMS['tactical']}{suf}").read_bytes()).hexdigest()
+            for n, suf in (("atd", "_atd.txt"), ("meta", "_atd.xml"), ("tags", "_smart_tagging.xml"), ("homography", "_homography.csv"))}
     m = load_tactical(args.data); tags = load_tags(args.data)
     ev = compute_evidence(m, tags, cfg, dead)
     labels = predict(m, tags, cfg, dead, evidence=ev)
     out = ROOT / "runs" / "candidates"; out.mkdir(parents=True, exist_ok=True)
-    p = write_submission(labels, out / f"{args.name}.csv"); reason = validate(p)
+    p = Path(write_submission(labels, out / f"{args.name}.csv")); reason = validate(p)
     if reason is not None:
         print(f"INVALID submission {p}: {reason}")
         sys.exit(1)
@@ -49,9 +52,6 @@ def main():
         print("out_of_range:", oor)
     drift = {"candidate": drift, "reference": ref, "out_of_range": oor}
     (out / f"{args.name}.drift.json").write_text(json.dumps(drift, indent=1))
-    d = Path(args.data) / "tactical"
-    md5s = {n: hashlib.md5((d / f"{STEMS['tactical']}{suf}").read_bytes()).hexdigest()
-            for n, suf in (("atd", "_atd.txt"), ("meta", "_atd.xml"), ("tags", "_smart_tagging.xml"), ("homography", "_homography.csv"))}
     manifest = {"git": subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], cwd=ROOT).decode().strip(),
                 "git_dirty": bool(subprocess.check_output(["git", "status", "--porcelain"], cwd=ROOT).strip()),
                 "select_dir": str(sel), "config": {**cfg.to_dict(), "lengths": lengths}, "data_md5": md5s,

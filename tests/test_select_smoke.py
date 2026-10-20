@@ -63,8 +63,9 @@ def test_run_selection_smoke(tmp_path, monkeypatch):
     monkeypatch.setattr(sel, "GRID", grid)
     mod = _load_script()
     out = tmp_path / "out"
-    best = mod.run_selection(sim_dir, seeds, out)
-    assert best in grid
+    r1 = mod.run_selection(sim_dir, seeds, out)
+    best = r1["best_cell"]
+    assert best in grid and r1["resumed_folds"] == []
     for name in ("summary.csv", "best.json", "registration.json", "drift_reference.json"):
         assert (out / name).exists(), name
     for fold in (9001, 9002, 9003):
@@ -76,5 +77,11 @@ def test_run_selection_smoke(tmp_path, monkeypatch):
     assert "seed_sd" in b and "baseline_used" in b
     assert json.loads((out / "drift_reference.json").read_text())
     # resume: a second run reuses the fold tables
-    best2 = mod.run_selection(sim_dir, seeds, out)
-    assert best2 == best
+    r2 = mod.run_selection(sim_dir, seeds, out)
+    assert r2["best_cell"] == best and sorted(r2["resumed_folds"]) == [9001, 9002, 9003]
+    assert b["seeds"] == seeds and b["git"]
+    # a changed grid must not silently resume
+    import pytest
+    monkeypatch.setattr(sel, "GRID", grid[:1])
+    with pytest.raises(SystemExit):
+        mod.run_selection(sim_dir, seeds, out)
