@@ -48,6 +48,14 @@ def speeds_from_positions(pos, fps):
     return out
 
 
+def kinematics(pos, fps):
+    """Speed used by every loader: central differences of the positions (alias of speeds_from_positions).
+
+    DFL has no provider speed, so both loaders compute it the same way and features see one definition.
+    """
+    return speeds_from_positions(pos, fps)
+
+
 def half_runs(half):
     """[(half_id, start, stop)] half-open spans of each graded half, in order.
 

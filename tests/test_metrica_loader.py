@@ -29,7 +29,7 @@ def test_parse_epts_tiny(tmp_path):
     assert m.ball[0].tolist() == pytest.approx([0.25 * 105.3, 0.0])
     assert np.isnan(m.ball[1]).all()
     assert m.ball_present.tolist() == [True, False, True]
-    assert m.speed[0, 2] == pytest.approx(2.0)                          # provider speed kept
+    assert np.isnan(m.speed[0, 2]) and m.speed[1, 0] == 0.0            # central differences only: provider speed ignored
     assert m.half.tolist() == [1, 1, 1]                                 # short file: all graded
 
 

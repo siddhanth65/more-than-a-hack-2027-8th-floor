@@ -4,7 +4,7 @@ from pathlib import Path
 
 import numpy as np
 
-from mtah.io.match import Match, speeds_from_positions
+from mtah.io.match import Match, kinematics
 
 DFL_PITCH = (105.0, 68.0)
 SLOTS_PER_TEAM = 16
@@ -52,8 +52,8 @@ def load_half(npz_path, census_path):
     ball = z["ball_xy"].astype(np.float32)
     status = z["ball_status"].astype(np.int8); poss = z["ball_poss_ltr"].astype(np.int8)
     labels = np.where(status == 0, "D", np.where(poss == ltr_home, "H", "A")).astype("<U1")
-    m = Match(fps=FPS, pos=pos, speed=speeds_from_positions(pos, FPS), team=team, ball=ball,
-              ball_speed=speeds_from_positions(ball, FPS), half=np.ones(F, np.int8), pitch=DFL_PITCH)
+    m = Match(fps=FPS, pos=pos, speed=kinematics(pos, FPS), team=team, ball=ball,
+              ball_speed=kinematics(ball, FPS), half=np.ones(F, np.int8), pitch=DFL_PITCH)
     return m, labels
 
 
