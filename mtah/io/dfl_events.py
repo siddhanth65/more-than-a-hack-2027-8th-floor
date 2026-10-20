@@ -21,7 +21,10 @@ def _segments(labels):
 
 
 def ctrl_filter(labels, events, fps):
-    """Relabel team runs whose start is not confirmed by an event of that team within +-1.5 s."""
+    """Controlled-possession truth: a team run whose start is not confirmed by an event of that team within
+    +-1.5 s starts at its first event after the window instead (re-anchor; the frames before it go to the
+    previous team); a run with no such event at all is absorbed by the previous team. D runs are untouched
+    and do not reset the previous team."""
     out = np.asarray(labels).copy()
     win = int(round(CTRL_WINDOW_S * fps))
     ev_frames = {"H": np.sort(events.loc[events["team"] == "H", "frame"].to_numpy()),
@@ -34,8 +37,12 @@ def ctrl_filter(labels, events, fps):
             f = ev_frames[lab]
             supported = f.size and np.any((f >= s - win) & (f <= s + win))
             if not supported:
-                out[s:e] = prev_team
-                lab = prev_team
+                inside = f[(f > s + win) & (f < e)]
+                if inside.size:
+                    out[s:int(inside[0])] = prev_team
+                else:
+                    out[s:e] = prev_team
+                    lab = prev_team
         prev_team = lab
     return out
 

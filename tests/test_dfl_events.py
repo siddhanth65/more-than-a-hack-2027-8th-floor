@@ -64,3 +64,37 @@ def test_dnarrow_ignores_stoppage_event_before_static():
     v = truth_variants(labels, events, ball, speed, 25, (105.0, 68.0))
     d = v["raw_Dnarrow"]
     assert "".join(d[100:130]) == "H" * 30 and "".join(d[130:180]) == "D" * 50 and "".join(d[180:200]) == "A" * 20
+
+
+def _ctrl(labels, rows, fps=25):
+    from mtah.io.dfl_events import ctrl_filter
+    return "".join(ctrl_filter(labels, ev(rows), fps))
+
+
+def test_ctrl_reanchors_long_unsupported_run_at_first_event():
+    # A run 50..249 with no A event within 1.5 s of frame 50, first A event at 150 -> H until 150, A from 150
+    labels = lab("H" * 50 + "A" * 200 + "H" * 50)
+    rows = [(10, "H", 1, False), (150, "A", 2, False), (200, "A", 2, False), (255, "H", 2, False)]
+    assert _ctrl(labels, rows) == "H" * 150 + "A" * 100 + "H" * 50
+
+
+def test_ctrl_absorbs_short_unsupported_run_without_events():
+    labels = lab("H" * 50 + "A" * 20 + "H" * 50)
+    rows = [(10, "H", 1, False), (100, "H", 2, False)]
+    assert _ctrl(labels, rows) == "H" * 120
+
+
+def test_ctrl_dead_run_between_same_team_runs_untouched():
+    labels = lab("A" * 50 + "D" * 30 + "A" * 60)
+    rows = [(10, "A", 1, False)]                          # no event near the second A run start
+    assert _ctrl(labels, rows) == "".join(labels)
+    # after a re-anchored run, a D run does not reset prev_team: the A run after D stays A
+    labels = lab("H" * 50 + "A" * 200 + "D" * 30 + "A" * 60)
+    rows = [(10, "H", 1, False), (150, "A", 2, False)]
+    assert _ctrl(labels, rows) == "H" * 150 + "A" * 100 + "D" * 30 + "A" * 60
+
+
+def test_ctrl_supported_start_unchanged():
+    labels = lab("H" * 50 + "A" * 200)
+    rows = [(10, "H", 1, False), (45, "A", 2, False), (150, "A", 2, False)]   # A event 5 frames before the start
+    assert _ctrl(labels, rows) == "".join(labels)
