@@ -15,7 +15,7 @@ def test_phases_and_setpiece():
     labels = np.full(m.n_frames, "H", dtype="<U1")
     labels[25 * 40:25 * 70] = "A"
     labels[25 * 70:25 * 80] = "D"
-    m.ball[25 * 69, 1] = 34.0             # last ball before the D run: on the touchline -> throw-in
+    m.ball[25 * 69:25 * 70, 1] = 34.0     # last ball frames before the D run (incl. 1749): on the touchline -> throw-in
     events = pd.DataFrame([(25 * 80, "H", 8, False)], columns=["frame", "team", "cls", "poss_only"])
     mask = np.zeros(m.n_frames, bool); mask[25 * 70:25 * 80] = True
     p = TagSimParams(keep_outside=1.0, keep_inside=1.0, jitter_s=0.0)
