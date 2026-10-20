@@ -18,8 +18,10 @@ class CorruptParams:
     dropout_iid: float = 0.03
     edge_dropout_m: float = 8.0
     edge_dropout_s: float = 1.0
-    noise_sigma_m: float = 0.3
-    noise_rho: float = 0.9
+    # AR(1) noise; implied central-difference speed noise ~0.5 m/s at 25 fps
+    # (sigma=0.3, rho=0.9 inflated player speed by ~2 m/s)
+    noise_sigma_m: float = 0.1
+    noise_rho: float = 0.95
 
     def to_dict(self):
         return asdict(self)
@@ -40,13 +42,13 @@ def corrupt(match, blackout_mask, params, rng):
     fps = match.fps
     pos = match.pos.copy()
     minutes = F / fps / 60.0
-    present = ~np.isnan(pos[..., 0])
     # same-team identity swaps (persist to the end of the half)
     for k in (0, 1):
         slots = np.flatnonzero(match.team == k)
         for _ in range(rng.poisson(params.swap_rate_per_team_min * minutes)):
             f = int(rng.integers(0, F))
-            on = slots[present[f, slots]]
+            present = ~np.isnan(pos[f, :, 0])
+            on = slots[present[slots]]
             if len(on) < 2:
                 continue
             d = np.hypot(pos[f, on, 0][:, None] - pos[f, on, 0][None, :],
@@ -59,7 +61,8 @@ def corrupt(match, blackout_mask, params, rng):
     home = np.flatnonzero(match.team == 0); away = np.flatnonzero(match.team == 1)
     for _ in range(rng.poisson(params.flip_rate_per_min * minutes)):
         f = int(rng.integers(0, F))
-        h_on = home[present[f, home]]; a_on = away[present[f, away]]
+        present = ~np.isnan(pos[f, :, 0])
+        h_on = home[present[home]]; a_on = away[present[away]]
         if not len(h_on) or not len(a_on):
             continue
         a = int(rng.choice(h_on)); b = int(rng.choice(a_on))
