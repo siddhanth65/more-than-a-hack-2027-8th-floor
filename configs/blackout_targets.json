@@ -1,0 +1,2 @@
+{"per_133min": 79, "masked_share": 0.41, "median_s": 10.7, "max_s_min": 150, "dead_share_inside": 0.56, "long_share": 0.85,
+ "tolerance": {"per_133min": 10, "masked_share": 0.03, "median_s": 3.0, "dead_share_inside": 0.10, "long_share": 0.08}}
