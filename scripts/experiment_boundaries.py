@@ -115,7 +115,7 @@ def main():
         cfg = apply_cell(base, cell); cfg.decoder.lengths = lengths
         L = []
         for s in test:
-            ev = compute_evidence(s.match, s.tags, cfg, dead)
+            ev = compute_evidence(s.match, s.tags, cfg, dead, cache_key=f"{s.key}_s{s.seed}")
             lab = predict(s.match, s.tags, cfg, dead, evidence=ev, strong=compute_strong(s.match, cfg))
             g = codes(s.truth["ctrl_Dfull"]); runs = pm.valid_runs(g)
             p = pm.fill_abstentions(codes(lab), runs)

@@ -20,6 +20,9 @@ def apply_cell(cfg, cell):
     cfg.decoder.tau_HA = cell["tau_HA"]; cfg.decoder.tau_HD = cell["tau_D"]; cfg.decoder.tau_DH = cell["tau_D"]
     cfg.decoder.weights["dead"] = cell["w_dead"]; cfg.post.aba_s = cell["aba_s"]
     cfg.dead_policy = cell.get("dead_policy", "full")
+    if "w_pathcrf" in cell:
+        cfg.decoder.weights["pathcrf"] = cell["w_pathcrf"]
+        cfg.use_pathcrf = cell["w_pathcrf"] > 0
     return cfg
 
 
@@ -50,7 +53,7 @@ def estimate_lengths(train_sims, cfg, train_fn):
     dead_model = train_fn(inner)
     acc = {}
     for s in held:
-        ev = compute_evidence(s.match, s.tags, cfg, dead_model)
+        ev = compute_evidence(s.match, s.tags, cfg, dead_model, cache_key=f"{s.key}_s{s.seed}")
         truth = s.truth["ctrl_Dfull"]
         for k, e in ev.items():
             if k == "dead":

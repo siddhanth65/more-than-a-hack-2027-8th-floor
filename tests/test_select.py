@@ -75,7 +75,7 @@ def _fake_sims(noise_kind, n=6000, seed=0):
 def test_estimate_lengths_uses_errors_not_signal(monkeypatch, kind, lo, hi):
     import mtah.select as sel
     sims = _fake_sims(kind)
-    def fake_ev(match, tags, cfg, dead):
+    def fake_ev(match, tags, cfg, dead, cache_key=None):
         e, d = sims[0].ev
         return {"ball": e, "tag": e, "dead": d}
     monkeypatch.setattr(sel, "compute_evidence", fake_ev)

@@ -123,7 +123,7 @@ def main():
         cfg = apply_cell(base, cell); cfg.decoder.lengths = lengths
         acc = new_acc()
         for s in test:
-            ev = compute_evidence(s.match, s.tags, cfg, dead)
+            ev = compute_evidence(s.match, s.tags, cfg, dead, cache_key=f"{s.key}_s{s.seed}")
             lab = predict(s.match, s.tags, cfg, dead, evidence=ev, strong=compute_strong(s.match, cfg))
             merge(acc, analyse_half(s, lab))
         folds[str(held)] = finish(acc); merge(pooled, acc)

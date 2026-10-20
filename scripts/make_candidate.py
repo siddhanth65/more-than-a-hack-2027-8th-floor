@@ -28,7 +28,7 @@ def main():
     cfg = PipelineConfig.from_dict(raw); cfg.decoder.lengths = lengths
     dead = DeadModel.load(sel / "dead_model.joblib")
     m = load_tactical(args.data); tags = load_tags(args.data)
-    ev = compute_evidence(m, tags, cfg, dead)
+    ev = compute_evidence(m, tags, cfg, dead, cache_key="real_tactical")
     labels = predict(m, tags, cfg, dead, evidence=ev)
     out = ROOT / "runs" / "candidates"; out.mkdir(parents=True, exist_ok=True)
     p = write_submission(labels, out / f"{args.name}.csv"); reason = validate(p)

@@ -50,7 +50,7 @@ def out_of_sample_drift_reference(sim_dir, seeds, keys, base, best_cell, lengths
         dead = dead_by_fold.get(held) or train_dead(train)
         cfg = apply_cell(base, best_cell); cfg.decoder.lengths = lengths
         for s in test:
-            ev = compute_evidence(s.match, s.tags, cfg, dead)
+            ev = compute_evidence(s.match, s.tags, cfg, dead, cache_key=f"{s.key}_s{s.seed}")
             lab = predict(s.match, s.tags, cfg, dead, evidence=ev)
             rows.append(drift_report(lab, s.match, s.tags, blackout_mask_from_match(s.match)))
     return _drift_summary(rows)
@@ -93,7 +93,7 @@ def run_grid(sim_dir, seeds, keys, base, out, grid):
         dead = train_dead(train)  # final fold dead model: all train halves
         lengths_by_fold[held] = lengths; dead_by_fold[held] = dead
         cfg0 = apply_cell(base, grid[0]); cfg0.decoder.lengths = lengths
-        test_ev = [compute_evidence(s.match, s.tags, cfg0, dead) for s in test]  # grid-independent (tested)
+        test_ev = [compute_evidence(s.match, s.tags, cfg0, dead, cache_key=f"{s.key}_s{s.seed}") for s in test]  # grid-independent (tested)
         test_strong = [compute_strong(s.match, cfg0) for s in test]  # touches do not depend on the grid
         rows, halves = [], []
         for i, cell in enumerate(grid):
@@ -162,7 +162,7 @@ def run_pilot(args, keys, base):
     print(f"PILOT fold {held} L_k:", json.dumps(lengths))
     dead = train_dead(train)
     cfg0 = apply_cell(base, sel.GRID[0]); cfg0.decoder.lengths = lengths
-    ev = [compute_evidence(s.match, s.tags, cfg0, dead) for s in test]
+    ev = [compute_evidence(s.match, s.tags, cfg0, dead, cache_key=f"{s.key}_s{s.seed}") for s in test]
     strong = [compute_strong(s.match, cfg0) for s in test]
     for a, d, w in itertools.product((3.0, 30.0), (3.0, 30.0), (0.5, 2.0)):
         cell = {"tau_HA": a, "tau_D": d, "w_dead": w, "aba_s": 0.5}
@@ -215,11 +215,11 @@ def main():
             ref_path.write_text((Path(args.best_from) / "drift_reference.json").read_text())
         if not ref_path.exists():
             print("WARNING: drift_reference.json absent; writing an IN-SAMPLE reference (train halves)")
-            rows = [drift_report(predict(s.match, s.tags, cfg, dead), s.match, s.tags, blackout_mask_from_match(s.match))
+            rows = [drift_report(predict(s.match, s.tags, cfg, dead, cache_key=f"{s.key}_s{s.seed}"), s.match, s.tags, blackout_mask_from_match(s.match))
                     for s in train]
             ref_path.write_text(json.dumps(_drift_summary(rows), indent=1))
         sealed = load_sims(args.sim, args.seeds, [k for k in list_sim_keys(args.sim) if match_id(k) == SEALED_MATCH])
-        ev = [compute_evidence(s.match, s.tags, cfg, dead) for s in sealed]
+        ev = [compute_evidence(s.match, s.tags, cfg, dead, cache_key=f"{s.key}_s{s.seed}") for s in sealed]
         res = {v: m["spell_f1"] for v, m in score_cell(sealed, ev, cfg, VARIANTS)[0].items()}
         rec = {"time": time.strftime("%Y-%m-%d %H:%M"), "git": git_sha(), "cell": best_cell, "sealed": res}
         with open(log, "a") as f:
