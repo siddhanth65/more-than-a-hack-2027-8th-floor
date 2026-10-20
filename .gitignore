@@ -9,3 +9,5 @@ runs/
 *.parquet
 *.npz
 *.pkl
+.superpowers/
+*.egg-info/
