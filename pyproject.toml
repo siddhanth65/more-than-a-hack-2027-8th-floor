@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mtah"
+version = "0.1.0"
+description = "More Than A Hack 2027 frame-level possession pipeline"
+requires-python = ">=3.12"
+dependencies = [
+  "numpy==2.5.4",
+  "pandas==3.0.6",
+  "scipy>=1.14",
+  "scikit-learn>=1.6",
+  "pyarrow>=18",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[tool.setuptools.packages.find]
+include = ["mtah*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+  "real: needs the competition data in MTAH_DATA_DIR",
+  "dfl: needs the DFL proxy data on E:",
+]
