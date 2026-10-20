@@ -9,7 +9,7 @@ from mtah.decode.scale import correlation_length, evidence_margin
 from mtah.eval.scorer import score
 from mtah.evidence.dead import DeadModel, dead_features
 from mtah.pipeline import compute_evidence, predict
-from mtah.sim.dataset import VARIANTS
+from mtah.sim.dataset import VARIANTS, match_id
 
 GRID = [{"tau_HA": a, "tau_D": d, "w_dead": w, "aba_s": m}
         for a, d, w, m in itertools.product((3.0, 10.0, 30.0), (3.0, 10.0, 30.0), (0.5, 1.0, 2.0), (0.0, 0.5, 1.0))]
@@ -28,9 +28,24 @@ def train_dead(sims, variant="ctrl_Dfull"):
     return DeadModel().fit(X, y)
 
 
-def estimate_lengths(sims, cfg, dead_model):
+def estimate_lengths(train_sims, cfg, train_fn):
+    """Correlation lengths L_k via an inner split.
+
+    The dead model used here is trained on all train matches except the last one (by match_id);
+    lengths are estimated on that held-out train match's halves (all seeds), so the dead evidence
+    is out-of-sample as it will be on the test match. The fold's final dead model is trained
+    separately on all train halves. With < 2 train matches, falls back to in-sample (warns).
+    """
+    mids = sorted({match_id(s.key) for s in train_sims})
+    if len(mids) < 2:
+        print("WARNING: estimate_lengths: <2 train matches, falling back to in-sample dead model")
+        inner, held = list(train_sims), list(train_sims)
+    else:
+        inner = [s for s in train_sims if match_id(s.key) != mids[-1]]
+        held = [s for s in train_sims if match_id(s.key) == mids[-1]]
+    dead_model = train_fn(inner)
     acc = {}
-    for s in sims:
+    for s in held:
         ev = compute_evidence(s.match, s.tags, cfg, dead_model)
         for k, e in ev.items():
             m = evidence_margin(e) if k != "dead" else (e[:, 2] - e[:, 0])
@@ -38,15 +53,24 @@ def estimate_lengths(sims, cfg, dead_model):
     return {k: float(np.median(v)) for k, v in acc.items()}
 
 
-def score_cell(sims, evidences, cfg, variant):
+def score_cell(sims, evidences, cfg, variants, strongs=None):
+    """Predict once per (sim, evidence); score the same labels against every variant.
+
+    Returns ({variant: {spell_f1, macro_f1, ratio}}, long-format rows DataFrame)."""
     rows = []
-    for s, ev in zip(sims, evidences):
-        lab = predict(s.match, s.tags, cfg, None, evidence=ev)
-        r = score(s.truth[variant], lab)
-        rows.append({"key": s.key, "seed": s.seed, "spell_f1": r["spell_f1"], "macro_f1": r["macro_f1"],
-                     "ratio": r["n_pred_spells"] / max(1, r["n_gt_spells"])})
+    for i, (s, ev) in enumerate(zip(sims, evidences)):
+        lab = predict(s.match, s.tags, cfg, None, evidence=ev, strong=None if strongs is None else strongs[i])
+        for v in variants:
+            r = score(s.truth[v], lab)
+            rows.append({"key": s.key, "seed": s.seed, "variant": v, "spell_f1": r["spell_f1"],
+                         "macro_f1": r["macro_f1"], "n_gt": r["n_gt_spells"], "n_pred": r["n_pred_spells"]})
     df = pd.DataFrame(rows)
-    return {"spell_f1": df["spell_f1"].mean(), "macro_f1": df["macro_f1"].mean(), "ratio": df["ratio"].mean(), "rows": df}
+    out = {}
+    for v in variants:
+        d = df[df["variant"] == v]
+        out[v] = {"spell_f1": float(d["spell_f1"].mean()), "macro_f1": float(d["macro_f1"].mean()),
+                  "ratio": float((d["n_pred"] / d["n_gt"].clip(lower=1)).mean())}
+    return out, df
 
 
 def mean_rank(table, variants):
