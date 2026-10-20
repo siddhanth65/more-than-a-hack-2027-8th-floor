@@ -82,3 +82,10 @@ def test_estimate_lengths_uses_errors_not_signal(monkeypatch, kind, lo, hi):
     L = estimate_lengths(sims, PipelineConfig(), lambda s: None)
     for k in ("ball", "tag"):
         assert lo <= L[k] <= hi, (k, L[k])
+
+
+def test_apply_cell_sets_dead_policy():
+    from mtah.pipeline import PipelineConfig
+    from mtah.select import GRID, apply_cell
+    assert apply_cell(PipelineConfig(), GRID[0]).dead_policy == "full"
+    assert apply_cell(PipelineConfig(), {**GRID[0], "dead_policy": "no_ball_cues"}).dead_policy == "no_ball_cues"

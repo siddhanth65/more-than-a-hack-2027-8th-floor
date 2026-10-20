@@ -19,13 +19,14 @@ def apply_cell(cfg, cell):
     cfg = copy.deepcopy(cfg)
     cfg.decoder.tau_HA = cell["tau_HA"]; cfg.decoder.tau_HD = cell["tau_D"]; cfg.decoder.tau_DH = cell["tau_D"]
     cfg.decoder.weights["dead"] = cell["w_dead"]; cfg.post.aba_s = cell["aba_s"]
+    cfg.dead_policy = cell.get("dead_policy", "full")
     return cfg
 
 
-def train_dead(sims, variant="ctrl_Dfull"):
+def train_dead(sims, variant="ctrl_Dfull", policy="full"):
     X = np.concatenate([dead_features(s.match, s.tags) for s in sims])
     y = np.concatenate([(s.truth[variant] == "D").astype(int) for s in sims])
-    return DeadModel().fit(X, y)
+    return DeadModel(policy=policy).fit(X, y)
 
 
 def estimate_lengths(train_sims, cfg, train_fn):

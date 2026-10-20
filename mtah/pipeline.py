@@ -19,6 +19,7 @@ class PipelineConfig:
                                                                          lengths={"ball": 1.0, "tag": 1.0, "dead": 1.0}))
     post: PostParams = field(default_factory=PostParams)
     dead_model_path: Optional[str] = None
+    dead_policy: str = "full"     # training-time feature policy of the dead model (recorded for reproducibility)
 
     def to_dict(self):
         return asdict(self)
@@ -30,12 +31,15 @@ class PipelineConfig:
             from mtah.evidence.tag_prior import load_tag_codes
             tag["code_table"] = load_tag_codes()
         return cls(ball=BallCtrlParams(**d["ball"]), tag=TagPriorParams(**tag), touch=TouchParams(**d["touch"]),
-                   decoder=DecoderParams(**d["decoder"]), post=PostParams(**d["post"]), dead_model_path=d.get("dead_model_path"))
+                   decoder=DecoderParams(**d["decoder"]), post=PostParams(**d["post"]), dead_model_path=d.get("dead_model_path"),
+                   dead_policy=d.get("dead_policy", "full"))
 
 
 def compute_evidence(match, tags, cfg, dead_model):
     ev = {"ball": ball_ctrl_evidence(match, cfg.ball), "tag": tag_prior_evidence(tags, match.n_frames, cfg.tag)}
     if dead_model is not None:
+        if dead_model.policy != cfg.dead_policy:
+            raise ValueError(f"dead model policy {dead_model.policy!r} != cfg.dead_policy {cfg.dead_policy!r}")
         ev["dead"] = dead_evidence(dead_model.predict_proba(dead_features(match, tags)))
     return ev
 

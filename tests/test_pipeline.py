@@ -38,3 +38,20 @@ def test_from_dict_defaults_code_table():
     d["tag"]["code_table"] = None
     cfg = PipelineConfig.from_dict(d)
     assert cfg.tag.code_table and "DEFENDING IN MIDDLE THIRD" in cfg.tag.code_table
+
+
+def test_dead_policy_config_roundtrip_and_default():
+    cfg = PipelineConfig(); assert cfg.dead_policy == "full"
+    cfg.dead_policy = "no_ball_at_all"
+    assert PipelineConfig.from_dict(cfg.to_dict()).dead_policy == "no_ball_at_all"
+    d = cfg.to_dict(); d.pop("dead_policy")
+    assert PipelineConfig.from_dict(d).dead_policy == "full"
+
+
+def test_compute_evidence_rejects_policy_mismatch():
+    import pytest
+    from mtah.evidence.dead import DeadModel
+    cfg = PipelineConfig(); cfg.dead_policy = "no_ball_cues"
+    with pytest.raises(ValueError):
+        compute_evidence(carry_match(), pd.DataFrame(columns=["start", "end", "code", "team", "type", "half"]),
+                         cfg, DeadModel(policy="full"))

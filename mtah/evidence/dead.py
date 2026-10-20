@@ -137,23 +137,47 @@ def dead_features(match, tags, fps=None):
     return X
 
 
+FEATURE_POLICIES = {
+    "full": (),
+    "no_ball_cues": ("ball_speed", "ball_line_dist", "ball_out", "ball_static_1s"),
+    "no_ball_at_all": ("ball_speed", "ball_line_dist", "ball_out", "ball_static_1s", "ball_present",
+                       "entry_line_dist", "entry_outward"),
+}
+
+
+def apply_policy(X, policy):
+    """Copy of X with the policy's dropped columns set to 0.0 (constant: HGB cannot take all-NaN columns)."""
+    Y = np.array(X, np.float32, copy=True)
+    for n in FEATURE_POLICIES[policy]:
+        Y[:, DEAD_FEATURES.index(n)] = 0.0
+    return Y
+
+
 class DeadModel:
-    def __init__(self):
+    def __init__(self, policy="full"):
+        if policy not in FEATURE_POLICIES:
+            raise KeyError(policy)
+        self.policy = policy
         self.model = HistGradientBoostingClassifier(max_iter=300, max_leaf_nodes=31, learning_rate=0.1,
                                                     min_samples_leaf=200, random_state=0, early_stopping=False)
 
     def fit(self, X, y, sample_weight=None):
-        self.model.fit(X, y, sample_weight=sample_weight); return self
+        self.model.fit(apply_policy(X, self.policy), y, sample_weight=sample_weight); return self
 
     def predict_proba(self, X):
-        return self.model.predict_proba(X)[:, 1].astype(np.float32)
+        return self.model.predict_proba(apply_policy(X, self.policy))[:, 1].astype(np.float32)
 
     def save(self, path):
-        joblib.dump(self.model, path)
+        joblib.dump({"model": self.model, "policy": self.policy}, path)
 
     @classmethod
     def load(cls, path):
-        m = cls(); m.model = joblib.load(path); return m
+        obj = joblib.load(path)
+        if isinstance(obj, dict):
+            m = cls(obj.get("policy", "full")); m.model = obj["model"]
+        else:                                  # old format: bare sklearn model, trained on full features
+            m = cls(); m.model = obj
+        return m
 
 
 def dead_evidence(p_dead, eps=1e-3):

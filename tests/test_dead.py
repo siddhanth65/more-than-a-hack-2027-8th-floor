@@ -123,3 +123,35 @@ def test_player_speed_mean_ignores_nonfinite_speed():
     m.speed[:] = 1.0; m.speed[375:, 0] = 2.0; m.speed[375:, 1] = np.nan      # slot 1 tracked but speed unknown
     r = dead_features(m, NO_TAGS)[:, FI["player_speed_ratio"]]
     assert r[399] == pytest.approx(2.0, rel=1e-3)    # NaN speeds no longer count as 0 m/s
+
+
+def test_apply_policy_zeroes_columns():
+    from mtah.evidence.dead import FEATURE_POLICIES, apply_policy
+    X = np.ones((5, len(DEAD_FEATURES)), np.float32)
+    Y = apply_policy(X, "no_ball_cues")
+    idx = [DEAD_FEATURES.index(n) for n in FEATURE_POLICIES["no_ball_cues"]]
+    assert (Y[:, idx] == 0).all() and (np.delete(Y, idx, axis=1) == 1).all() and (X == 1).all()
+    assert np.array_equal(apply_policy(X, "full"), X)
+
+
+def test_dead_model_policy_travels_with_model(tmp_path):
+    from mtah.evidence.dead import FEATURE_POLICIES
+    rng = np.random.default_rng(0)
+    X = rng.normal(size=(600, len(DEAD_FEATURES))).astype(np.float32)
+    y = (X[:, 5] > 0).astype(int)
+    idx = [DEAD_FEATURES.index(n) for n in FEATURE_POLICIES["no_ball_cues"]]
+    m = DeadModel(policy="no_ball_cues").fit(X, y)
+    X2 = X.copy(); X2[:, idx] = rng.normal(size=(600, len(idx))) * 50
+    assert np.array_equal(m.predict_proba(X), m.predict_proba(X2))
+    p = tmp_path / "m.joblib"; m.save(p)
+    assert DeadModel.load(p).policy == "no_ball_cues"
+    assert np.array_equal(DeadModel.load(p).predict_proba(X2), m.predict_proba(X))
+
+
+def test_load_old_model_file_defaults_to_full(tmp_path):
+    import joblib
+    rng = np.random.default_rng(0)
+    X = rng.normal(size=(400, len(DEAD_FEATURES))).astype(np.float32)
+    m = DeadModel().fit(X, (X[:, 0] > 0).astype(int))
+    joblib.dump(m.model, tmp_path / "old.joblib")           # old format: bare sklearn model
+    assert DeadModel.load(tmp_path / "old.joblib").policy == "full"
