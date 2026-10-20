@@ -59,3 +59,19 @@ def load_half(npz_path, census_path):
 
 def list_halves(dfl_dir):
     return [(p.stem, p) for p in sorted(Path(dfl_dir).glob("game_*_H*.npz"))]
+
+
+def load_events(npz_path, census_path):
+    """DFL events of one half as a frame-indexed table: frame (0-based), team H/A, cls, poss_only."""
+    import pandas as pd
+    npz_path = Path(npz_path)
+    z = np.load(npz_path)
+    ltr_home = _ltr_home(census_path, npz_path.stem)
+    n0 = int(z["ball_n"][0]); F = len(z["ball_n"])
+    t = z["truth"]
+    frame = t[:, 0].astype(np.int64) - n0
+    ok = (frame >= 0) & (frame < F)
+    team = np.where(t[:, 1].astype(np.int64) == ltr_home, "H", "A")
+    df = pd.DataFrame({"frame": frame[ok], "team": team[ok], "cls": t[ok, 3].astype(int),
+                       "poss_only": z["poss_only"][ok].astype(bool)})
+    return df.sort_values("frame", kind="stable").reset_index(drop=True)
