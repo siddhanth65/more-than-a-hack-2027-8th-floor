@@ -66,7 +66,8 @@ def run_grid(args, keys, base, out):
     margins = {v: float(best[v] - base_rows.loc["smooth50", v]) for v in VARIANTS}
     cellf = allf[allf["cell"] == best_i].set_index("held")["ctrl_Dfull"]
     smf = allf[allf["cell"] == "smooth50"].set_index("held")["ctrl_Dfull"]
-    folds_won = int((cellf > smf.reindex(cellf.index)).sum())
+    # a fold is "won" only when the best cell beats smooth50 by the full 0.05 margin on ctrl_Dfull
+    folds_won = int(((cellf - smf.reindex(cellf.index)) >= 0.05).sum())
     ratios = {v: float(best[f"{v}_ratio"]) for v in VARIANTS}
     bar_pass = bool(all(m >= 0.05 for m in margins.values()) and folds_won >= 4
                     and all(0.8 <= r <= 1.25 for r in ratios.values()))
