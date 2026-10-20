@@ -80,3 +80,29 @@ def test_edge_dropout_only_near_ball():
     nan = np.isnan(out.pos[..., 0])
     assert nan[1000:1025, 0].all() and nan[1475:1500, 5].all()
     assert not nan[1000:1025, 3].any() and not nan[1475:1500, 3].any()
+
+
+from mtah.sim.corrupt import dead_ball_realism
+
+
+def test_dead_ball_realism_moves_ball_inside_pitch():
+    F = 25 * 60
+    labels = np.full(F, "H", dtype="<U1"); labels[500:1000] = "D"
+    ball = np.zeros((F, 2), np.float32); ball[500:1000, 0] = 53.0      # static, 0.5 m outside the goal line
+    ball[1000:, 0] = 0.0
+    p = CorruptParams(dead_out_keep=0.0)
+    out = dead_ball_realism(ball, labels, (105.0, 68.0), 25, p, np.random.default_rng(0))
+    assert np.array_equal(out[:500], ball[:500]) and np.array_equal(out[1000:], ball[1000:])
+    seg = out[500:1000]
+    assert np.abs(seg[:, 0]).max() <= 52.5 and np.abs(seg[:, 1]).max() <= 34.0
+    sp = np.hypot(*np.diff(seg, axis=0).T) * 25
+    assert np.median(sp) > 0.5                     # no longer static
+    assert np.array_equal(out, dead_ball_realism(ball, labels, (105.0, 68.0), 25, p, np.random.default_rng(0)))
+
+
+def test_dead_ball_realism_keeps_nan_and_out_runs():
+    F = 300
+    labels = np.full(F, "D", dtype="<U1")
+    ball = np.full((F, 2), np.nan, np.float32); ball[:100, 0] = 54.0
+    out = dead_ball_realism(ball, labels, (105.0, 68.0), 25, CorruptParams(dead_out_keep=1.0), np.random.default_rng(1))
+    assert np.array_equal(np.nan_to_num(out), np.nan_to_num(ball))

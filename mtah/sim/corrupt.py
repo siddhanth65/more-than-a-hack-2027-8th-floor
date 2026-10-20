@@ -22,6 +22,14 @@ class CorruptParams:
     # (sigma=0.3, rho=0.9 inflated player speed by ~2 m/s)
     noise_sigma_m: float = 0.1
     noise_rho: float = 0.95
+    # dead-ball realism (see dead_ball_realism)
+    dead_motion: bool = True
+    dead_v_lo: float = 1.0
+    dead_v_hi: float = 6.0
+    dead_hover_lo: float = 0.5
+    dead_hover_hi: float = 2.0
+    dead_out_keep: float = 0.1
+    dead_jitter_m: float = 0.15
 
     def to_dict(self):
         return asdict(self)
@@ -29,6 +37,40 @@ class CorruptParams:
     @classmethod
     def from_dict(cls, d):
         return cls(**d)
+
+
+def dead_ball_realism(ball, labels, pitch, fps, params, rng):
+    """Make the visible ball on dead frames behave like an automatic tracker's: carried/kicked back
+    towards the restart spot at 1-6 m/s, then hovering, always inside the pitch (real match: ball
+    static on 2 % and out of pitch on 3 % of visible frames; DFL raw: 35 % and 17 %)."""
+    out = ball.copy(); L, W = pitch; half = np.array([L / 2 - 0.5, W / 2 - 0.5])
+    if not params.dead_motion:
+        return out
+    labels = np.asarray(labels)
+    for s, e in runs_of(labels == "D"):
+        vis = np.flatnonzero(~np.isnan(ball[s:e, 0])) + s
+        if not vis.size or rng.random() < params.dead_out_keep:
+            continue
+        start = np.clip(ball[vis[0]], -half, half)
+        after = np.flatnonzero(~np.isnan(ball[e:, 0]))
+        target = np.clip(ball[e + after[0]], -half, half) if after.size else np.zeros(2)
+        v = rng.uniform(params.dead_v_lo, params.dead_v_hi) / fps
+        pos = start.astype(np.float64).copy(); arrived = False
+        for f in range(s, e):
+            if np.isnan(ball[f, 0]):
+                continue
+            if not arrived:
+                d = target - pos; dist = np.hypot(*d)
+                if dist <= v:
+                    pos = target.copy(); arrived = True
+                else:
+                    pos = pos + d / dist * v
+            else:
+                ang = rng.uniform(0, 2 * np.pi); step = rng.uniform(params.dead_hover_lo, params.dead_hover_hi) / fps
+                pos = pos + step * np.array([np.cos(ang), np.sin(ang)])
+                pos = np.where(np.abs(pos) > half, np.sign(pos) * half - (pos - np.sign(pos) * half), pos)
+            out[f] = np.clip(pos + rng.normal(0, params.dead_jitter_m, 2), -half, half)
+    return out.astype(np.float32)
 
 
 def _swap_rows(pos, a, b, start, stop):

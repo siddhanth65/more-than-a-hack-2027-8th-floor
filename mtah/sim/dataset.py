@@ -1,6 +1,7 @@
 """One simulated DFL half = corrupted tracking + blackouts + simulated tags + truth variants."""
 import json
 from dataclasses import dataclass
+from dataclasses import replace as dc_replace
 from pathlib import Path
 
 import numpy as np
@@ -11,7 +12,7 @@ from mtah.io.dfl_proxy import load_events, load_half
 from mtah.io.match import Match, speeds_from_positions
 from mtah.sim import half_rng
 from mtah.sim.blackout_sim import apply_blackouts, blackout_mask
-from mtah.sim.corrupt import corrupt
+from mtah.sim.corrupt import corrupt, dead_ball_realism
 from mtah.sim.tag_sim import simulate_tags
 
 SEALED_MATCH = 9006
@@ -51,6 +52,8 @@ def build_half(key, npz, census, seed, bparams, cparams, tparams):
     rng = half_rng(seed, half_index(key))
     mask = blackout_mask(labels, m.ball, m.pitch, m.fps, bparams, rng)
     sim = apply_blackouts(m, mask)
+    sim = dc_replace(sim, ball=dead_ball_realism(sim.ball, labels, m.pitch, m.fps, cparams, rng))
+    sim = dc_replace(sim, ball_speed=speeds_from_positions(sim.ball, m.fps))
     sim = corrupt(sim, mask, cparams, rng)
     tags = simulate_tags(sim, labels, events, mask, tparams, rng)
     return SimHalf(key=key, seed=seed, match=sim, tags=tags, blackout=mask, truth=truth, events=events)
