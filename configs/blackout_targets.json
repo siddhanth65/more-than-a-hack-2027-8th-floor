@@ -1,0 +1,4 @@
+{"note": "median_s/p90_s/max_s are over gaps > 10 s (the median over all 150 gaps is 10.7 s); counts and shares are over the 158,857 graded frames, and the count target is per graded minute (79 long gaps in 105.9 graded min = 0.746/min), not per 133 video minutes; dead_share_inside is measured on only ~900 public-window frames, hence its wide tolerance; entry_* are reported, not in tolerance",
+ "per_graded_min": 0.746, "masked_share": 0.41, "median_s": 20.8, "p90_s": 50.5, "max_s_min": 150, "dead_share_inside": 0.56, "long_share": 0.85,
+ "entry_near_line_share": 0.52, "entry_outward_share": 0.80,
+ "tolerance": {"per_graded_min": 0.12, "masked_share": 0.03, "median_s": 3.0, "p90_s": 12.0, "dead_share_inside": 0.15, "long_share": 0.08}}

@@ -34,7 +34,7 @@ Metrica Sports + FC Barcelona give us one LaLiga match (Barcelona v Athletic, 20
 
 ## 4. What the data actually looks like (measured locally, aggregates only)
 
-- **The ball is missing in blackouts, not flicker.** 150 gaps on graded frames; median 10.7 s, p90 34 s, max 3.7 min; **85 % of missing frames sit in 79 stretches > 10 s = 37 minutes.** Zero gaps between 1 and 3 s. Interpolation/smoothing cannot help.
+- **The ball is missing in blackouts, not flicker.** 150 gaps on graded frames (median 10.7 s over all gaps); **85 % of missing frames sit in 79 stretches > 10 s = 37 minutes, median 20.8 s, p90 50 s, max 3.7 min.** No gaps at all between 0.5 s and 5 s — the tracker needs ≥ 5 s to re-acquire the ball. Interpolation/smoothing cannot help.
 - **Blackouts are a mix of dead and live.** Public window: ball-missing frames are 56 % D, 44 % live (A 386 frames, H 5). Match-wide: 52 % of blackouts start with the ball ≤ 5 m from a line and moving outward (80 %); re-acquisition is also near a line in 49 %. 36 of 79 contain a set-piece tag. The live portions are overwhelmingly Athletic possessions (long balls lost in the air — the ball is present 99.9 % of the time Barcelona has it, 85 % when Athletic has it).
 - **The automatic ball is clean when present:** no static-ball lock-ons (0.0 %), 13 teleports in 113 k frames. Nearest-player logic is therefore trustworthy *on ball frames*.
 - **Smart Tagging** covers 82 % of graded frames (78 % with a team), 77 % inside blackouts; set-piece windows are long (median 35 s). **All 26 throw-ins and all kick-offs carry no team.**
@@ -54,7 +54,7 @@ A single pipeline, pure numpy/pandas/scikit-learn, deterministic, reproducible w
    - `broadcast_ball` (B) — the broadcast's independent ball track, aligned to the tactical timeline by matching player formations in pitch coordinates, borrowed inside blackouts.
 3. **Decoder** — one 3-state (H/A/D) Viterbi per half combining the evidence with switch costs tuned for spellF1, with evidence-scale correction so smoothed posteriors don't swamp the switch costs.
 4. **Post-processing tuned for the metric** — A-B-A merges below a minimum duration unless a strong touch says otherwise, D-hole handling, per-transition-type boundary offsets. X emitted nowhere.
-5. **Validation** — the official scorer wrapped unchanged; DFL proxy with a blackout simulator fitted to the real match's blackout statistics (79 / 41 % / 10.7 s median / 3.7 min max); leave-one-match-out selection; one DFL match sealed; the public window read ≤ 3 times, for conventions and plausibility, never for tuning; label-free drift checks on the real match.
+5. **Validation** — the official scorer wrapped unchanged; DFL proxy with a blackout simulator fitted to the real match's blackout statistics (79 / 41 % / 20.8 s median of > 10 s runs / 3.7 min max); leave-one-match-out selection; one DFL match sealed; the public window read ≤ 3 times, for conventions and plausibility, never for tuning; label-free drift checks on the real match.
 
 ## 6. What it takes to win
 
