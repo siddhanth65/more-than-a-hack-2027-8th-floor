@@ -35,7 +35,9 @@ interpreter; the commands above give an equivalent self-contained venv. The chec
   truth; a copy lives at `HOME/mtah-ext\pathcrf-eval\run_infer.py` (re-copy after edits).
 - `mtah.evidence.pathcrf.pathcrf_posterior(match, cache_key, params)` calls it per half and caches the merged
   result in `runs/cache/pathcrf/<cache_key>.npz` (`<sim.key>_s<seed>` for sims, `real_tactical` for the
-  real match). Hand-off npz files go to a temporary directory that is deleted after the run.
+  real match). Hand-off npz files go to a temporary directory that is deleted after the run. The cache is keyed on the input hash,
+  the wrapper hash, checkpoint and threads. The wrapper also writes `n_chunks` and `n_ok` (windows with a prediction);
+  `pathcrf_posterior` raises `RuntimeError` when `n_ok / n_chunks < 0.5` for a half.
 - Environment overrides of the defaults in `PathCRFParams`:
   - `MTAH_PATHCRF_REPO` - PathCRF checkout (default `HOME/mtah-ext\pathcrf`)
   - `MTAH_PATHCRF_PY` - PathCRF venv python (default `HOME/mtah-ext\pathcrf-venv\Scripts\python.exe`)

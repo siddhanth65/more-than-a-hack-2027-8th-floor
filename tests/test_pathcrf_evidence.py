@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -69,12 +71,164 @@ def test_compute_evidence_with_pathcrf(monkeypatch):
         compute_evidence(carry_match(F=200), NO_TAGS, cfg, None)
 
 
-def test_apply_cell_w_pathcrf():
+def test_apply_cell_w_pathcrf_only_sets_weight():
     from mtah.select import GRID, apply_cell
     base = PipelineConfig()
     assert apply_cell(base, GRID[0]).use_pathcrf is False
     off = apply_cell(base, {**GRID[0], "w_pathcrf": 0.0})
     assert off.use_pathcrf is False and off.decoder.weights["pathcrf"] == 0.0
-    on = apply_cell(base, {**GRID[0], "w_pathcrf": 2.0})
-    assert on.use_pathcrf is True and on.decoder.weights["pathcrf"] == 2.0
-    assert base.use_pathcrf is False and base.decoder.weights["pathcrf"] == 1.0
+    base.use_pathcrf = True
+    on = apply_cell(base, {**GRID[0], "w_pathcrf": 0.0})
+    assert on.use_pathcrf is True and on.decoder.weights["pathcrf"] == 0.0     # caller owns use_pathcrf
+    assert base.decoder.weights["pathcrf"] == 1.0
+
+
+def test_zero_weight_equals_no_stream():
+    from mtah.decode.viterbi import DecoderParams, cost_matrix
+    rng = np.random.default_rng(0)
+    a = rng.normal(size=(50, 3)).astype(np.float32)
+    b = rng.normal(size=(50, 3)).astype(np.float32); b[::7] = np.nan
+    p = DecoderParams(weights={"ball": 1.0, "pathcrf": 0.0}, lengths={"ball": 1.0, "pathcrf": 1.0})
+    np.testing.assert_array_equal(cost_matrix({"ball": a, "pathcrf": b}, p), cost_matrix({"ball": a}, p))
+
+
+def test_config_omits_and_ignores_runtime_params(monkeypatch):
+    monkeypatch.setenv("MTAH_PATHCRF_REPO", "X:/env_repo")
+    monkeypatch.setenv("MTAH_PATHCRF_PY", "X:/env_py.exe")
+    d = PipelineConfig().to_dict()
+    assert set(d["pathcrf"]) == {"ckpt", "eps", "conf_alpha"}
+    d["pathcrf"].update(repo="C:/old/repo", python="C:/old/py.exe", cache_dir="C:/old/cache", threads=99, ckpt=141)
+    p = PipelineConfig.from_dict(d).pathcrf
+    assert (p.repo, p.python, p.ckpt) == ("X:/env_repo", "X:/env_py.exe", 141)
+    assert p.threads == 4 and p.cache_dir == PathCRFParams().cache_dir
+
+
+def test_default_cache_dir_is_repo_anchored():
+    cd = Path(PathCRFParams().cache_dir)
+    assert cd.is_absolute() and cd.parts[-3:] == ("runs", "cache", "pathcrf")
+    assert (cd.parents[2] / "mtah").is_dir()
+
+
+def test_cache_invalidation_and_atomic_write(monkeypatch, tmp_path):
+    import mtah.evidence.pathcrf as pc
+    calls = []
+
+    def fake(match, a, b, params, tmp):
+        calls.append(a)
+        n = b - a
+        return {"p_home": np.full(n, 0.6, np.float32), "p_none": np.zeros(n, np.float32),
+                "imputed_frac": np.zeros(n, np.float32)}
+    monkeypatch.setattr(pc, "_run_half", fake)
+    m = carry_match(F=120)
+    params = PathCRFParams(cache_dir=str(tmp_path))
+    pc.pathcrf_posterior(m, "k", params); n1 = len(calls)
+    assert n1 >= 1 and [p.name for p in tmp_path.iterdir()] == ["k.npz"]       # no temp leftovers
+    pc.pathcrf_posterior(m, "k", params); assert len(calls) == n1               # hit
+    m.pos = m.pos.copy(); m.pos[3, 0, 0] += 1.0                                 # input changed, same frame count
+    pc.pathcrf_posterior(m, "k", params); assert len(calls) == 2 * n1
+    pc.pathcrf_posterior(m, "k", params); assert len(calls) == 2 * n1
+    p141 = PathCRFParams(cache_dir=str(tmp_path), ckpt=141)
+    pc.pathcrf_posterior(m, "k", p141); assert len(calls) == 3 * n1
+    p2 = PathCRFParams(cache_dir=str(tmp_path), ckpt=141, threads=2)
+    pc.pathcrf_posterior(m, "k", p2); assert len(calls) == 4 * n1
+    pc.pathcrf_posterior(m, "k", p2); assert len(calls) == 4 * n1
+    monkeypatch.setattr(pc, "_wrapper_sha", lambda: "changed")
+    pc.pathcrf_posterior(m, "k", p2); assert len(calls) == 5 * n1
+
+
+def test_run_half_raises_on_failed_chunks(monkeypatch, tmp_path):
+    import mtah.evidence.pathcrf as pc
+
+    def fake_subprocess(cmd, **kw):
+        out = cmd[cmd.index("--out") + 1]
+        np.savez(out, p_home=np.full(100, np.nan, np.float32), p_none=np.full(100, np.nan, np.float32),
+                 imputed_frac=np.zeros(100, np.float32), n_chunks=np.int32(10), n_ok=np.int32(4))
+    monkeypatch.setattr(pc.subprocess, "run", fake_subprocess)
+    with pytest.raises(RuntimeError, match="0.40"):
+        pc._run_half(carry_match(F=100), 0, 100, PathCRFParams(), str(tmp_path))
+
+
+def _wrapper_module():
+    import importlib.util
+    path = Path(__file__).resolve().parents[1] / "third_party" / "pathcrf" / "run_infer.py"
+    spec = importlib.util.spec_from_file_location("pathcrf_run_infer", path)
+    mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)
+    return mod
+
+
+def test_impute_extrapolates_one_second_then_holds():
+    w = _wrapper_module()
+    pos = np.full((120, 1, 2), np.nan, np.float32)
+    pos[:50, 0, 0] = np.arange(50) * 0.2          # 5 m/s along x
+    pos[:50, 0, 1] = 1.0
+    out = w.impute(pos, 25.0)
+    np.testing.assert_allclose(out[:50], pos[:50])
+    assert out[49 + 25, 0, 0] == pytest.approx(9.8 + 5.0, abs=1e-4)      # 1 s of extrapolation at 5 m/s
+    assert out[49 + 25, 0, 1] == pytest.approx(1.0)
+    assert out[119, 0, 0] == pytest.approx(out[49 + 25, 0, 0])            # then hold
+    assert not np.isnan(out).any()
+
+
+def test_impute_backfills_start_and_clips():
+    w = _wrapper_module()
+    pos = np.full((30, 2, 2), np.nan, np.float32)
+    pos[10:, 0] = (3.0, -4.0)
+    pos[:, 1, 0] = 80.0; pos[:, 1, 1] = -50.0          # outside 105 x 68
+    out = w.impute(pos, 25.0)
+    assert (out[:10, 0] == (3.0, -4.0)).all()
+    assert (out[:, 1, 0] == 52.5).all() and (out[:, 1, 1] == -34.0).all()
+    assert np.isnan(w.impute(np.full((5, 1, 2), np.nan, np.float32), 25.0)).all()   # never tracked stays NaN
+
+
+@pytest.mark.parametrize("k", [1, 3])
+@pytest.mark.parametrize("r", [0, 124, 125, 249])
+def test_chunks_of_remainder_merging(k, r):
+    w = _wrapper_module()
+    F = k * 250 + r
+    ch = w.chunks_of(F, 250)
+    assert ch[0][0] == 0 and ch[-1][1] == F
+    assert all(ch[i][1] == ch[i + 1][0] for i in range(len(ch) - 1))
+    sizes = [b - a for a, b in ch]
+    if r < 125:
+        assert len(ch) == k and sizes[-1] == 250 + r      # short remainder merged into the last window
+    else:
+        assert len(ch) == k + 1 and sizes[-1] == r
+
+
+DFL = Path(__file__).resolve().parents[1] / "runs" / "dfl_extra"
+SIM = Path(__file__).resolve().parents[1] / "runs" / "sim"
+
+
+def _pathcrf_available():
+    p = PathCRFParams()
+    return Path(p.python).is_file() and Path(p.repo).is_dir()
+
+
+@pytest.mark.dfl
+def test_integration_clean_9007_h1_agreement(tmp_path):
+    from mtah.evidence.pathcrf import pathcrf_posterior
+    from mtah.io.dfl_proxy import load_half
+    npz, census = DFL / "game_9007_H1.npz", DFL / "fp1d_census.json"
+    if not (npz.is_file() and census.is_file() and _pathcrf_available()):
+        pytest.skip("DFL proxy data or the PathCRF venv is absent")
+    m, labels = load_half(npz, census)
+    r = pathcrf_posterior(m, "test_clean_9007_H1", PathCRFParams(cache_dir=str(tmp_path)))
+    ha = np.isin(labels, ("H", "A")) & np.isfinite(r["p_home"])
+    agree = float(((r["p_home"][ha] > 0.5) == (labels[ha] == "H")).mean())
+    assert agree >= 0.88, agree
+
+
+@pytest.mark.dfl
+def test_integration_sim_9007_h1_seed100(tmp_path):
+    from mtah.evidence.pathcrf import pathcrf_posterior
+    from mtah.sim.dataset import load_half_sim
+    if not ((SIM / "game_9007_H1_s100.json").is_file() and _pathcrf_available()):
+        pytest.skip("sim data or the PathCRF venv is absent")
+    sim = load_half_sim(SIM, "game_9007_H1", 100)
+    r = pathcrf_posterior(sim.match, "test_sim_9007_H1_s100", PathCRFParams(cache_dir=str(tmp_path)))
+    truth = sim.truth["raw_Dfull"]
+    nan_share = float(np.isnan(r["p_home"]).mean())
+    ha = np.isin(truth, ("H", "A")) & np.isfinite(r["p_home"])
+    agree = float(((r["p_home"][ha] > 0.5) == (truth[ha] == "H")).mean())
+    assert nan_share <= 0.05, nan_share
+    assert agree >= 0.70, agree

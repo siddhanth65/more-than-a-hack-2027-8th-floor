@@ -25,7 +25,9 @@ class PipelineConfig:
     pathcrf: PathCRFParams = field(default_factory=PathCRFParams)
 
     def to_dict(self):
-        return asdict(self)
+        d = asdict(self)
+        d["pathcrf"] = {k: d["pathcrf"][k] for k in ("ckpt", "eps", "conf_alpha")}   # runtime paths stay out of configs
+        return d
 
     @classmethod
     def from_dict(cls, d):
@@ -36,7 +38,7 @@ class PipelineConfig:
         return cls(ball=BallCtrlParams(**d["ball"]), tag=TagPriorParams(**tag), touch=TouchParams(**d["touch"]),
                    decoder=DecoderParams(**d["decoder"]), post=PostParams(**d["post"]), dead_model_path=d.get("dead_model_path"),
                    dead_policy=d.get("dead_policy", "full"), use_pathcrf=d.get("use_pathcrf", False),
-                   pathcrf=PathCRFParams(**d["pathcrf"]) if "pathcrf" in d else PathCRFParams())
+                   pathcrf=PathCRFParams(**{k: v for k, v in d.get("pathcrf", {}).items() if k in ("ckpt", "eps", "conf_alpha")}))
 
 
 def compute_evidence(match, tags, cfg, dead_model, cache_key=None):

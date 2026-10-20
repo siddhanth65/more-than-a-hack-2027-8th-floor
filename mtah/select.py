@@ -21,8 +21,7 @@ def apply_cell(cfg, cell):
     cfg.decoder.weights["dead"] = cell["w_dead"]; cfg.post.aba_s = cell["aba_s"]
     cfg.dead_policy = cell.get("dead_policy", "full")
     if "w_pathcrf" in cell:
-        cfg.decoder.weights["pathcrf"] = cell["w_pathcrf"]
-        cfg.use_pathcrf = cell["w_pathcrf"] > 0
+        cfg.decoder.weights["pathcrf"] = cell["w_pathcrf"]   # 0 disables the stream in cost_matrix; use_pathcrf is the caller's (base config)
     return cfg
 
 

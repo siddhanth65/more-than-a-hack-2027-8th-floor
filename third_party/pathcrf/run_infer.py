@@ -10,6 +10,7 @@ Input npz: pos (F,S,2) float32 metres centred on the pitch (x along length, NaN 
   p_none       float32  source-node mass on the four out-of-pitch nodes; NaN = no prediction
   imputed_frac float32  share of the 22 node slots whose position is imputed on that frame (unfilled = imputed)
   chunk_id     int32    10 s window the frame belongs to (-1 = none)
+  n_chunks, n_ok  int32 scalars: windows attempted / windows with a prediction
 
 Why the emission marginal: on 15 000 frames of the corrupted sim half game_9007_H1 s100 it beat the other soft
 outputs against the ball-owning team (acc / mean log-lik: emission marginal 0.885 / -0.340, macro heads
@@ -106,7 +107,7 @@ def run(pos, team, fps, model, window_seconds):
     out = {"p_home": np.full(F, np.nan, np.float32), "p_none": np.full(F, np.nan, np.float32),
            "imputed_frac": np.ones(F, np.float32), "chunk_id": np.full(F, -1, np.int32)}
     chunks = chunks_of(F, int(round(CHUNK_S * fps)))
-    n_ok, row_err = 0, 0.0
+    n_ok, n_failed, row_err = 0, 0, 0.0
     for ci, (a, b) in enumerate(chunks):
         out["chunk_id"][a:b] = ci
         seg, mseg = pos[a:b], miss[a:b]
@@ -143,14 +144,17 @@ def run(pos, team, fps, model, window_seconds):
                     use_crf=False, decode="indep", evaluate=False,
                     window_seconds=window_seconds, fps=fps, sample_freq=max(1, int(round(fps / 5))),
                     device="cpu")
-        except ValueError:          # window shorter than the smoothing filter: no prediction
+        except ValueError as e:     # e.g. window shorter than the smoothing filter: no prediction
+            n_failed += 1
+            print(f"pathcrf: chunk {ci} failed: {type(e).__name__}", flush=True)
             continue
         if micro is None:
             continue
         P = micro.reindex(index=df.index).to_numpy(np.float64)          # (n, 26*26) edge "src-dst" softmax
         cn = np.array([str(c).split("-")[0] for c in micro.columns])    # source node of each edge
-        home = P[:, np.char.startswith(cn, "home_")].sum(1)
-        away = P[:, np.char.startswith(cn, "away_")].sum(1)
+        real = np.char.find(cn, "_pad_") < 0                             # padded nodes carry no team
+        home = P[:, np.char.startswith(cn, "home_") & real].sum(1)
+        away = P[:, np.char.startswith(cn, "away_") & real].sum(1)
         none = P[:, np.char.startswith(cn, "out_")].sum(1)
         row_err = max(row_err, float(np.abs(home + away + none - 1).max()))
         with np.errstate(invalid="ignore", divide="ignore"):
@@ -182,7 +186,7 @@ def main():
     torch.set_num_threads(a.threads)
     model, ta = load_model(a.repo, a.ckpt)
     out, n_chunks, n_ok, row_err = run(pos, team, fps, model, ta.get("window_seconds"))
-    np.savez(outp, **out)
+    np.savez(outp, n_chunks=np.int32(n_chunks), n_ok=np.int32(n_ok), **out)
     print(f"pathcrf: frames={len(pos)} chunks={n_chunks} predicted_chunks={n_ok} "
           f"nopred={np.isnan(out['p_home']).mean():.3f} imputed_frac={out['imputed_frac'].mean():.3f} "
           f"p_none={np.nanmean(out['p_none']) if n_ok else float('nan'):.3f} max|rowsum-1|={row_err:.1e} "
