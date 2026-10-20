@@ -15,3 +15,11 @@ def test_drift_keys():
     assert r["n_spells"] == 3 and abs(r["tag_agreement"] - 1.0) < 1e-6
     assert r["D_starts_near_sp_share"] == 1.0 and r["share_changes_in_blackout"] == 0.0
     assert 0 < r["pred_D_share"] < 0.2
+
+
+def test_drift_nan_when_no_changes_or_d_runs():
+    m = two_player_match(F=25 * 120); m.ball[:] = 0.0
+    labels = np.full(m.n_frames, "H", dtype="<U1")
+    tags = pd.DataFrame([{"start": 0, "end": 10, "code": "SET PIECES", "team": None, "type": "Throw-in", "half": 1}])
+    r = drift_report(labels, m, tags, np.zeros(m.n_frames, bool))
+    assert np.isnan(r["share_changes_in_blackout"]) and np.isnan(r["D_starts_near_sp_share"])

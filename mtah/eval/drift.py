@@ -2,7 +2,6 @@
 import numpy as np
 
 from mtah.io.match import half_runs
-from mtah.sim.blackout_sim import runs_of
 
 
 def _segments(x, s0, e0):
@@ -36,7 +35,7 @@ def drift_report(labels, match, tags, blackout_mask):
         "spells_per_HA_min": len(spells) / max(1e-9, ha_frames / fps / 60),
         "pred_D_share": float((labels[g] == "D").mean()),
         "spell_len_median_s": float(np.median([(e - s) / fps for s, e in spells])) if spells else 0.0,
-        "share_changes_in_blackout": float(np.mean([blackout_mask[s] for s in changes])) if changes else 0.0,
-        "D_starts_near_sp_share": float(np.mean(near)) if near else 0.0,
+        "share_changes_in_blackout": float(np.mean([blackout_mask[s] for s in changes])) if changes else float("nan"),
+        "D_starts_near_sp_share": float(np.mean(near)) if near else float("nan"),
         "tag_agreement": float(np.mean(agree)) if agree else float("nan"),
     }

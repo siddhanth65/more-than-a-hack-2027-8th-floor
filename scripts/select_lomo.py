@@ -10,8 +10,9 @@ import numpy as np
 import pandas as pd
 
 from mtah import baselines
+from mtah.eval.drift import drift_report
 from mtah.eval.scorer import OFFICIAL_PATH, score
-from mtah.pipeline import PipelineConfig, compute_evidence
+from mtah.pipeline import PipelineConfig, compute_evidence, predict
 from mtah.select import GRID, apply_cell, estimate_lengths, mean_rank, score_cell, train_dead
 from mtah.sim.dataset import SEALED_MATCH, VARIANTS, list_sim_keys, load_half_sim, lomo_folds, match_id
 
@@ -76,6 +77,14 @@ def main():
         train = load_sims(args.sim, args.seeds, keys); dead = train_dead(train)
         lengths = estimate_lengths(train[: 4], base, dead)
         cfg = apply_cell(base, best_cell); cfg.decoder.lengths = lengths
+        ref_vals = {}
+        for s in train:
+            rep = drift_report(predict(s.match, s.tags, cfg, dead), s.match, s.tags, s.blackout)
+            for k, v in rep.items():
+                ref_vals.setdefault(k, []).append(v)
+        ref = {k: {"min": float(np.nanmin(v)), "median": float(np.nanmedian(v)), "max": float(np.nanmax(v))}
+               for k, v in ref_vals.items() if not np.all(np.isnan(v))}
+        (out / "drift_reference.json").write_text(json.dumps(ref, indent=1))
         sealed = load_sims(args.sim, args.seeds, [k for k in list_sim_keys(args.sim) if match_id(k) == SEALED_MATCH])
         ev = [compute_evidence(s.match, s.tags, cfg, dead) for s in sealed]
         res = {v: score_cell(sealed, ev, cfg, v)["spell_f1"] for v in VARIANTS}

@@ -6,6 +6,7 @@ import numpy as np
 
 from mtah.eval.official import possession_metrics as pm
 from mtah.eval.scorer import score, window_labels
+from mtah.submission import validate
 
 ROOT = Path(__file__).resolve().parents[1]
 GT = Path(r"WORKDIR/repo\evaluation\gt\BAR-ATH_possession_gt_public.csv")
@@ -14,6 +15,9 @@ GT = Path(r"WORKDIR/repo\evaluation\gt\BAR-ATH_possession_gt_public.csv")
 def main():
     ap = argparse.ArgumentParser(); ap.add_argument("--candidate", required=True); ap.add_argument("--note", required=True)
     args = ap.parse_args()
+    reason = validate(args.candidate)
+    if reason is not None:
+        raise SystemExit(f"invalid candidate: {reason}")
     log = ROOT / "runs" / "public_reads.jsonl"
     n_prev = sum(1 for _ in open(log)) if log.exists() else 0
     if n_prev >= 2:
