@@ -55,13 +55,14 @@ def fragment(pos, team, rng, fps=25.0, mean_s=8.0):
     smap = np.tile(np.arange(S), (F, 1))
     cps = np.flatnonzero(rng.random(F) < 1.0 / (mean_s * fps))
     cur = np.arange(S)
+    have = ~np.isnan(pos[:, :, 0]).all(0)  # never-tracked slots are not part of the anonymous pool
     prev = 0
     for c in list(cps) + [F]:
         smap[prev:c] = cur
         if c < F:
             new = cur.copy()
             for k in (0, 1):
-                idx = np.flatnonzero(team == k)
+                idx = np.flatnonzero((team == k) & have)
                 new[idx] = cur[rng.permutation(idx)]
             cur = new
         prev = c
@@ -156,16 +157,22 @@ def run(variant, half):
         df = pd.DataFrame({"frame_id": np.arange(a, b), "period_id": 1, "timestamp": np.arange(n) / 25.0,
                            "phase_id": 1, "episode_id": 1, "ball_state": "alive", "ball_owning_team_id": "home"})
         df = pd.concat([df, pd.DataFrame(cols), pd.DataFrame({"ball_x": np.nan, "ball_y": np.nan}, index=df.index)], axis=1)
-        with contextlib.redirect_stdout(io.StringIO()):
-            df = utils.calculate_running_features(df, fps=25)
+        try:
+            with contextlib.redirect_stdout(io.StringIO()):
+                df = utils.calculate_running_features(df, fps=25)
+        except ValueError:
+            continue
         df = df.set_index("frame_id")
-        res = inference_episode(model, df, left_gk=gk[left_team], right_gk=gk[1 - left_team],
-                                use_crf=ta.get("crf_weight", 0) > 0, decode="indep", evaluate=False,
-                                window_seconds=ta.get("window_seconds"), device="cpu")
+        try:
+            res = inference_episode(model, df, left_gk=gk[left_team], right_gk=gk[1 - left_team],
+                                    use_crf=ta.get("crf_weight", 0) > 0, decode="indep", evaluate=False,
+                                    window_seconds=ta.get("window_seconds"), device="cpu")
+        except ValueError:  # chunk shorter than the savgol window: no prediction
+            continue
         micro = res[2]
         if micro is None:
             continue
-        s = micro["edge_src"].astype(str).values
+        s = np.array([str(v) for v in micro["edge_src"].values], dtype="<U12")
         pred[a:b] = np.where(np.char.startswith(s, "home_"), "H", np.where(np.char.startswith(s, "away_"), "A", "N"))
     t_inf = time.time() - t0
     alive = labels != "D"
