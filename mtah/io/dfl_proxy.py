@@ -25,6 +25,9 @@ def load_half(npz_path, census_path):
     key = npz_path.stem
     z = np.load(npz_path)
     raw = z["raw"]; ball_n = z["ball_n"].astype(np.int64)
+    for name, arr in (("raw[:,2]", raw[:, 2]), ("ball_poss_ltr", z["ball_poss_ltr"]), ("ball_status", z["ball_status"])):
+        if not np.isin(arr, (0, 1)).all():
+            raise ValueError(f"{npz_path}: {name} has values outside {{0, 1}}")
     n0 = int(ball_n[0]); F = len(ball_n)
     if not np.array_equal(ball_n, np.arange(n0, n0 + F)):
         raise ValueError(f"{npz_path}: ball frames not contiguous")

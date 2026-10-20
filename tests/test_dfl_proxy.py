@@ -41,8 +41,20 @@ def test_list_halves(tmp_path):
 @pytest.mark.dfl
 def test_real_half(dfl_dir):
     m, labels = load_half(dfl_dir / "game_9001_H1.npz", dfl_dir / "fp1d_census.json")
-    assert m.n_frames == 70708
-    assert np.isin(labels, ["H", "A", "D"]).all()
-    assert (labels == "D").mean() == pytest.approx(23483 / 70708, abs=1e-6)
-    present = ~np.isnan(m.pos[..., 0])
-    assert 20 <= present.sum(axis=1).mean() <= 22
+    n_frames = m.n_frames
+    labels_ok = bool(np.isin(labels, ["H", "A", "D"]).all())
+    dead_share = float((labels == "D").mean())
+    mean_present = float((~np.isnan(m.pos[..., 0])).sum(axis=1).mean())
+    assert n_frames == 70708
+    assert labels_ok
+    assert dead_share == pytest.approx(23483 / 70708, abs=1e-6)
+    assert 20 <= mean_present <= 22
+
+
+def test_load_half_rejects_non_binary(tmp_path):
+    p, c = make_npz(tmp_path)
+    z = dict(np.load(p))
+    z["ball_poss_ltr"] = np.array([1, 1, 2, 0, 0, 0], np.int8)
+    np.savez(p, **z)
+    with pytest.raises(ValueError):
+        load_half(p, c)

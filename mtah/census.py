@@ -38,6 +38,7 @@ def real_match_census(match, tags, long_s=10.0):
     return {
         "ball_present_graded": float(present[g].mean()),
         "n_blackouts": len(long),
+        "blackouts_per_graded_min": float(len(long) / (int(g.sum()) / fps / 60.0)),
         "blackout_median_s": float(np.median(lens)),
         "blackout_max_s": float(lens.max()),
         "long_share": float(inside.sum() / max(1, missing_total)),
@@ -50,13 +51,22 @@ def real_match_census(match, tags, long_s=10.0):
     }
 
 
+def real_blackout_lengths(match, long_s=10.0):
+    """Sorted lengths in seconds of the graded ball gaps longer than long_s (aggregates, no frame data)."""
+    runs = runs_of(~match.ball_present & match.graded)
+    return sorted((e - s) / match.fps for s, e in runs if (e - s) / match.fps > long_s)
+
+
 def main():
     from mtah.io.metrica_loader import load_tactical
     from mtah.io.tags import load_tags
     data = Path(os.environ.get("MTAH_DATA_DIR", r"HOME/mtah-data"))
-    c = real_match_census(load_tactical(data), load_tags(data))
-    Path("runs").mkdir(exist_ok=True)
-    Path("runs/census.json").write_text(json.dumps(c, indent=1))
+    tactical = load_tactical(data)
+    c = real_match_census(tactical, load_tags(data))
+    runs_dir = Path(__file__).resolve().parents[1] / "runs"
+    runs_dir.mkdir(exist_ok=True)
+    (runs_dir / "census.json").write_text(json.dumps(c, indent=1))
+    (runs_dir / "real_blackout_lengths.json").write_text(json.dumps(real_blackout_lengths(tactical)))
     print(json.dumps(c, indent=1))
 
 

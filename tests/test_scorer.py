@@ -28,6 +28,7 @@ def test_split_in_half():
     assert r["spell_f1"] == pytest.approx(0.4, abs=1e-6)
     d = r["decomposition"]
     assert d["false_splits"] == 1 and d["false_merges"] == 0
+    assert d["boundary_only"] == 1 and d["matched_07"] == 0 and d["unmatched_gt_03"] == 0
 
 
 def test_merge():

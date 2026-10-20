@@ -49,3 +49,8 @@ def test_half_runs_rejects_non_contiguous():
 
 def test_half_runs_empty():
     assert half_runs(np.zeros(5, np.int8)) == []
+
+
+def test_match_repr_is_data_safe():
+    r = repr(tiny_match())
+    assert "F=10" in r and "S=4" in r and "array" not in r

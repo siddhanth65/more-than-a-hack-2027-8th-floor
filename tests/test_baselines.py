@@ -25,7 +25,8 @@ def test_nearest_and_hold():
     assert nt[50] == 0 and nt[150] == 1 and nt[250] == -1
     held = hold_last(nt, m.half)
     assert held[250] == 1
-    assert held[5] == 0            # ungraded frames are still filled (caller decides)
+    assert held[5] == nt[5]        # frames outside every half are left as they are (not filled)
+    assert hold_last(np.array([-1, -1, 0, -1], np.int8), np.array([0, 0, 1, 1], np.int8)).tolist() == [-1, -1, 0, 0]
 
 
 def test_b0_and_b4():
@@ -35,6 +36,7 @@ def test_b0_and_b4():
     b4 = b4_blackout_dead(m, min_gap_s=2.0)
     assert b4[250] == "D" and b4[150] == "A"
     assert b4_blackout_dead(m, min_gap_s=10.0)[250] == "A"
+    assert b4_blackout_dead(m, min_gap_s=4.0)[250] == "A"   # a gap of exactly 4 s is not longer than 4 s
 
 
 def test_smooth_vote_window():
@@ -50,5 +52,10 @@ def test_smooth50_parity(data_dir):
     m = load_tactical(data_dir)
     ours = smooth_vote(m, 50)
     ref = pd.read_csv(r"WORKDIR/repo\evaluation\results\baseline_smooth50.csv")["label"].to_numpy()
-    agree = (ours == ref).mean()
-    assert agree > 0.999, agree
+    agree = float((ours == ref).mean())
+    assert agree == 1.0
+
+
+def test_hold_last_does_not_cross_half_boundary():
+    held = hold_last(np.array([0, -1, -1, -1, -1, -1], np.int8), np.array([1, 1, 1, 2, 2, 2], np.int8))
+    assert held.tolist() == [0, 0, 0, -1, -1, -1]

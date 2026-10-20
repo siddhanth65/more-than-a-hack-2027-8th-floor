@@ -43,7 +43,18 @@ def test_half_array():
 @pytest.mark.real
 def test_load_tactical_real(data_dir):
     m = load_tactical(data_dir)
-    assert m.n_frames == 199319 and m.n_slots == 46
-    assert m.ball_present.mean() == pytest.approx(0.569, abs=0.001)
-    assert m.ball_present[m.graded].mean() == pytest.approx(0.593, abs=0.002)
-    assert (m.team == 0).sum() + (m.team == 1).sum() == 46
+    n_frames, n_slots = m.n_frames, m.n_slots
+    share_all = float(m.ball_present.mean())
+    share_graded = float(m.ball_present[m.graded].mean())
+    n_team = int((m.team == 0).sum() + (m.team == 1).sum())
+    assert n_frames == 199319 and n_slots == 46
+    assert share_all == pytest.approx(0.569, abs=0.001)
+    assert share_graded == pytest.approx(0.593, abs=0.002)
+    assert n_team == 46
+
+
+def test_slot_teams_rejects_unknown_team(tmp_path):
+    from mtah.io.metrica_loader import slot_teams
+    (tmp_path / "b.xml").write_text(XML.replace('teamId="T2"', 'teamId="T9"'))
+    with pytest.raises(ValueError):
+        slot_teams(tmp_path / "b.xml")

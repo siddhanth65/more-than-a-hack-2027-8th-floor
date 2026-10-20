@@ -4,7 +4,7 @@ from dataclasses import dataclass
 import numpy as np
 
 
-@dataclass
+@dataclass(repr=False)
 class Match:
     fps: float
     pos: np.ndarray        # (F, S, 2) float32 metres, NaN = slot not tracked
@@ -14,6 +14,11 @@ class Match:
     ball_speed: np.ndarray # (F,) float32 m/s
     half: np.ndarray       # (F,) int8: 0 = ungraded, 1 = first half, 2 = second half
     pitch: tuple = (105.3, 68.0)
+
+    def __repr__(self):
+        # shapes only: a Match holds competition data and must never print it
+        return (f"Match(F={self.n_frames}, S={self.n_slots}, fps={self.fps}, "
+                f"pitch={tuple(self.pitch)})")
 
     @property
     def n_frames(self):

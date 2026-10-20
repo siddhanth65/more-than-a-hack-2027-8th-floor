@@ -23,6 +23,9 @@ def slot_teams(xml_path):
     slots = [p.get("teamId") for p in root.iter("Player")]
     if not slots:
         raise ValueError(f"{xml_path}: no Player entries")
+    unknown = sorted({t for t in slots if t not in team_ids}, key=str)
+    if unknown:
+        raise ValueError(f"{xml_path}: Player teamId {unknown} is in neither team")
     return np.array([0 if t == team_ids[0] else 1 for t in slots], dtype=np.int8)
 
 

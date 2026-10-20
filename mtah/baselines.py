@@ -26,10 +26,9 @@ def nearest_team(match, radius_m=None):
 
 def hold_last(codes, half):
     out = np.asarray(codes, dtype=np.int8).copy()
-    spans = half_runs(half) or [(1, 0, len(out))]
-    # fill ungraded frames too, within the span they precede/follow; simplest: fill the whole array per span
-    bounds = [0] + [s for _, s, _ in spans[1:]] + [len(out)]
-    for a, b in zip(bounds[:-1], bounds[1:]):
+    # carry within each half only; frames outside every half (pre-match etc.) are left as they are
+    spans = [(s, e) for _, s, e in half_runs(half)] or [(0, len(out))]
+    for a, b in spans:
         w = out[a:b]
         known = np.flatnonzero(w != NOBODY)
         if not len(known):
@@ -54,7 +53,7 @@ def b4_blackout_dead(match, min_gap_s=10.0):
     codes = hold_last(nearest_team(match), match.half)
     gap = int(min_gap_s * match.fps)
     for s, e in runs_of(~match.ball_present):
-        if e - s >= gap:
+        if e - s > gap:
             codes[s:e] = NOBODY
     return _to_labels(codes, match.graded)
 

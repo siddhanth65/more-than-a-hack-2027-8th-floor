@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import pytest
 
 from mtah.census import real_match_census
 from tests.test_baselines import two_player_match
@@ -16,3 +17,12 @@ def test_census_keys_and_values():
     assert c["entry_near_line_share"] == 1.0 and c["entry_outward_share"] == 1.0
     assert c["setpiece_in_blackout_share"] == 1.0 and c["throwins_with_team"] == 0
     assert 0 < c["tag_coverage_inside"] < 1
+
+
+def test_census_rate_per_graded_minute():
+    m = two_player_match(F=3000)
+    m.ball[:] = 0.0
+    m.ball[1000:2000, :] = np.nan         # one 40 s blackout; frames 0-9 ungraded
+    tags = pd.DataFrame(columns=["start", "end", "code", "team", "type", "half"])
+    c = real_match_census(m, tags)
+    assert c["blackouts_per_graded_min"] == pytest.approx(1 / (2990 / 25 / 60))

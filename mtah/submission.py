@@ -1,6 +1,7 @@
 """Write and validate a frame,label submission; CLI runs a baseline end to end."""
 import argparse
 import os
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -14,7 +15,7 @@ def write_submission(labels, path):
     if len(labels) != N_FRAMES:
         raise ValueError(f"{len(labels)} labels, expected {N_FRAMES}")
     path = Path(path); path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "w", newline="\n") as f:
+    with open(path, "w", newline="\n", encoding="ascii") as f:
         f.write("frame,label\n")
         f.write("\n".join(f"{i},{l}" for i, l in enumerate(labels.tolist())))
         f.write("\n")
@@ -25,7 +26,7 @@ def validate(path):
     try:
         frame = pm.read_label_csv(path)
     except Exception as e:  # unparseable
-        return str(e)
+        return f"unreadable: {e!r}"
     return pm.validate_submission(frame, N_FRAMES)
 
 
@@ -44,6 +45,8 @@ def main():
     reason = validate(p)
     counts = {k: int((labels == k).sum()) for k in "HADX"}
     print(f"wrote {p}  counts {counts}  validation: {'OK' if reason is None else reason}")
+    if reason is not None:
+        sys.exit(1)
 
 
 if __name__ == "__main__":
