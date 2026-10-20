@@ -181,7 +181,7 @@ def run_pilot(args, keys, base):
     cfg0 = apply_cell(base, sel.GRID[0]); cfg0.decoder.lengths = lengths
     ev = [compute_evidence(s.match, s.tags, cfg0, dead) for s in test]
     strong = [compute_strong(s.match, cfg0) for s in test]
-    for a, d, w in itertools.product((3.0, 30.0), (3.0, 30.0), (0.5, 2.0)):
+    for a, d, w in itertools.product((3.0, 100.0), (3.0, 100.0), (0.5, 2.0)):
         cell = {"tau_HA": a, "tau_D": d, "w_dead": w, "aba_s": 0.5}
         cfg = apply_cell(base, cell); cfg.decoder.lengths = lengths
         res, _ = score_cell(test, ev, cfg, ("ctrl_Dfull",), strongs=strong)

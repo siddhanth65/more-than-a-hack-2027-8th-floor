@@ -12,7 +12,7 @@ from mtah.pipeline import compute_evidence, predict
 from mtah.sim.dataset import VARIANTS, match_id
 
 GRID = [{"tau_HA": a, "tau_D": d, "w_dead": w, "aba_s": m}
-        for a, d, w, m in itertools.product((3.0, 10.0, 30.0), (3.0, 10.0, 30.0), (0.5, 1.0, 2.0), (0.0, 0.5, 1.0))]
+        for a, d, w, m in itertools.product((3.0, 10.0, 30.0, 100.0), (3.0, 10.0, 30.0, 100.0), (0.5, 1.0, 2.0), (0.0, 0.5, 1.0))]
 
 
 def apply_cell(cfg, cell):
@@ -28,7 +28,15 @@ def train_dead(sims, variant="ctrl_Dfull"):
     return DeadModel().fit(X, y)
 
 
-def estimate_lengths(train_sims, cfg, train_fn):
+LENGTHS_MODE = "unit"   # "unit": L_k = 1 for every stream (the tau grid absorbs the scale);
+                        # "residual": integrated autocorrelation of the errors (pilot 2026-10-20: 164/606/380 -> too sticky)
+EVIDENCE_STREAMS = ("ball", "tag", "dead")
+
+
+def estimate_lengths(train_sims, cfg, train_fn, mode=None):
+    mode = mode or LENGTHS_MODE
+    if mode == "unit":
+        return {k: 1.0 for k in EVIDENCE_STREAMS}
     """Correlation lengths L_k: integrated autocorrelation of each stream's errors (spec 4.4), not of its signal.
 
     Errors are the evidence margin minus its per-truth-state mean (truth = ctrl_Dfull): ball and tag over
