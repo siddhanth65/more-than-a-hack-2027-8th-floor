@@ -54,3 +54,13 @@ def test_load_events_real(dfl_dir):
     from mtah.io.dfl_proxy import load_events
     df = load_events(dfl_dir / "game_9001_H1.npz", dfl_dir / "fp1d_census.json")
     assert len(df) > 500 and set(df["team"]) == {"H", "A"} and df["frame"].is_monotonic_increasing
+
+
+def test_dnarrow_ignores_stoppage_event_before_static():
+    labels = lab("H" * 100 + "D" * 100 + "A" * 100)
+    ball = np.zeros((300, 2), np.float32); speed = np.ones(300, np.float32)
+    speed[130:200] = 0.0
+    events = ev([(102, "H", 1, False), (180, "A", 8, False)])   # stoppage touch at 102, restart at 180
+    v = truth_variants(labels, events, ball, speed, 25, (105.0, 68.0))
+    d = v["raw_Dnarrow"]
+    assert "".join(d[100:130]) == "H" * 30 and "".join(d[130:180]) == "D" * 50 and "".join(d[180:200]) == "A" * 20

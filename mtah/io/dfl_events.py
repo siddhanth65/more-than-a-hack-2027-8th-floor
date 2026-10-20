@@ -2,7 +2,6 @@
 import numpy as np
 
 from mtah.io.match import distance_to_line
-from mtah.sim.blackout_sim import runs_of
 
 CTRL_WINDOW_S = 1.5
 STATIC_MPS = 0.5
@@ -42,7 +41,10 @@ def ctrl_filter(labels, events, fps):
 
 
 def narrow_dead(labels, events, ball, ball_speed, fps, pitch):
-    """Trim each D run to [first static/out frame, first restart event]; keep if inverted."""
+    """Trim each D run to [first static/out frame, first restart event]; keep if inverted.
+
+    The restart is the first restart event at or after the static/out frame, looking up to 2 s past the run end.
+    """
     out = np.asarray(labels).copy()
     look = int(round(RESTART_LOOK_S * fps))
     ev_all = np.sort(events["frame"].to_numpy())
@@ -56,9 +58,10 @@ def narrow_dead(labels, events, ball, ball_speed, fps, pitch):
         outp = distance_to_line(ball[s:e], pitch) < -OUT_MARGIN_M
         hit = np.flatnonzero(static | outp)
         s2 = s + int(hit[0]) if hit.size else s
-        cand = ev_all[(ev_all >= s) & (ev_all <= e + look)]
-        e2 = int(cand[0]) if cand.size else e
-        e2 = min(e2, e)
+        cand = ev_all[(ev_all >= s2) & (ev_all <= e + look)]
+        if not cand.size:
+            continue
+        e2 = min(int(cand[0]), e)
         if e2 <= s2:
             continue
         fill_before = before if before is not None else after
