@@ -5,7 +5,7 @@ from dataclasses import replace as dc_replace
 
 import numpy as np
 
-from mtah.io.match import distance_to_line
+from mtah.io.match import distance_to_line, speeds_from_positions
 
 
 @dataclass
@@ -75,7 +75,14 @@ def blackout_mask(labels, ball, pitch, fps, params, rng):
     n_live = rng.poisson(params.live_rate_per_min * minutes) if len(alive) else 0
     for _ in range(n_live):
         s = int(rng.choice(alive))
-        dur = float(np.exp(np.log(params.live_median_s) + params.live_sigma_log * rng.standard_normal()))
+        # lognormal duration, resampled up to 10 times while shorter than min_s (such runs would be
+        # dropped below); if all ten draws are short the dropout is emitted at exactly min_s
+        for _ in range(10):
+            dur = float(np.exp(np.log(params.live_median_s) + params.live_sigma_log * rng.standard_normal()))
+            if dur >= params.min_s:
+                break
+        else:
+            dur = params.min_s
         dur = min(dur, params.live_max_s)
         mask[s:min(F, s + int(dur * fps))] = True
     # component C: short re-acquisition dropouts
@@ -93,27 +100,109 @@ def blackout_mask(labels, ball, pitch, fps, params, rng):
 
 def apply_blackouts(match, mask):
     ball = match.ball.copy(); ball[mask] = np.nan
-    bs = match.ball_speed.copy(); bs[mask] = np.nan
-    return dc_replace(match, ball=ball, ball_speed=bs)
+    # recompute from the masked track: a speed that needs a hidden neighbour frame is not observable
+    return dc_replace(match, ball=ball, ball_speed=speeds_from_positions(ball, match.fps))
 
 
-def blackout_stats(mask, labels, fps, long_s=10.0):
-    labels = np.asarray(labels)
-    runs = runs_of(mask)
-    lens = np.array([e - s for s, e in runs], dtype=float) / fps
-    long = lens[lens > long_s]
-    F = len(mask); minutes = F / fps / 60.0
-    inside = np.zeros(F, bool)
-    for (s, e), ln in zip(runs, lens):
-        if ln > long_s:
-            inside[s:e] = True
+def _components(mask, labels, fps, graded, long_s):
+    mask = np.asarray(mask, dtype=bool); labels = np.asarray(labels)
+    graded = np.ones(len(mask), bool) if graded is None else np.asarray(graded, dtype=bool)
+    m = mask & graded
+    runs = runs_of(m)
+    long_runs = [(s, e) for s, e in runs if (e - s) / fps > long_s]
+    inside = np.zeros(len(mask), bool)
+    for s, e in long_runs:
+        inside[s:e] = True
     return {
-        "n_blackouts": int(len(long)),
-        "per_133min": float(len(long) / minutes * 133.0) if minutes else 0.0,
-        "masked_share": float(mask.mean()),
-        "median_s": float(np.median(long)) if len(long) else 0.0,
-        "p90_s": float(np.percentile(long, 90)) if len(long) else 0.0,
-        "max_s": float(long.max()) if len(long) else 0.0,
-        "dead_share_inside": float((labels[inside] == "D").mean()) if inside.any() else float("nan"),
-        "long_share": float(inside.sum() / max(1, mask.sum())),
+        "lengths": [(e - s) / fps for s, e in long_runs],
+        "graded_frames": int(graded.sum()), "masked_frames": int(m.sum()),
+        "inside_frames": int(inside.sum()), "dead_inside": int((labels[inside] == "D").sum()),
     }
+
+
+def _finalize(parts, fps):
+    lens = np.array([x for c in parts for x in c["lengths"]], dtype=float)
+    graded = sum(c["graded_frames"] for c in parts)
+    masked = sum(c["masked_frames"] for c in parts)
+    inside = sum(c["inside_frames"] for c in parts)
+    dead = sum(c["dead_inside"] for c in parts)
+    minutes = graded / fps / 60.0
+    return {
+        "n_blackouts": int(len(lens)),
+        "per_graded_min": float(len(lens) / minutes) if minutes else 0.0,
+        "masked_share": float(masked / graded) if graded else 0.0,
+        "median_s": float(np.median(lens)) if len(lens) else float("nan"),
+        "p90_s": float(np.percentile(lens, 90)) if len(lens) else float("nan"),
+        "max_s": float(lens.max()) if len(lens) else float("nan"),
+        "dead_share_inside": float(dead / inside) if inside else float("nan"),
+        "long_share": float(inside / max(1, masked)),
+        "lengths_s": lens.tolist(),
+    }
+
+
+def blackout_stats(mask, labels, fps, long_s=10.0, graded=None):
+    """Aggregates of one mask. Counts and shares are over graded frames (all frames if graded is None)."""
+    return _finalize([_components(mask, labels, fps, graded, long_s)], fps)
+
+
+def entry_flags(mask, ball, pitch, fps=25.0, long_s=10.0):
+    """Per long blackout run: (near_line flags, outward flags) from the last visible ball before it.
+
+    near: that ball is within 5 m of a boundary line. outward: it is closer to the line than the ball
+    5 frames earlier (only evaluated when that earlier frame is visible). A frame is visible when it is
+    not masked and the ball is not NaN.
+    """
+    mask = np.asarray(mask, dtype=bool)
+    present = ~mask & ~np.isnan(ball[:, 0])
+    near, outward = [], []
+    for s, e in runs_of(mask):
+        if (e - s) / fps <= long_s:
+            continue
+        k = s - 1
+        while k >= 0 and not present[k]:
+            k -= 1
+        if k < 0:
+            continue
+        d = distance_to_line(ball[k], pitch)
+        near.append(bool(d <= 5.0))
+        j = k - 5
+        if j >= 0 and present[j]:
+            outward.append(bool(d < distance_to_line(ball[j], pitch)))
+    return near, outward
+
+
+def _share(flags):
+    return float(np.mean(flags)) if flags else float("nan")
+
+
+def entry_geometry(mask, ball, pitch, fps=25.0, long_s=10.0):
+    """(near_line_share, outward_share) over the long blackout runs of mask; NaN when there are none."""
+    near, outward = entry_flags(mask, ball, pitch, fps, long_s)
+    return _share(near), _share(outward)
+
+
+def pooled_blackout_stats(items, long_s=10.0):
+    """Stats over several (mask, labels, fps, graded, ball, pitch) inputs, pooling lengths, frames and entries."""
+    parts, near, outward = [], [], []
+    fps = items[0][2]
+    for mask, labels, f, graded, ball, pitch in items:
+        parts.append(_components(mask, labels, f, graded, long_s))
+        if ball is not None:
+            n, o = entry_flags(mask if graded is None else np.asarray(mask, bool) & np.asarray(graded, bool),
+                               ball, pitch, f, long_s)
+            near += n; outward += o
+    out = _finalize(parts, fps)
+    out["entry_near_line_share"] = _share(near)
+    out["entry_outward_share"] = _share(outward)
+    return out
+
+
+def ks_statistic(lengths_a, lengths_b):
+    """Two-sample Kolmogorov-Smirnov distance (max gap between the empirical CDFs)."""
+    a = np.sort(np.asarray(lengths_a, dtype=float)); b = np.sort(np.asarray(lengths_b, dtype=float))
+    if not len(a) or not len(b):
+        return float("nan")
+    grid = np.concatenate([a, b])
+    cdf_a = np.searchsorted(a, grid, side="right") / len(a)
+    cdf_b = np.searchsorted(b, grid, side="right") / len(b)
+    return float(np.abs(cdf_a - cdf_b).max())

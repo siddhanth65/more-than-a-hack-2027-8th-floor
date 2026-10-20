@@ -5,9 +5,8 @@ from pathlib import Path
 
 import numpy as np
 
-from mtah.io.match import distance_to_line
 from mtah.io.tags import coverage
-from mtah.sim.blackout_sim import runs_of
+from mtah.sim.blackout_sim import entry_geometry, runs_of
 
 
 def real_match_census(match, tags, long_s=10.0):
@@ -19,17 +18,7 @@ def real_match_census(match, tags, long_s=10.0):
     for s, e in long:
         inside[s:e] = True
     lens = np.array([(e - s) / fps for s, e in long]) if long else np.array([0.0])
-    near, outward = [], []
-    for s, e in long:
-        k = s - 1
-        while k >= 0 and not present[k]:
-            k -= 1
-        if k < 0:
-            continue
-        d = distance_to_line(match.ball[k], match.pitch); near.append(d <= 5.0)
-        j = k - 5
-        if j >= 0 and present[j]:
-            outward.append(distance_to_line(match.ball[k], match.pitch) < distance_to_line(match.ball[j], match.pitch))
+    near_share, outward_share = entry_geometry(~present & g, match.ball, match.pitch, fps, long_s)
     cov = coverage(tags, F)
     sp = tags[tags["code"] == "SET PIECES"]
     sp_in = sum(1 for s, e in long if ((sp["start"] >= s - 2 * fps) & (sp["start"] <= e + 2 * fps)).any())
@@ -42,8 +31,8 @@ def real_match_census(match, tags, long_s=10.0):
         "blackout_median_s": float(np.median(lens)),
         "blackout_max_s": float(lens.max()),
         "long_share": float(inside.sum() / max(1, missing_total)),
-        "entry_near_line_share": float(np.mean(near)) if near else float("nan"),
-        "entry_outward_share": float(np.mean(outward)) if outward else float("nan"),
+        "entry_near_line_share": near_share,
+        "entry_outward_share": outward_share,
         "tag_coverage_inside": float(cov[inside].mean()) if inside.any() else float("nan"),
         "tag_coverage_outside": float(cov[g & ~inside].mean()),
         "setpiece_in_blackout_share": float(sp_in / max(1, len(long))),

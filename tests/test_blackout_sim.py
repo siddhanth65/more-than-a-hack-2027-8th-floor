@@ -1,7 +1,9 @@
 import numpy as np
 import pytest
 
-from mtah.sim.blackout_sim import BlackoutParams, apply_blackouts, blackout_mask, blackout_stats, runs_of
+from mtah.io.match import speeds_from_positions
+from mtah.sim.blackout_sim import (BlackoutParams, apply_blackouts, blackout_mask, blackout_stats, entry_geometry,
+                                   ks_statistic, pooled_blackout_stats, runs_of)
 from tests.test_match import tiny_match
 
 
@@ -78,9 +80,7 @@ def test_merge_short_gaps():
 
 
 def test_min_duration_drops_short_runs():
-    labels = np.full(25 * 60, "H", dtype="<U1"); ball = np.zeros((len(labels), 2), np.float32)
-    p = BlackoutParams(p_mask_near=0.0, p_mask_far=0.0, live_rate_per_min=0.0, min_s=5.0)
-    mask = np.zeros(len(labels), bool); mask[100:150] = True; mask[500:700] = True   # 2 s and 8 s
+    mask = np.zeros(25 * 60, bool); mask[100:150] = True; mask[500:700] = True   # 2 s and 8 s
     from mtah.sim.blackout_sim import drop_short_runs
     out = drop_short_runs(mask, 25, 5.0)
     assert runs_of(out) == [(500, 700)]
@@ -92,3 +92,79 @@ def test_short_component_lengths():
     mask = blackout_mask(labels, ball, (105.0, 68.0), 25, p, np.random.default_rng(3))
     lens = np.array([e - s for s, e in runs_of(mask)]) / 25.0
     assert len(lens) >= 5 and lens.min() >= 5.0 and lens.max() <= 10.0 + 10.0   # overlaps may chain two
+
+
+def test_stats_per_graded_minute():
+    labels = np.full(25 * 120, "H", dtype="<U1")
+    mask = np.zeros(len(labels), bool); mask[500:1000] = True            # one 20 s run
+    graded = np.ones(len(labels), bool); graded[:1500] = False           # 60 s ungraded, 60 s graded
+    st = blackout_stats(mask, labels, 25, graded=graded)
+    assert st["n_blackouts"] == 0 and st["per_graded_min"] == 0.0        # the run lies in the ungraded part
+    mask[2000:2500] = True
+    st = blackout_stats(mask, labels, 25, graded=graded)
+    assert st["n_blackouts"] == 1 and st["per_graded_min"] == pytest.approx(1.0)
+    assert st["lengths_s"] == [20.0] and st["masked_share"] == pytest.approx(500 / 1500)
+    assert blackout_stats(mask, labels, 25)["per_graded_min"] == pytest.approx(2 / 2.0)
+
+
+def entry_fixture():
+    F = 25 * 120
+    ball = np.zeros((F, 2), np.float32)
+    ball[1000 - 6:1000, 0] = np.linspace(40, 52, 6)     # heads to the goal line, then vanishes
+    mask = np.zeros(F, bool); mask[1000:1500] = True    # 20 s
+    return mask, ball
+
+
+def test_entry_geometry():
+    mask, ball = entry_fixture()
+    assert entry_geometry(mask, ball, (105.0, 68.0)) == (1.0, 1.0)
+    assert all(np.isnan(v) for v in entry_geometry(np.zeros(len(mask), bool), ball, (105.0, 68.0)))
+
+
+def test_pooled_stats_two_halves():
+    labels = np.full(25 * 120, "H", dtype="<U1")
+    mask, ball = entry_fixture()
+    m2 = np.zeros_like(mask); m2[100:1100] = True                      # 40 s
+    graded = np.ones(len(mask), bool)
+    st = pooled_blackout_stats([(mask, labels, 25, graded, ball, (105.0, 68.0)),
+                                (m2, labels, 25, graded, ball, (105.0, 68.0))])
+    assert st["n_blackouts"] == 2 and st["per_graded_min"] == pytest.approx(2 / 4.0)
+    assert st["median_s"] == pytest.approx(30.0) and st["max_s"] == pytest.approx(40.0)
+    assert st["masked_share"] == pytest.approx(1500 / 6000)
+    assert sorted(st["lengths_s"]) == [20.0, 40.0]
+    assert st["entry_near_line_share"] == pytest.approx(0.5)           # only the first entry is near the line
+    empty = pooled_blackout_stats([(np.zeros(len(mask), bool), labels, 25, graded, ball, (105.0, 68.0))])
+    assert np.isnan(empty["median_s"]) and np.isnan(empty["p90_s"]) and np.isnan(empty["max_s"])
+
+
+def test_ks_statistic():
+    a = [1.0, 2.0, 3.0]
+    assert ks_statistic(a, a) == 0.0
+    assert ks_statistic([1.0, 2.0], [10.0, 11.0]) == 1.0
+    assert ks_statistic([1.0, 2.0, 3.0, 4.0], [3.0, 4.0, 5.0, 6.0]) == pytest.approx(0.5)
+
+
+def test_half_rng_reproducible_and_distinct():
+    from mtah.sim import EVAL_SEEDS, FIT_SEEDS, half_rng
+    assert half_rng(3, 0).random() == half_rng(3, 0).random()
+    assert half_rng(3, 0).random() != half_rng(3, 1).random()
+    assert not set(FIT_SEEDS) & set(EVAL_SEEDS)
+
+
+def test_live_durations_resampled_above_min():
+    labels = np.full(25 * 600, "H", dtype="<U1"); ball = np.zeros((len(labels), 2), np.float32)
+    p = BlackoutParams(p_mask_near=0.0, p_mask_far=0.0, live_rate_per_min=2.0, live_median_s=1.0,
+                       live_sigma_log=0.3, merge_s=0.0, min_s=5.0)
+    mask = blackout_mask(labels, ball, (105.0, 68.0), 25, p, np.random.default_rng(0))
+    # a median of 1 s would drop nearly every dropout; resampling / clamping to min_s keeps them
+    assert len(runs_of(mask)) >= 10
+
+
+def test_apply_blackouts_recomputes_ball_speed():
+    m = tiny_match()
+    m.ball[:] = 0.0; m.ball[:, 0] = np.arange(m.n_frames)
+    m.ball_speed[:] = speeds_from_positions(m.ball, 25.0)
+    mask = np.zeros(m.n_frames, bool); mask[5:8] = True
+    m2 = apply_blackouts(m, mask)
+    assert np.isnan(m2.ball_speed[4]) and np.isnan(m2.ball_speed[8])    # neighbour of a mask edge is NaN
+    assert m2.ball_speed[3] == pytest.approx(25.0)

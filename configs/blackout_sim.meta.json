@@ -1,0 +1,47 @@
+{
+ "fit_rng_seed": 2026,
+ "fit_seeds": [
+  0,
+  1
+ ],
+ "eval_seeds": [
+  100,
+  101,
+  102,
+  103,
+  104
+ ],
+ "draws": 400,
+ "refine_steps": 200,
+ "loss": 0.024903744088149035,
+ "targets_md5": "ae8e0a4a80ca653e2bd155db24482388",
+ "in_sample_stats": {
+  "per_graded_min": 0.7580325156513996,
+  "masked_share": 0.41044232876936415,
+  "median_s": 20.84,
+  "p90_s": 50.04,
+  "max_s": 149.96,
+  "dead_share_inside": 0.5551419579709654,
+  "long_share": 0.8412605100627579,
+  "entry_near_line_share": 0.26967592592592593,
+  "entry_outward_share": 0.5613425925925926,
+  "n_blackouts": 865
+ },
+ "held_out_stats": {
+  "per_graded_min": 0.7487433310665387,
+  "masked_share": 0.41211379776919355,
+  "median_s": 20.92,
+  "p90_s": 51.42,
+  "max_s": 187.6,
+  "dead_share_inside": 0.5555956678700361,
+  "long_share": 0.8450557270889507,
+  "entry_near_line_share": 0.27681498829039813,
+  "entry_outward_share": 0.5423887587822014,
+  "n_blackouts": 2136
+ },
+ "ks_vs_real": {
+  "in_sample": 0.11339723421379966,
+  "held_out": 0.12537334660787935
+ },
+ "git_sha": "9c6dc61"
+}
