@@ -111,3 +111,7 @@ A single pipeline, pure numpy/pandas/scikit-learn, deterministic, reproducible w
 - Team name and 3–5 registered members by **10 Nov** (register early).
 - Who else codes? Natural split: one person owns the broadcast alignment (B), one owns the technical document + reproduction testing, the core pipeline is mine.
 - Google account for the submission form.
+
+## 10. Update 2026-10-21 (after the first candidate)
+- Approach B (broadcast fusion) is **dropped**: the two feeds share one constant clock offset (+160.58 s), but the broadcast ball is present on only 18.7 % of tactical-blackout frames and plausibly usable on 1.3 % — both trackers lose the ball at the same moments.
+- First registered candidate a1: DFL-sim 0.357/0.344 (raw/ctrl) vs baseline 0.232/0.174; sealed 0.445/0.375; public window 0.290 (read 2 of 3). Diagnosed and fixed: tag `Team` semantics (defensive codes name the team without the ball); diagnosed: dead-ball recall on visible-ball frames (sim/real mismatch). Plan 2b targets: dead model robustness, ball-control tuning, PathCRF for live blackouts, boundary snapping (+0.018).
