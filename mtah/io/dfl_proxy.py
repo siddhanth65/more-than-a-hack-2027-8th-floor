@@ -69,6 +69,8 @@ def load_events(npz_path, census_path):
     with np.load(npz_path) as z:
         n0 = int(z["ball_n"][0]); F = len(z["ball_n"])
         t = z["truth"]
+        if not np.isin(t[:, 1], (0, 1)).all():
+            raise ValueError(f"{npz_path}: truth[:,1] has values outside {{0, 1}}")
         frame = t[:, 0].astype(np.int64) - n0
         ok = (frame >= 0) & (frame < F)
         team = np.where(t[:, 1].astype(np.int64) == ltr_home, "H", "A")

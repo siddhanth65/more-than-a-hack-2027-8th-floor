@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-from mtah.sim.tag_sim import TagSimParams, simulate_tags
+from mtah.sim.tag_sim import TagSimParams, _phase_runs, simulate_tags
 from tests.test_baselines import two_player_match
 
 
@@ -22,6 +22,7 @@ def test_phases_and_setpiece():
     df = simulate_tags(m, labels, events, mask, p, np.random.default_rng(0))
     phases = df[df["code"] == "PROGRESSION"]
     assert list(phases["team"]) == ["H", "A", "H"]
+    assert int(phases.iloc[1]["end"]) == 25 * 80 - 1   # the A phase now persists through the 10 s blackout
     sp = df[df["code"] == "SET PIECES"]
     assert len(sp) == 1 and sp.iloc[0]["type"] == "Throw-in" and sp.iloc[0]["team"] is None
     assert sp.iloc[0]["start"] == 25 * 80 - 125 and sp.iloc[0]["end"] == 25 * 80 + 750
@@ -34,3 +35,17 @@ def test_deletion_rate():
     p = TagSimParams(keep_outside=0.0, keep_inside=0.0)
     df = simulate_tags(m, labels, events, np.zeros(m.n_frames, bool), p, np.random.default_rng(0))
     assert len(df) == 0
+
+
+def test_phase_runs_carry_through_gaps():
+    fps = 25.0
+    def codes(gap_s):
+        c = np.full(25 * (40 + 40) + int(gap_s * 25), -1, np.int8)
+        c[:25 * 40] = 1
+        c[25 * 40 + int(gap_s * 25):] = 1
+        return c
+    r = _phase_runs(codes(20), fps, 1.0, 3.0, 60.0)
+    assert r == [(0, len(codes(20)) - 1, 1)]          # one A phase, spanning the 20 s gap
+    r = _phase_runs(codes(90), fps, 1.0, 3.0, 60.0)
+    assert r[0] == (0, 25 * 40 - 1, 1)                # 90 s gap ends the run at the last ball frame
+    assert r[1][0] == 25 * 40 + 90 * 25

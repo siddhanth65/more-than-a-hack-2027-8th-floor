@@ -19,6 +19,7 @@ class TagSimParams:
     keep_outside: float = 0.88
     keep_inside: float = 0.75
     jitter_s: float = 1.0
+    carry_max_s: float = 60.0
 
     def to_dict(self):
         return asdict(self)
@@ -28,18 +29,22 @@ class TagSimParams:
         return cls(**d)
 
 
-def _phase_runs(codes, fps, hyst_s, min_s):
-    """Runs of team codes with hysteresis; -1 (no ball) breaks a run."""
-    F = len(codes); hyst = int(hyst_s * fps); min_len = int(min_s * fps)
+def _phase_runs(codes, fps, hyst_s, min_s, carry_max_s=60.0):
+    """Runs of team codes with hysteresis. A -1 (no ball) frame does not end a run: the team is carried
+    through missing-ball frames (as the real tags do through blackouts). A run ends on a confirmed team
+    change, or at the last ball frame once the gap exceeds carry_max_s."""
+    F = len(codes); hyst = int(hyst_s * fps); min_len = int(min_s * fps); carry = int(carry_max_s * fps)
     out = []
-    cur = -1; start = 0; pending = None
+    cur = -1; start = 0; pending = None; last_ball = -1
     for t in range(F):
         c = int(codes[t])
         if c == -1:
-            if cur != -1 and t - start >= min_len:
-                out.append((start, t - 1, cur))
-            cur, pending = -1, None
+            if cur != -1 and t - last_ball > carry:
+                if last_ball - start + 1 >= min_len:
+                    out.append((start, last_ball, cur))
+                cur, pending = -1, None
             continue
+        last_ball = t
         if cur == -1:
             cur, start, pending = c, t, None
             continue
@@ -73,7 +78,7 @@ def simulate_tags(match, labels, events, blackout_mask, params, rng):
     fps = match.fps; F = match.n_frames
     rows = []
     codes = nearest_team(match)
-    for s, e, team in _phase_runs(codes, fps, params.hysteresis_s, params.min_phase_s):
+    for s, e, team in _phase_runs(codes, fps, params.hysteresis_s, params.min_phase_s, params.carry_max_s):
         mid = (s + e) // 2
         keep = params.keep_inside if blackout_mask[mid] else params.keep_outside
         if rng.random() >= keep:
