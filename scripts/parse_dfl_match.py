@@ -86,11 +86,74 @@ def parse_positions(p, mid):
                 cur, buf = None, []
     return out
 
+DRIVE, PASS, CROSS, THROW_IN, SHOT, HEADER, TACKLE, BLOCK = range(1, 9)
+WRAPPERS = ("KickOff", "FreeKick", "CornerKick", "GoalKick", "ThrowIn", "Penalty")
+
+
+def map_event(ev):
+    """(kind, class, actor PersonId, actor TeamId, rule) or None; copied from fp1d_dfl.map_event."""
+    kids = list(ev)
+    if len(kids) != 1:
+        return None
+    top = kids[0]
+    wrapper = top.tag if top.tag in WRAPPERS else None
+    inner = top
+    if wrapper:
+        sub = [c for c in top if c.tag in ("Play", "ShotAtGoal")]
+        if not sub:
+            return None
+        inner = sub[0]
+    if inner.tag == "Play":
+        kid = {c.tag for c in inner}
+        if wrapper == "ThrowIn":
+            cls, rule = THROW_IN, "ThrowIn/Play -> throw-in"
+        elif "Cross" in kid:
+            cls, rule = CROSS, f"{wrapper or ''}/Play/Cross -> cross"
+        else:
+            cls, rule = PASS, f"{wrapper or ''}/Play/{'Pass' if 'Pass' in kid else 'other'} -> pass"
+        return "SCORED", cls, inner.get("Player"), inner.get("Team"), rule
+    if inner.tag == "ShotAtGoal":
+        return "SCORED", SHOT, inner.get("Player"), inner.get("Team"), "ShotAtGoal -> shot"
+    if inner.tag == "TacklingGame":
+        res, role, typ = inner.get("WinnerResult"), inner.get("WinnerRole"), inner.get("Type")
+        who, tm = inner.get("Winner"), inner.get("WinnerTeam")
+        if res == "fouled":
+            return None
+        if typ == "air":
+            return "SCORED", HEADER, who, tm, "TacklingGame air (winner) -> header"
+        if role == "withoutBallControl":
+            return "SCORED", TACKLE, who, tm, "TacklingGame ground won w/o ball -> tackle"
+        return "POSS", DRIVE, who, tm, "TacklingGame ground won with ball -> poss-only"
+    if inner.tag == "BallClaiming":
+        typ = inner.get("Type")
+        if typ in ("InterceptedBall", "Block"):
+            return "SCORED", BLOCK, inner.get("Player"), inner.get("Team"), f"BallClaiming {typ} -> block"
+        return "POSS", BLOCK, inner.get("Player"), inner.get("Team"), f"BallClaiming {typ} -> poss-only opener"
+    if inner.tag == "OtherBallAction":
+        return "POSS", DRIVE, inner.get("Player"), inner.get("Team"), "OtherBallAction -> poss-only"
+    return None
+
+
+def parse_events(p, mid):
+    r = ET.parse(p["events"]).getroot()
+    out = []
+    for ev in r.iter("Event"):
+        assert ev.get("MatchId") == mid
+        m = map_event(ev)
+        if m is None:
+            continue
+        kind, cls, actor, team, rule = m
+        out.append({"id": int(ev.get("EventId")), "t": _ms(ev.get("EventTime")), "kind": kind,
+                    "cls": cls, "actor": actor, "team": team})
+    out.sort(key=lambda e: (e["t"], e["id"]))
+    return out
+
 
 def build(mid, raw_dir, out_dir, syn_id=9007):
     p = paths(raw_dir, mid)
     teams, people = load_info(p)
     pos = parse_positions(p, mid)
+    evs = parse_events(p, mid)
     r = ET.parse(p["events"]).getroot()
     sub_pos, sub_out = {}, {}
     for s in r.iter("Substitution"):
@@ -137,16 +200,44 @@ def build(mid, raw_dir, out_dir, syn_id=9007):
         home_t = [t for t, rl in teams.items() if rl == "home"][0]
         guest_t = [t for t, rl in teams.items() if rl == "guest"][0]
         ltr_poss = np.where(ball[:, 5] == 1, ltr[home_t], np.where(ball[:, 5] == 2, ltr[guest_t], -1))
+        t0, t1 = ball[0, 1], ball[-1, 1]
+        sel = [e for e in evs if t0 - 2000 <= e["t"] <= t1 + 2000]
+        et = np.array([e["t"] for e in sel], np.float64)
+        fidx = np.clip(np.searchsorted(ball[:, 1], et), 1, len(ball) - 1)
+        prev_closer = np.abs(ball[fidx - 1, 1] - et) <= np.abs(ball[fidx, 1] - et)
+        fidx = np.where(prev_closer, fidx - 1, fidx)
+        present = {pd_: set(arr[:, 0].astype(np.int64).tolist())
+                   for pd_, (_t, arr) in pos[sec]["players"].items()}
+        cand = []
+        for e, fi in zip(sel, fidx):
+            fr = int(bn[fi]); pd_ = e["actor"]
+            if pd_ not in present or fr not in present[pd_] or people[pd_][0] != e["team"]:
+                continue
+            cand.append((fr, ltr[e["team"]], people[pd_][1], e["cls"], 1, 0,
+                         0 if e["kind"] == "SCORED" else 1, pid_index[pd_]))
+        by_fr = {}
+        for x in cand:
+            by_fr.setdefault(x[0], []).append(x)
+        ev_rows = []
+        for fr in sorted(by_fr):
+            grp = by_fr[fr]
+            sc = [x for x in grp if x[6] == 0]
+            ev_rows.append(sc[0] if sc else grp[0])
+        truth = np.array([x[:6] for x in ev_rows], np.int64).reshape(-1, 6)
+        poss_only = np.array([x[6] for x in ev_rows], np.int64)
+        actor_pid = np.array([x[7] for x in ev_rows], np.int64)
         key = f"game_{syn_id}_H{hi}"
         np.savez(Path(out_dir) / f"{key}.npz", raw=rawa, ball_n=bn, ball_xy=ball[:, 2:4],
                  ball_z=ball[:, 4], ball_status=ball[:, 6].astype(np.int8),
-                 ball_poss_ltr=ltr_poss.astype(np.int8))
+                 ball_poss_ltr=ltr_poss.astype(np.int8), truth=truth, poss_only=poss_only,
+                 actor_pid=actor_pid)
         census["halves"][key] = {"section": sec, "frames": int(len(bn)),
                                  "fps_from_T": round(float(fps), 4),
                                  "n_players_tracked": len(rows),
                                  "gk_mean_xn": {teams[t]: round(v, 4) for t, v in gkm.items()},
                                  "ltr": {teams[t]: v for t, v in ltr.items()},
-                                 "ball_alive_share": round(float((ball[:, 6] == 1).mean()), 4)}
+                                 "ball_alive_share": round(float((ball[:, 6] == 1).mean()), 4),
+                                 "events_kept": len(ev_rows)}
     (Path(out_dir) / "fp1d_census.json").write_text(json.dumps({mid: census}, indent=1))
     return census
 
