@@ -1,0 +1,16 @@
+{
+  "BUILD UP": {"sign": 1, "p": 0.77},
+  "PROGRESSION": {"sign": 1, "p": 0.69},
+  "ATTACKING TRANSITION": {"sign": 1, "p": 0.63},
+  "LONG BALL": {"sign": 1, "p": 0.62},
+  "BALL IN FINAL THIRD": {"sign": 1, "p": 0.61},
+  "DEFENDING IN ATTACKING THIRD": {"sign": -1, "p": 0.77},
+  "DEFENDING IN MIDDLE THIRD": {"sign": -1, "p": 0.69},
+  "DEFENSIVE TRANSITION": {"sign": -1, "p": 0.62},
+  "DEFENDING IN DEFENSIVE THIRD": {"sign": -1, "p": 0.52},
+  "BALL IN THE BOX": {"sign": 0, "p": 0.5},
+  "CREATING CHANCES": {"sign": 0, "p": 0.5},
+  "PLAYERS IN THE BOX": {"sign": 0, "p": 0.5},
+  "GOALS": {"sign": 0, "p": 0.5},
+  "SET PIECES": {"sign": 1, "p": 0.8}
+}
