@@ -1,4 +1,4 @@
-"""Make clean DFL tracking look like automatic tracking: swaps, team flips, dropouts, noise."""
+"""Make clean DFL tracking look like automatic tracking: swaps, team flips, dropouts, player outages, noise."""
 from dataclasses import asdict, dataclass
 from dataclasses import replace as dc_replace
 
@@ -10,18 +10,28 @@ from mtah.sim.blackout_sim import runs_of
 
 @dataclass
 class CorruptParams:
-    swap_rate_per_team_min: float = 2.0
+    # the real tracker has almost no identity switches: teleports > 3 m ~0.02 per player-minute, which the
+    # clean DFL tracking already shows; each 0.01 flips/min adds ~0.003 (calibrated, runs/select/players_shift.json)
+    swap_rate_per_team_min: float = 0.2
     swap_dist_m: float = 1.5
-    flip_rate_per_min: float = 0.6
+    flip_rate_per_min: float = 0.02
     flip_lo_s: float = 0.5
     flip_hi_s: float = 5.0
-    dropout_iid: float = 0.03
+    # no short gaps on the real tracker (missing-run p50 ~8 s inside blackouts), so iid and blackout-edge
+    # dropout are off by default; the long gaps come from player_outages
+    dropout_iid: float = 0.0
     edge_dropout_m: float = 8.0
-    edge_dropout_s: float = 1.0
+    edge_dropout_s: float = 0.0
     # AR(1) noise; implied central-difference speed noise ~0.5 m/s at 25 fps
     # (sigma=0.3, rho=0.9 inflated player speed by ~2 m/s)
     noise_sigma_m: float = 0.1
     noise_rho: float = 0.95
+    # long per-slot player outages (see player_outages), much more frequent inside ball blackouts
+    outage_rate_out_per_player_min: float = 0.005
+    outage_rate_in_per_player_min: float = 0.9
+    outage_median_s: float = 5.0
+    outage_sigma_log: float = 1.2
+    outage_max_s: float = 240.0
     # dead-ball realism (see dead_ball_realism)
     dead_motion: bool = True
     dead_v_lo: float = 1.0
@@ -71,6 +81,25 @@ def dead_ball_realism(ball, labels, pitch, fps, params, rng):
                 pos = np.where(np.abs(pos) > half, np.sign(pos) * half - (pos - np.sign(pos) * half), pos)
             out[f] = np.clip(pos + rng.normal(0, params.dead_jitter_m, 2), -half, half)
     return out.astype(np.float32)
+
+
+def player_outages(F, S, fps, blackout_mask, params, rng):
+    """(F, S) bool: frames on which a slot is lost by the tracker. Per slot, outage starts form a Poisson
+    process (per player-minute) at outage_rate_out on non-blackout frames and outage_rate_in on blackout
+    frames; each outage lasts min(outage_max_s, lognormal(median=outage_median_s, sigma=outage_sigma_log))
+    seconds; overlapping outages merge (real tracker inside blackouts: missing-run p50 ~8 s, p90 ~100 s)."""
+    bo = np.asarray(blackout_mask, bool)
+    per_frame = np.where(bo, params.outage_rate_in_per_player_min, params.outage_rate_out_per_player_min) / (60.0 * fps)
+    starts = rng.random((F, S)) < per_frame[:, None]
+    t, j = np.nonzero(starts)
+    dur_s = np.minimum(params.outage_max_s,
+                       params.outage_median_s * np.exp(params.outage_sigma_log * rng.standard_normal(len(t))))
+    n = np.maximum(1, np.round(dur_s * fps).astype(np.int64))
+    n = np.minimum(n, max(1, int(round(params.outage_max_s * fps))))
+    inc = np.zeros((F + 1, S), np.int32)
+    np.add.at(inc, (t, j), 1)
+    np.add.at(inc, (np.minimum(F, t + n), j), -1)
+    return np.cumsum(inc[:F], axis=0) > 0
 
 
 def _swap_rows(pos, a, b, start, stop):
@@ -126,6 +155,7 @@ def corrupt(match, blackout_mask, params, rng):
         if k < F:
             d = np.hypot(pos[max(0, e - edge):e, :, 0] - match.ball[k, 0], pos[max(0, e - edge):e, :, 1] - match.ball[k, 1])
             drop[max(0, e - edge):e] |= d <= params.edge_dropout_m
+    drop |= player_outages(F, S, fps, blackout_mask, params, rng)
     pos[drop] = np.nan
     # AR(1) positional noise
     if params.noise_sigma_m > 0:
