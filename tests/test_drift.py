@@ -60,11 +60,14 @@ def test_implied_agreement_skips_sign_zero_and_unknown():
     assert r["tag_agreement"] == 0.0
 
 
-def test_implied_agreement_default_table_loaded():
-    m, labels, mask = _implied_setup()
-    tags = pd.DataFrame([{"start": 0, "end": 100, "code": "BUILD UP", "team": "A", "type": None, "half": 1}])
-    r = drift_report(labels, m, tags, mask)
-    assert "tag_agreement_implied" in r
+def test_implied_agreement_default_table_loaded(monkeypatch):
+    import mtah.evidence.tag_prior as tp
+    monkeypatch.setattr(tp, "load_tag_codes", lambda: {"DEF": {"sign": -1, "p": 0.8}})
+    m, labels, mask = _implied_setup()      # labels all A
+    tags = pd.DataFrame([{"start": 0, "end": 100, "code": "DEF", "team": "H", "type": None, "half": 1},
+                         {"start": 200, "end": 300, "code": "MYSTERY", "team": "H", "type": None, "half": 1}])
+    r = drift_report(labels, m, tags, mask)   # code_table=None -> loaded table; unknown code counts as sign +1
+    assert abs(r["tag_agreement_implied"] - 0.5) < 1e-9   # DEF agrees (1.0), MYSTERY as +1 disagrees (0.0)
 
 
 def test_d_share_split_by_blackout():

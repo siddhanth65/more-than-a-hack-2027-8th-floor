@@ -46,9 +46,9 @@ def drift_report(labels, match, tags, blackout_mask, code_table=None):
                 agree.append((sel[alive] == r.team).mean())
                 entry = code_table.get(r.code)
                 if entry is None:
-                    if table_given or code_table:
+                    if table_given:
                         continue
-                    sign = 1   # no table at all: unknown codes count as sign +1
+                    sign = 1   # default table: unknown codes count as sign +1 (as in tag_prior_evidence)
                 else:
                     sign = int(entry["sign"])
                 if sign == 0:
