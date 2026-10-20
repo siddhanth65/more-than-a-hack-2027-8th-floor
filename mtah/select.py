@@ -42,23 +42,31 @@ def train_dead(sims, variant="ctrl_Dfull", policy="full"):
 
 LENGTHS_MODE = "unit"   # "unit": L_k = 1 for every stream (the tau grid absorbs the scale);
                         # "residual": integrated autocorrelation of the errors (pilot 2026-10-20: 164/606/380 -> too sticky)
-EVIDENCE_STREAMS = ("ball", "tag", "dead")
+EVIDENCE_STREAMS = ("ball", "tag", "dead", "pathcrf")
 
 
 def estimate_lengths(train_sims, cfg, train_fn, mode=None):
-    mode = mode or LENGTHS_MODE
-    if mode == "unit":
-        return {k: 1.0 for k in EVIDENCE_STREAMS}
-    """Correlation lengths L_k: integrated autocorrelation of each stream's errors (spec 4.4), not of its signal.
+    """Correlation lengths L_k per evidence stream.
 
+    mode "unit" (LENGTHS_MODE, the default): L_k = 1.0 for every stream in EVIDENCE_STREAMS and for every other
+    stream the decoder knows (cfg.decoder.weights / cfg.decoder.lengths keys); nothing is computed or trained.
+
+    mode "residual": integrated autocorrelation of each stream's errors (spec 4.4), not of its signal.
     Errors are the evidence margin minus its per-truth-state mean (truth = ctrl_Dfull): ball and tag over
     H/A frames, dead (ev[:,2]-ev[:,0]) as D vs not-D. L_k is the median over held-out halves.
-
     The dead model used here is trained on all train matches except the last one (by match_id);
     lengths are estimated on that held-out train match's halves (all seeds), so the dead evidence
     is out-of-sample as it will be on the test match. The fold's final dead model is trained
     separately on all train halves. With < 2 train matches, falls back to in-sample (warns).
     """
+    mode = mode or LENGTHS_MODE
+    if mode == "unit":
+        keys = dict.fromkeys(EVIDENCE_STREAMS)
+        if cfg is not None:
+            keys.update(dict.fromkeys(cfg.decoder.weights)); keys.update(dict.fromkeys(cfg.decoder.lengths))
+        return {k: 1.0 for k in keys}
+    if mode != "residual":
+        raise ValueError(f"unknown lengths mode {mode!r}; expected 'unit' or 'residual'")
     mids = sorted({match_id(s.key) for s in train_sims})
     if len(mids) < 2:
         print("WARNING: estimate_lengths: <2 train matches, falling back to in-sample dead model")

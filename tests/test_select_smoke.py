@@ -164,8 +164,8 @@ def test_sealed_bar_gate(tmp_path):
     best = {"spec_bar": {"bar_pass": False}}
     with pytest.raises(SystemExit):
         mod.check_bar_gate(best, None)
-    assert mod.check_bar_gate(best, "registered exploratory read") is True   # forced
-    assert mod.check_bar_gate({"spec_bar": {"bar_pass": True}}, None) is False
+    assert mod.check_bar_gate(best, "registered exploratory read") == ["bar"]   # forced
+    assert mod.check_bar_gate({"spec_bar": {"bar_pass": True}}, None) == []
 
 
 def test_resume_rejects_fold_csv_from_other_grid(tmp_path):
@@ -210,3 +210,48 @@ def test_data_dir_unset_exits():
     with pytest.raises(SystemExit, match="MTAH_DATA_DIR"):
         mod.data_dir_or_exit(None)
     assert mod.data_dir_or_exit("x") == "x"
+
+
+def test_sealed_main_defaults_out_to_best_from_and_guards_registration(tmp_path, monkeypatch):
+    """--sealed --best-from X without --out writes config/dead model into X; the read is logged per registration
+    in the (tracked) sealed log, a repeat read is refused unless forced, and an implausible chosen cell is gated."""
+    import pytest
+    from mtah.io import readlog
+    from mtah.sim.dataset import SEALED_MATCH
+    monkeypatch.setattr(readlog, "READS_DIR", tmp_path / "reads")
+    rng = np.random.default_rng(2)
+    sim_dir = tmp_path / "sim"; seeds = [100, 101]
+    for mid in (9001, 9002, 9003, SEALED_MATCH):
+        for half in (1, 2):
+            for seed in seeds:
+                save_half(_fake_half(mid, half, seed, rng), sim_dir)
+    grid = [{"tau_HA": 3.0, "tau_D": 3.0, "w_dead": 1.0, "aba_s": 0.5},
+            {"tau_HA": 10.0, "tau_D": 10.0, "w_dead": 1.0, "aba_s": 0.5}]
+    monkeypatch.setattr(sel, "GRID", grid)
+    mod = _load_script()
+    out = tmp_path / "sel"
+    r = mod.run_selection(sim_dir, seeds, out)
+    assert r["chosen_real_plausible"] is None
+    b = json.loads((out / "best.json").read_text())
+    assert "chosen_real_plausible" in b and b["chosen_real_plausible"] is None
+    b["spec_bar"]["bar_pass"] = True; (out / "best.json").write_text(json.dumps(b))
+    argv = ["select_lomo", "--sim", str(sim_dir), "--seeds", "100", "101", "--sealed", "--best-from", str(out)]
+    monkeypatch.setattr(sys, "argv", argv)
+    mod.main()
+    assert (out / "config.json").exists() and (out / "dead_model.joblib").exists()   # M3: --out defaulted to --best-from
+    log = readlog.read_log("sealed")
+    reg = json.loads((out / "registration.json").read_text())
+    assert len(log) == 1 and log[0]["registration"] == mod.registration_id(reg) and log[0]["match"] == SEALED_MATCH
+    assert log[0]["forced"] is False and log[0]["force_reason"] is None and set(log[0]["sealed"]) == set(b["scores"])
+    with pytest.raises(SystemExit, match="already read"):
+        mod.main()
+    monkeypatch.setattr(sys, "argv", argv + ["--force-sealed", "smoke re-read"])
+    mod.main()
+    log = readlog.read_log("sealed")
+    assert len(log) == 2 and log[1]["forced"] is True and log[1]["forced_over"] == ["repeat_read"]
+    assert log[1]["force_reason"] == "smoke re-read"
+    b["chosen_real_plausible"] = False; (out / "best.json").write_text(json.dumps(b))
+    monkeypatch.setattr(sys, "argv", argv)
+    with pytest.raises(SystemExit, match="real_plausible"):
+        mod.main()
+    assert len(readlog.read_log("sealed")) == 2

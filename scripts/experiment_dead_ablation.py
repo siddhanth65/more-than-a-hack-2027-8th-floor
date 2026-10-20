@@ -102,7 +102,7 @@ for name, drop in SETS.items():
     starts = np.array([s for s, e in runs])
     near = float(np.mean([np.min(np.abs(sp - s)) <= 2 * fps for s in starts])) if len(starts) and len(sp) else None
     rec = float(np.mean([any((s <= t + 5 * fps) and (e >= t - 5 * fps) for s, e in runs) for t in sp])) if len(sp) else None
-    dr = drift_report(lab, m, tags, bm)
+    dr = drift_report(lab, m, tags, bm, code_table=cfg.tag.code_table)
     out["real"][name] = {
         "D_share_graded": float(isD[g].mean()), "D_share_nonblackout": float(isD[g & ~bm].mean()),
         "D_share_blackout": float(isD[g & bm].mean()) if (g & bm).any() else None,

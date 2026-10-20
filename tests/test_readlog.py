@@ -38,13 +38,27 @@ def test_bad_kind(logdir):
         readlog.append_read("other", {})
 
 
-def test_sealed_guard_keyed_on_cell_and_seeds(logdir):
+def test_sealed_guard_per_registration(logdir):
+    """A second sealed read of the same registration is refused unless a force reason is given."""
     mod = _load("select_lomo")
-    readlog.append_read("sealed", {"cell": {"a": 1}, "seeds": [100, 101], "git": "abc"})
-    with pytest.raises(SystemExit):
-        mod.check_sealed_guard({"a": 1}, [100, 101])
-    mod.check_sealed_guard({"a": 1}, [100, 102])  # different seeds: allowed
-    mod.check_sealed_guard({"a": 2}, [100, 101])  # different cell: allowed
+    reg = {"grid": "grid2", "seeds": [100, 101], "grid_size": 64, "best_cell": {"tau_HA": 10.0}, "git": "abc"}
+    rid = mod.registration_id(reg)
+    assert rid == mod.registration_id({**reg, "git": "other", "selection": "x"})   # identity ignores other fields
+    assert rid != mod.registration_id({**reg, "seeds": [100, 102]})
+    assert rid != mod.registration_id({**reg, "best_cell": {"tau_HA": 30.0}})
+    assert rid != mod.registration_id({**reg, "grid": "grid1"})
+    assert mod.check_sealed_guard(rid) == []   # first read: allowed
+    # a legacy record (no registration) and another registration do not block
+    readlog.append_read("sealed", {"cell": {"tau_HA": 10.0}, "seeds": [100, 101], "git": "d85c166"})
+    readlog.append_read("sealed", {"match": 9007, "registration": mod.registration_id({**reg, "seeds": [1]})})
+    assert mod.check_sealed_guard(rid) == []
+    readlog.append_read("sealed", {"match": 9007, "registration": rid, "time": "t1"})
+    assert (logdir / "sealed.jsonl").exists()
+    with pytest.raises(SystemExit, match="already read"):
+        mod.check_sealed_guard(rid)
+    prev = mod.check_sealed_guard(rid, force_reason="re-read after scorer fix")
+    assert len(prev) == 1 and prev[0]["time"] == "t1"
+    assert mod.check_sealed_guard(rid, match=9006) == []   # other match
 
 
 def test_public_guard(logdir):

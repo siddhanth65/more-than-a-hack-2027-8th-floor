@@ -97,12 +97,18 @@ def out_of_sample_drift_reference(sim_dir, seeds, keys, base, best_cell, lengths
         for s in test:
             ev = compute_evidence(s.match, s.tags, cfg, dead, cache_key=f"{s.key}_s{s.seed}")
             lab = predict(s.match, s.tags, cfg, dead, evidence=ev)
-            rows.append(drift_report(lab, s.match, s.tags, blackout_mask_from_match(s.match)))
+            rows.append(drift_report(lab, s.match, s.tags, blackout_mask_from_match(s.match), code_table=cfg.tag.code_table))
     return _drift_summary(rows)
 
 
+RATIO_BAND = (0.8, 1.25)
+RATIO_VARIANTS = ("ctrl_Dfull", "ctrl_Dnarrow")   # raw truth counts uncontrolled touches: raw ratios sit ~0.6 by design
+
+
 def compute_bar(allf, halves, best, best_i):
-    """Spec bar: margins over the strongest baseline, 2x seed SD, folds won, count ratios."""
+    """Spec bar: margins over the strongest baseline (>= max(0.05, 2x seed SD), all four variants), folds won on
+    ctrl_Dfull (>= n_folds - 1), count ratios n_pred/n_gt in RATIO_BAND for the ctrl_* variants only. All four
+    ratios are recorded; the raw ones are informative only (raw truth splits spells at uncontrolled touches)."""
     base_rows = allf[allf["cell"].isin(list(BASELINES))].groupby("cell")[list(VARIANTS)].mean()
     baseline_used = {v: str(base_rows[v].idxmax()) for v in VARIANTS}
     margins = {v: float(best[v] - base_rows[v].max()) for v in VARIANTS}
@@ -114,13 +120,16 @@ def compute_bar(allf, halves, best, best_i):
     cellf = allf[allf["cell"] == best_i].set_index("held")["ctrl_Dfull"]
     basef = allf[allf["cell"].isin(list(BASELINES))].groupby("held")["ctrl_Dfull"].max()
     folds_won = int(((cellf - basef.reindex(cellf.index)) >= 0.05).sum())
+    n_folds = int(len(cellf)); folds_needed = max(1, n_folds - 1)
     ratios = {v: float(best[f"{v}_ratio"]) for v in VARIANTS}
+    ratios_ok = {v: bool(RATIO_BAND[0] <= ratios[v] <= RATIO_BAND[1]) for v in RATIO_VARIANTS}
     need = {v: max(0.05, 2.0 * seed_sd[v]) for v in VARIANTS}
-    bar_pass = bool(all(margins[v] >= need[v] for v in VARIANTS) and folds_won >= 4
-                    and all(0.8 <= r <= 1.25 for r in ratios.values()))
+    bar_pass = bool(all(margins[v] >= need[v] for v in VARIANTS) and folds_won >= folds_needed
+                    and all(ratios_ok.values()))
     bar = {"margins_vs_best_baseline": margins, "required_margin": need, "seed_sd": seed_sd,
-           "baseline_used": baseline_used, "folds_won_ctrl_Dfull": folds_won, "n_folds": int(len(cellf)),
-           "count_ratios": ratios, "bar_pass": bar_pass}
+           "baseline_used": baseline_used, "folds_won_ctrl_Dfull": folds_won, "n_folds": n_folds,
+           "folds_won_needed": folds_needed, "count_ratios": ratios, "ratio_band": list(RATIO_BAND),
+           "ratio_rule_variants": list(RATIO_VARIANTS), "count_ratios_ok": ratios_ok, "bar_pass": bar_pass}
     return bar, base_rows
 
 
@@ -277,13 +286,14 @@ def run_grid(sim_dir, seeds, keys, base, out, grid, real_data_dir=None, grid_nam
         selection += (f"; highest-ranked real-plausible cell among the top {top_k} "
                       f"(real non-blackout D share in {list(REAL_D_SHARE_BAND)}; fallback rank 1)")
     real_json = None if plaus is None else {str(i): v for i, v in plaus.items()}
+    chosen_real_plausible = None if plaus is None else bool(plaus.get(best_i, {}).get("real_plausible", False))
     reg = {"git": git_sha(), "seeds": seeds, "grid": grid_name, "grid_size": len(grid), "selection": selection,
            "scorer_md5": hashlib.md5(OFFICIAL_PATH.read_bytes().replace(b"\r\n", b"\n")).hexdigest(),
            "best_cell": best_cell, "best_cell_index": best_i, "chosen_rank": chosen_rank,
            "best": {v: best[v] for v in VARIANTS}, "baselines": base_rows.to_dict(),
            "seed_sd": bar["seed_sd"], "baseline_used": bar["baseline_used"], "spec_bar": bar,
            "use_pathcrf": bool(base.use_pathcrf), "pathcrf_threads": int(base.pathcrf.threads),
-           "real_plausibility": real_json,
+           "real_plausibility": real_json, "chosen_real_plausible": chosen_real_plausible,
            "pathcrf_train_matches": [9001, 9002, 9003, 9004, 9005], "pathcrf_val": 9006, "clean": 9007,
            "sealed_match": SEALED_MATCH}
     (out / "registration.json").write_text(json.dumps(reg, indent=1))
@@ -291,9 +301,10 @@ def run_grid(sim_dir, seeds, keys, base, out, grid, real_data_dir=None, grid_nam
                                                "scores": {v: best[v] for v in VARIANTS},
                                                "ratios": bar["count_ratios"], "seed_sd": bar["seed_sd"],
                                                "baseline_used": bar["baseline_used"], "spec_bar": bar,
-                                               "real_plausibility": real_json,
+                                               "real_plausibility": real_json, "chosen_real_plausible": chosen_real_plausible,
                                                "git": git_sha(), "seeds": list(seeds), "grid": grid_name}, indent=1))
-    return {"best_cell": best_cell, "resumed_folds": resumed_folds, "bar_pass": bar["bar_pass"]}
+    return {"best_cell": best_cell, "resumed_folds": resumed_folds, "bar_pass": bar["bar_pass"],
+            "chosen_real_plausible": chosen_real_plausible}
 
 
 def run_selection(sim_dir, seeds, out_dir, grid=None, base=None, real_data_dir=None, grid_name=None):
@@ -326,22 +337,44 @@ def run_pilot(args, keys, base, grid):
         print(f"  tau_HA={a:>4} tau_D={d:>4} w_dead={w:>3}  n_pred/n_gt={r['ratio']:.3f}  spell_f1={r['spell_f1']:.3f}", flush=True)
 
 
-def check_sealed_guard(best_cell, seeds):
-    for e in readlog.read_log("sealed"):
-        if e.get("cell") == best_cell and e.get("seeds") == list(seeds):
-            raise SystemExit(f"refusing sealed read: cell already read with seeds {list(seeds)} ({e.get('time')})")
+def registration_id(reg):
+    """Identity of a registration: grid name, seeds, and sha256 of registration.json's best_cell/grid_size/seeds."""
+    core = {"best_cell": reg.get("best_cell"), "grid_size": reg.get("grid_size"), "seeds": reg.get("seeds")}
+    return {"grid": reg.get("grid"), "seeds": reg.get("seeds"),
+            "sha256": hashlib.sha256(json.dumps(core, sort_keys=True).encode()).hexdigest()}
+
+
+def check_sealed_guard(reg_id, force_reason=None, match=SEALED_MATCH):
+    """Refuse a second read of the sealed match for the same registration (docs/reads/sealed.jsonl, tracked) unless
+    --force-sealed REASON is given. Returns the earlier reads of this registration (empty when it is the first)."""
+    prev = [e for e in readlog.read_log("sealed")
+            if e.get("registration") == reg_id and int(e.get("match", SEALED_MATCH)) == int(match)]
+    if prev and not force_reason:
+        raise SystemExit(f"refusing sealed read: registration {reg_id['grid']} seeds {reg_id['seeds']} "
+                         f"sha256 {reg_id['sha256'][:12]} already read {len(prev)}x ({prev[-1].get('time')}); "
+                         "pass --force-sealed REASON to override")
+    if prev:
+        print(f"!!! WARNING: --force-sealed ({force_reason}): re-reading the sealed match for an already-read registration !!!")
+    return prev
 
 
 def check_bar_gate(best, force_reason=None):
-    """Sealed reads need spec_bar.bar_pass in best.json, or an explicit --force-sealed REASON (logged). Returns forced."""
+    """Sealed reads need spec_bar.bar_pass AND chosen_real_plausible not False in best.json (null = real step
+    skipped with --no-real), or an explicit --force-sealed REASON (logged). Returns the list of failed gates."""
     bar = best.get("spec_bar") or {}
-    if bar.get("bar_pass"):
-        return False
+    failed = []
+    if not bar.get("bar_pass"):
+        failed.append("bar")
+    if best.get("chosen_real_plausible") is False:
+        failed.append("real_plausible")
+    if not failed:
+        return []
     print("SPEC BAR", json.dumps(bar, indent=1))
+    print("chosen_real_plausible:", best.get("chosen_real_plausible"))
     if not force_reason:
-        raise SystemExit("refusing sealed read: spec bar not passed (bar_pass false); pass --force-sealed REASON to override")
-    print(f"!!! WARNING: --force-sealed ({force_reason}): reading the sealed match although the spec bar FAILED !!!")
-    return True
+        raise SystemExit(f"refusing sealed read: gate(s) failed {failed}; pass --force-sealed REASON to override")
+    print(f"!!! WARNING: --force-sealed ({force_reason}): reading the sealed match although {failed} FAILED !!!")
+    return failed
 
 
 def load_best(best_dir, seeds):
@@ -360,7 +393,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--sim", default=str(ROOT / "runs" / "sim"))
     ap.add_argument("--seeds", type=int, nargs="+", default=[100, 101])
-    ap.add_argument("--out", default=str(ROOT / "runs" / "select" / time.strftime("%Y%m%d-%H%M")))
+    ap.add_argument("--out", default=None,
+                    help="selection dir (default runs/select/<timestamp>; with --sealed --best-from X, default X)")
     ap.add_argument("--grid", choices=sorted(sel.GRIDS), default="grid1",
                     help="grid1 (default) | grid2; the real-match plausibility step runs for every grid unless --no-real")
     ap.add_argument("--data", default=os.environ.get("MTAH_DATA_DIR"),
@@ -377,6 +411,8 @@ def main():
     if args.pilot:
         run_pilot(args, keys, base_for_grid(grid), grid)
         return
+    if args.out is None:
+        args.out = args.best_from if (args.sealed and args.best_from) else str(ROOT / "runs" / "select" / time.strftime("%Y%m%d-%H%M"))
     out = Path(args.out); out.mkdir(parents=True, exist_ok=True)
     if args.best_from:
         best = load_best(args.best_from, args.seeds)
@@ -388,16 +424,20 @@ def main():
                                   grid_name=args.grid)["best_cell"]
     if args.sealed:
         sel_dir = Path(args.best_from or out)
-        best = load_best(sel_dir, args.seeds)
+        if not args.best_from:
+            best = load_best(sel_dir, args.seeds)   # the best.json run_selection just wrote (--best-from loaded it above)
         reg_path = sel_dir / "registration.json"
         if not reg_path.exists():
             raise SystemExit(f"{reg_path} missing: cannot verify the registered seeds; refusing the sealed read")
-        reg_seeds = json.loads(reg_path.read_text()).get("seeds")
+        reg = json.loads(reg_path.read_text()); reg_seeds = reg.get("seeds")
         if reg_seeds != list(args.seeds):
             raise SystemExit(f"--seeds {list(args.seeds)} differ from the registered seeds {reg_seeds} in {reg_path}; "
                              "refusing the sealed read")
-        forced = check_bar_gate(best, args.force_sealed)
-        check_sealed_guard(best_cell, args.seeds)
+        if reg.get("best_cell") != best_cell:
+            raise SystemExit(f"best.json cell {best_cell} != registered best_cell {reg.get('best_cell')} in {reg_path}")
+        reg_id = registration_id(reg)
+        failed = check_bar_gate(best, args.force_sealed)
+        prev = check_sealed_guard(reg_id, args.force_sealed)
         base = base_for_grid([best_cell])   # PathCRF only if the chosen cell weights it
         policy = best_cell.get("dead_policy", "full")
         train = load_sims(args.sim, args.seeds, keys); dead = train_dead(train, policy=policy)
@@ -408,16 +448,20 @@ def main():
             ref_path.write_text((Path(args.best_from) / "drift_reference.json").read_text())
         if not ref_path.exists():
             print("WARNING: drift_reference.json absent; writing an IN-SAMPLE reference (train halves)")
-            rows = [drift_report(predict(s.match, s.tags, cfg, dead, cache_key=f"{s.key}_s{s.seed}"), s.match, s.tags, blackout_mask_from_match(s.match))
+            rows = [drift_report(predict(s.match, s.tags, cfg, dead, cache_key=f"{s.key}_s{s.seed}"), s.match, s.tags,
+                                 blackout_mask_from_match(s.match), code_table=cfg.tag.code_table)
                     for s in train]
             ref_path.write_text(json.dumps(_drift_summary(rows), indent=1))
         sealed = load_sims(args.sim, args.seeds, [k for k in list_sim_keys(args.sim) if match_id(k) == SEALED_MATCH])
         ev = [compute_evidence(s.match, s.tags, cfg, dead, cache_key=f"{s.key}_s{s.seed}") for s in sealed]
         res = {v: m["spell_f1"] for v, m in score_cell(sealed, ev, cfg, VARIANTS)[0].items()}
-        rec = {"time": time.strftime("%Y-%m-%d %H:%M"), "git": git_sha(), "cell": best_cell, "seeds": list(args.seeds),
-               "sealed": res, "bar_pass": bool(best.get("spec_bar", {}).get("bar_pass", False))}
-        if forced:
-            rec["forced"] = True; rec["force_reason"] = args.force_sealed
+        forced_over = failed + (["repeat_read"] if prev else [])
+        rec = {"time": time.strftime("%Y-%m-%d %H:%M"), "git": git_sha(), "match": SEALED_MATCH, "registration": reg_id,
+               "select_dir": str(sel_dir), "cell": best_cell, "seeds": list(args.seeds), "sealed": res,
+               "bar_pass": bool(best.get("spec_bar", {}).get("bar_pass", False)),
+               "chosen_real_plausible": best.get("chosen_real_plausible"),
+               "forced": bool(forced_over), "forced_over": forced_over,
+               "force_reason": args.force_sealed if forced_over else None}
         readlog.append_read("sealed", rec)
         dead.save(out / "dead_model.joblib"); (out / "config.json").write_text(json.dumps({**cfg.to_dict(), "lengths": lengths}, indent=1))
         print("SEALED", json.dumps(res))

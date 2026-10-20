@@ -139,3 +139,32 @@ def test_choose_plausible_ignores_unchecked_cells():
     # cell 5 was never checked on the real match (not in the top-k): it cannot be chosen over the fallback
     assert choose_plausible(_ranked([7, 5]), {7: {"real_plausible": False}}) == 7
     assert choose_plausible(_ranked([7, 5]), {}) == 7
+
+
+def test_unit_lengths_cover_every_stream(monkeypatch):
+    """Unit mode (the default): L_k = 1.0 for ball, tag, dead, pathcrf and for every stream the evidence carries."""
+    import mtah.pipeline as pl
+    import mtah.select as sel
+    from mtah.evidence.dead import DeadModel
+    assert sel.LENGTHS_MODE == "unit" and set(sel.EVIDENCE_STREAMS) == {"ball", "tag", "dead", "pathcrf"}
+    from tests.test_select_smoke import _fake_half
+    h = _fake_half(9001, 1, 100, np.random.default_rng(0)); m = h.match
+    monkeypatch.setattr(pl, "pathcrf_posterior", lambda match, key, params: {
+        "p_home": np.full(match.n_frames, 0.6, np.float32), "p_none": np.zeros(match.n_frames, np.float32),
+        "imputed_frac": np.zeros(match.n_frames, np.float32)})
+    cfg = PipelineConfig(); cfg.use_pathcrf = True
+    cfg.decoder.weights["extra"] = 0.5   # a stream the decoder weights beyond EVIDENCE_STREAMS
+    dead = DeadModel()
+    from mtah.evidence.dead import dead_features
+    dead.fit(dead_features(m, h.tags), (h.truth["ctrl_Dfull"] == "D").astype(int))
+    ev = compute_evidence(m, h.tags, cfg, dead, cache_key="k")
+    assert {"ball", "tag", "dead", "pathcrf"} <= set(ev)
+    ev["extra"] = ev["ball"]
+    called = []
+    L = estimate_lengths([], cfg, lambda sims: called.append(1))   # unit mode never trains or computes evidence
+    assert not called
+    for k in ("ball", "tag", "dead", "pathcrf", "extra", *ev):
+        assert L[k] == 1.0, (k, L)
+    assert estimate_lengths([], None, None) == {k: 1.0 for k in sel.EVIDENCE_STREAMS}
+    with pytest.raises(ValueError):
+        estimate_lengths([], cfg, None, mode="bogus")
