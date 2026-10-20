@@ -1,7 +1,6 @@
 """Evidence -> decoder -> post-processing: one function from inputs to labels."""
 from dataclasses import asdict, dataclass, field
-
-import numpy as np
+from typing import Optional
 
 from mtah.decode.viterbi import DecoderParams, decode
 from mtah.evidence.ball_ctrl import BallCtrlParams, ball_ctrl_evidence
@@ -19,7 +18,7 @@ class PipelineConfig:
     decoder: DecoderParams = field(default_factory=lambda: DecoderParams(weights={"ball": 1.0, "tag": 1.0, "dead": 1.0},
                                                                          lengths={"ball": 1.0, "tag": 1.0, "dead": 1.0}))
     post: PostParams = field(default_factory=PostParams)
-    dead_model_path: str = None
+    dead_model_path: Optional[str] = None
 
     def to_dict(self):
         return asdict(self)
@@ -37,9 +36,14 @@ def compute_evidence(match, tags, cfg, dead_model):
     return ev
 
 
-def predict(match, tags, cfg, dead_model, evidence=None):
+def compute_strong(match, cfg):
+    t = detect_touches(match, cfg.touch)
+    return (strong_touch_frames(t, 0, cfg.touch, match.n_frames),
+            strong_touch_frames(t, 1, cfg.touch, match.n_frames))
+
+
+def predict(match, tags, cfg, dead_model, evidence=None, strong=None):
     ev = evidence if evidence is not None else compute_evidence(match, tags, cfg, dead_model)
     lab = decode(ev, match.half, cfg.decoder)
-    t = detect_touches(match, cfg.touch)
-    sH = strong_touch_frames(t, 0, cfg.touch, match.n_frames); sA = strong_touch_frames(t, 1, cfg.touch, match.n_frames)
+    sH, sA = strong if strong is not None else compute_strong(match, cfg)
     return postprocess(lab, match.half, match.fps, cfg.post, strong_H=sH, strong_A=sA)

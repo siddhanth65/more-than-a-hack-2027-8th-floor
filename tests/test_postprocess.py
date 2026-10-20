@@ -23,3 +23,24 @@ def test_strong_touch_protects_blip():
     strong_A = np.zeros(40, bool); strong_A[22] = True
     out = postprocess(x, half, 25.0, PostParams(aba_s=0.2), strong_A=strong_A)
     assert "".join(out[20:24]) == "A" * 4
+
+
+def test_chained_interactions_fill_first():
+    half = np.ones(33, np.int8)
+    x = lab("D" * 10 + "H" * 5 + "D" * 3 + "H" * 5 + "D" * 10)
+    out = postprocess(x, half, 25.0, PostParams(island_s=0.4, d_fill_s=0.2, aba_s=0.0))
+    assert "".join(out[10:23]) == "H" * 13
+
+
+def test_many_blips_is_fast():
+    import time
+    n = 60000
+    x = np.array(["H"] * n, dtype="<U1")
+    for k in range(2000):
+        s = 100 + k * 28
+        x[s:s + 3] = "A"
+    half = np.ones(n, np.int8)
+    t0 = time.perf_counter()
+    out = postprocess(x, half, 25.0, PostParams(island_s=0.4, d_fill_s=0.2, aba_s=0.5))
+    assert time.perf_counter() - t0 < 2.0
+    assert (out == "H").all()

@@ -1,7 +1,6 @@
-import numpy as np
 import pandas as pd
 
-from mtah.pipeline import PipelineConfig, compute_evidence, predict
+from mtah.pipeline import PipelineConfig, compute_evidence, compute_strong, predict
 from tests.test_ball_ctrl import carry_match
 
 
@@ -15,3 +14,11 @@ def test_predict_end_to_end_without_dead_model():
     assert "".join(lab[20:90]) == "H" * 70 and "".join(lab[120:]) == "A" * 280
     d = PipelineConfig.from_dict(cfg.to_dict())
     assert d.decoder.tau_HA == cfg.decoder.tau_HA
+
+
+def test_predict_with_precomputed_strong_matches():
+    m = carry_match(F=400)
+    tags = pd.DataFrame(columns=["start", "end", "code", "team", "type", "half"])
+    cfg = PipelineConfig()
+    strong = compute_strong(m, cfg)
+    assert (predict(m, tags, cfg, None, strong=strong) == predict(m, tags, cfg, None)).all()
