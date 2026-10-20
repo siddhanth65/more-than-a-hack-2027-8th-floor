@@ -33,3 +33,56 @@ def test_blackout_mask_from_match():
     mask = blackout_mask_from_match(m)
     assert mask[25 * 20:25 * 35].all() and not mask[25 * 60:25 * 65].any()
     assert mask.sum() == 25 * 15 - int((~m.graded[25 * 20:25 * 35]).sum())
+
+
+def _implied_setup():
+    m = two_player_match(F=25 * 120); m.ball[:] = 0.0
+    labels = np.full(m.n_frames, "A", dtype="<U1")
+    return m, labels, np.zeros(m.n_frames, bool)
+
+
+def test_implied_agreement_sign_minus_counts_other_team():
+    m, labels, mask = _implied_setup()
+    tags = pd.DataFrame([{"start": 25 * 10, "end": 25 * 30, "code": "DEF", "team": "H", "type": None, "half": 1}])
+    table = {"DEF": {"sign": -1, "p": 0.8}}
+    r = drift_report(labels, m, tags, mask, code_table=table)
+    assert abs(r["tag_agreement_implied"] - 1.0) < 1e-9
+    assert r["tag_agreement"] == 0.0
+
+
+def test_implied_agreement_skips_sign_zero_and_unknown():
+    m, labels, mask = _implied_setup()
+    tags = pd.DataFrame([{"start": 0, "end": 100, "code": "NEUTRAL", "team": "H", "type": None, "half": 1},
+                         {"start": 200, "end": 300, "code": "MYSTERY", "team": "H", "type": None, "half": 1}])
+    table = {"NEUTRAL": {"sign": 0, "p": 0.5}}
+    r = drift_report(labels, m, tags, mask, code_table=table)
+    assert np.isnan(r["tag_agreement_implied"])
+    assert r["tag_agreement"] == 0.0
+
+
+def test_implied_agreement_default_table_loaded():
+    m, labels, mask = _implied_setup()
+    tags = pd.DataFrame([{"start": 0, "end": 100, "code": "BUILD UP", "team": "A", "type": None, "half": 1}])
+    r = drift_report(labels, m, tags, mask)
+    assert "tag_agreement_implied" in r
+
+
+def test_d_share_split_by_blackout():
+    m, _, _ = _implied_setup()
+    labels = np.full(m.n_frames, "H", dtype="<U1")
+    labels[25 * 10:25 * 20] = "D"      # outside blackout
+    labels[25 * 60:25 * 70] = "D"      # inside blackout
+    mask = np.zeros(m.n_frames, bool); mask[25 * 60:25 * 80] = True
+    g = m.graded
+    r = drift_report(labels, m, pd.DataFrame(columns=["start", "end", "code", "team", "type", "half"]), mask)
+    exp_in = (labels[g & mask] == "D").mean(); exp_out = (labels[g & ~mask] == "D").mean()
+    assert abs(r["blackout_D_share"] - exp_in) < 1e-9 and abs(r["non_blackout_D_share"] - exp_out) < 1e-9
+    assert r["blackout_D_share"] > r["non_blackout_D_share"] > 0
+
+
+def test_existing_keys_still_present():
+    m, labels, mask = _implied_setup()
+    r = drift_report(labels, m, pd.DataFrame(columns=["start", "end", "code", "team", "type", "half"]), mask, code_table={})
+    for k in ("n_spells", "spells_per_HA_min", "pred_D_share", "spell_len_median_s",
+              "share_changes_in_blackout", "D_starts_near_sp_share", "tag_agreement"):
+        assert k in r

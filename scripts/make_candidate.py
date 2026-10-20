@@ -36,7 +36,7 @@ def main():
         print(f"INVALID submission {p}: {reason}")
         sys.exit(1)
     mask = blackout_mask_from_match(m)
-    drift = drift_report(labels, m, tags, mask)
+    drift = drift_report(labels, m, tags, mask, code_table=cfg.tag.code_table)
     ref_path = sel / "drift_reference.json"
     ref = json.loads(ref_path.read_text()) if ref_path.exists() else None
     if ref is None:
