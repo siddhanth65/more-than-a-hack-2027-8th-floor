@@ -47,7 +47,9 @@ def main():
         print(f"WARNING: no drift_reference.json in {sel}; drift not compared")
         oor = []
     else:
-        oor = [k for k, v in drift.items() if k in ref and not np.isnan(v) and (v < ref[k]["min"] or v > ref[k]["max"])]
+        # n_spells is an absolute count (full match vs single sim halves); only rate-style metrics are compared
+        oor = [k for k, v in drift.items() if k != "n_spells" and k in ref and not np.isnan(v)
+               and (v < ref[k]["min"] or v > ref[k]["max"])]
         print("out_of_range:", oor)
     drift = {"candidate": drift, "reference": ref, "out_of_range": oor}
     (out / f"{args.name}.drift.json").write_text(json.dumps(drift, indent=1))
