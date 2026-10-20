@@ -84,3 +84,7 @@ def load_half_sim(d, key, seed):
         tags[c] = tags[c].astype(object).where(tags[c].notna(), None)
     events = pd.read_parquet(str(st) + ".events.parquet")
     return SimHalf(key=key, seed=seed, match=m, tags=tags, blackout=z["blackout"], truth=truth, events=events)
+
+
+def list_sim_keys(d):
+    return sorted({p.name.split("_s")[0] for p in Path(d).glob("game_*_s*.json")})
