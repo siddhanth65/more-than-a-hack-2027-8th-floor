@@ -93,9 +93,13 @@ def run_grid(sim_dir, seeds, keys, base, out, grid):
         meta_path = out / f"fold_{held}.meta.json"
         if fold_csv.exists() and halves_csv.exists():
             meta = json.loads(meta_path.read_text()) if meta_path.exists() else None
-            if meta != fp:
+            # seeds and grid must match exactly; a different git sha only warns (an unrelated commit
+            # must not force a multi-hour rerun), but it is recorded so the registration shows it
+            if meta is None or meta.get("seeds") != fp["seeds"] or meta.get("grid_hash") != fp["grid_hash"]:
                 raise SystemExit(f"refusing to resume fold {held} in {out}: fingerprint {meta} != current {fp}; "
                                  "use a fresh --out directory")
+            if meta.get("git") != fp["git"]:
+                print(f"WARNING: resuming fold {held} produced at git {meta.get('git')} (now {fp['git']})", flush=True)
             df = pd.read_csv(fold_csv); fold_tables.append(df)
             resumed_folds.append(held)
             lengths_by_fold[held] = json.loads(df["lengths"].iloc[0])
