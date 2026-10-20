@@ -5,7 +5,7 @@ from typing import Optional
 from mtah.decode.viterbi import DecoderParams, decode
 from mtah.evidence.ball_ctrl import BallCtrlParams, ball_ctrl_evidence
 from mtah.evidence.dead import dead_evidence, dead_features
-from mtah.evidence.tag_prior import TagPriorParams, tag_prior_evidence
+from mtah.evidence.tag_prior import TagPriorParams, load_tag_codes, tag_prior_evidence
 from mtah.evidence.touches import TouchParams, detect_touches, strong_touch_frames
 from mtah.spells.postprocess import PostParams, postprocess
 
@@ -13,7 +13,7 @@ from mtah.spells.postprocess import PostParams, postprocess
 @dataclass
 class PipelineConfig:
     ball: BallCtrlParams = field(default_factory=BallCtrlParams)
-    tag: TagPriorParams = field(default_factory=TagPriorParams)
+    tag: TagPriorParams = field(default_factory=lambda: TagPriorParams(code_table=load_tag_codes()))
     touch: TouchParams = field(default_factory=TouchParams)
     decoder: DecoderParams = field(default_factory=lambda: DecoderParams(weights={"ball": 1.0, "tag": 1.0, "dead": 1.0},
                                                                          lengths={"ball": 1.0, "tag": 1.0, "dead": 1.0}))
