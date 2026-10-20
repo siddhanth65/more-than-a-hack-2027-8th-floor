@@ -25,7 +25,11 @@ class PipelineConfig:
 
     @classmethod
     def from_dict(cls, d):
-        return cls(ball=BallCtrlParams(**d["ball"]), tag=TagPriorParams(**d["tag"]), touch=TouchParams(**d["touch"]),
+        tag = dict(d["tag"])
+        if tag.get("code_table") is None:          # configs saved before the per-code table existed
+            from mtah.evidence.tag_prior import load_tag_codes
+            tag["code_table"] = load_tag_codes()
+        return cls(ball=BallCtrlParams(**d["ball"]), tag=TagPriorParams(**tag), touch=TouchParams(**d["touch"]),
                    decoder=DecoderParams(**d["decoder"]), post=PostParams(**d["post"]), dead_model_path=d.get("dead_model_path"))
 
 

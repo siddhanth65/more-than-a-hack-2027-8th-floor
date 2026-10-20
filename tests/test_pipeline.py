@@ -31,3 +31,10 @@ def test_compute_strong_returns_touches_and_old_pair_tolerated():
     sH, sA, touches = compute_strong(m, cfg)
     assert touches.ndim == 2 and touches.shape[1] == 4
     assert (predict(m, tags, cfg, None, strong=(sH, sA)) == predict(m, tags, cfg, None, strong=(sH, sA, touches))).all()
+
+
+def test_from_dict_defaults_code_table():
+    d = PipelineConfig().to_dict()
+    d["tag"]["code_table"] = None
+    cfg = PipelineConfig.from_dict(d)
+    assert cfg.tag.code_table and "DEFENDING IN MIDDLE THIRD" in cfg.tag.code_table
