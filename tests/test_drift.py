@@ -23,3 +23,13 @@ def test_drift_nan_when_no_changes_or_d_runs():
     tags = pd.DataFrame([{"start": 0, "end": 10, "code": "SET PIECES", "team": None, "type": "Throw-in", "half": 1}])
     r = drift_report(labels, m, tags, np.zeros(m.n_frames, bool))
     assert np.isnan(r["share_changes_in_blackout"]) and np.isnan(r["D_starts_near_sp_share"])
+
+
+def test_blackout_mask_from_match():
+    from mtah.eval.drift import blackout_mask_from_match
+    m = two_player_match(F=25 * 120); m.ball[:] = 0.0
+    m.ball[25 * 20:25 * 35] = np.nan      # 15 s gap -> masked
+    m.ball[25 * 60:25 * 65] = np.nan      # 5 s gap -> not masked
+    mask = blackout_mask_from_match(m)
+    assert mask[25 * 20:25 * 35].all() and not mask[25 * 60:25 * 65].any()
+    assert mask.sum() == 25 * 15 - int((~m.graded[25 * 20:25 * 35]).sum())

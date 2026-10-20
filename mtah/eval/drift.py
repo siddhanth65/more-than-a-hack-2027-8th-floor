@@ -12,6 +12,16 @@ def _segments(x, s0, e0):
     return out
 
 
+def blackout_mask_from_match(match, long_s=10.0):
+    """(F,) bool: runs of ~ball_present & graded frames longer than long_s seconds."""
+    from mtah.sim.blackout_sim import runs_of
+    mask = np.zeros(match.n_frames, bool)
+    for s, e in runs_of(~match.ball_present & match.graded):
+        if e - s > long_s * match.fps:
+            mask[s:e] = True
+    return mask
+
+
 def drift_report(labels, match, tags, blackout_mask):
     fps = match.fps; g = match.graded
     segs = []

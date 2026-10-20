@@ -8,12 +8,11 @@ import pandas
 import sklearn
 
 from mtah import N_FRAMES
-from mtah.eval.drift import drift_report
+from mtah.eval.drift import blackout_mask_from_match, drift_report
 from mtah.evidence.dead import DeadModel
 from mtah.io.metrica_loader import STEMS, load_tactical
 from mtah.io.tags import load_tags
 from mtah.pipeline import PipelineConfig, compute_evidence, predict
-from mtah.sim.blackout_sim import runs_of
 from mtah.submission import validate, write_submission
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -36,10 +35,7 @@ def main():
     if reason is not None:
         print(f"INVALID submission {p}: {reason}")
         sys.exit(1)
-    mask = np.zeros(N_FRAMES, bool)
-    for s, e in runs_of(~m.ball_present & m.graded):
-        if e - s > 10 * m.fps:
-            mask[s:e] = True
+    mask = blackout_mask_from_match(m)
     drift = drift_report(labels, m, tags, mask)
     ref_path = sel / "drift_reference.json"
     ref = json.loads(ref_path.read_text()) if ref_path.exists() else None
