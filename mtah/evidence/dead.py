@@ -83,8 +83,9 @@ def dead_features(match, tags, fps=None):
             if j >= 0 and present[j]:
                 X[s:e, 9] = float(ld[k] < ld[j])
     on = ~np.isnan(match.pos[..., 0])
-    cnt = on.sum(1)
-    msp = np.where(cnt > 0, np.where(on, np.nan_to_num(match.speed), 0).sum(1) / np.maximum(cnt, 1), np.nan)
+    ok = on & np.isfinite(match.speed)
+    cnt = ok.sum(1)
+    msp = np.where(cnt > 0, np.where(ok, np.nan_to_num(match.speed), 0).sum(1) / np.maximum(cnt, 1), np.nan)
     if F > int(fps):
         recent = _rolling_mean(msp, int(fps)); earlier = _rolling_mean(np.r_[np.full(int(fps), np.nan), msp[:-int(fps)]], int(5 * fps))
         with np.errstate(all="ignore"):

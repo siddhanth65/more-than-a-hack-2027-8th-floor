@@ -1,3 +1,4 @@
+import pytest
 import warnings
 
 import numpy as np
@@ -114,3 +115,11 @@ def test_model_save_load_roundtrip(tmp_path):
     X = rng.normal(size=(600, len(DEAD_FEATURES))).astype(np.float32); y = (X[:, 1] > 0).astype(int)
     model = DeadModel().fit(X, y); model.save(tmp_path / "m.joblib")
     assert np.array_equal(DeadModel.load(tmp_path / "m.joblib").predict_proba(X), model.predict_proba(X))
+
+
+def test_player_speed_mean_ignores_nonfinite_speed():
+    pos = np.zeros((400, 2, 2)); pos[:, :, 0] = [[-10, 10]]
+    m = make_match(pos, [0, 1])
+    m.speed[:] = 1.0; m.speed[375:, 0] = 2.0; m.speed[375:, 1] = np.nan      # slot 1 tracked but speed unknown
+    r = dead_features(m, NO_TAGS)[:, FI["player_speed_ratio"]]
+    assert r[399] == pytest.approx(2.0, rel=1e-3)    # NaN speeds no longer count as 0 m/s

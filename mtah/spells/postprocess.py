@@ -32,7 +32,7 @@ def _one_half(x, fps, p, strong):
     x = x.copy()
     if len(x) == 0:
         return x
-    island = int(round(p.island_s * fps)); fill = int(round(p.d_fill_s * fps)); aba = int(round(p.aba_s * fps))
+    island = p.island_s * fps; fill = p.d_fill_s * fps; aba = p.aba_s * fps   # float thresholds: no rounding
     cuts = np.flatnonzero(x[1:] != x[:-1]) + 1
     starts = [0] + cuts.tolist(); stops = cuts.tolist() + [len(x)]
     segs = [[s, e, str(x[s])] for s, e in zip(starts, stops)]

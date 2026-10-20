@@ -44,3 +44,10 @@ def test_many_blips_is_fast():
     out = postprocess(x, half, 25.0, PostParams(island_s=0.4, d_fill_s=0.2, aba_s=0.5))
     assert time.perf_counter() - t0 < 2.0
     assert (out == "H").all()
+
+
+def test_float_thresholds_not_rounded():
+    half = np.ones(40, np.int8)
+    x = lab("D" * 10 + "H" * 11 + "D" * 10 + "A" * 9)      # island_s 0.45 s = 11.25 frames at 25 fps
+    out = postprocess(x, half, 25.0, PostParams(island_s=0.45, d_fill_s=0.0, aba_s=0.0))
+    assert "".join(out[10:21]) == "D" * 11                   # an 11-frame run is shorter than 11.25
