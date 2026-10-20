@@ -136,7 +136,9 @@ def run_grid(sim_dir, seeds, keys, base, out, grid):
     reg = {"git": git_sha(), "seeds": seeds, "grid_size": len(grid), "selection": "mean rank over 4 variants, tie ctrl_Dfull",
            "scorer_md5": hashlib.md5(OFFICIAL_PATH.read_bytes().replace(b"\r\n", b"\n")).hexdigest(),
            "best_cell": best_cell, "best": {v: best[v] for v in VARIANTS}, "baselines": base_rows.to_dict(),
-           "seed_sd": bar["seed_sd"], "baseline_used": bar["baseline_used"], "spec_bar": bar}
+           "seed_sd": bar["seed_sd"], "baseline_used": bar["baseline_used"], "spec_bar": bar,
+           "pathcrf_train_matches": [9001, 9002, 9003, 9004, 9005], "pathcrf_val": 9006, "clean": 9007,
+           "sealed_match": SEALED_MATCH}
     (out / "registration.json").write_text(json.dumps(reg, indent=1))
     (out / "best.json").write_text(json.dumps({"cell": best_cell, "scores": {v: best[v] for v in VARIANTS},
                                                "ratios": bar["count_ratios"], "seed_sd": bar["seed_sd"],

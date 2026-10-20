@@ -15,7 +15,7 @@ from mtah.sim.blackout_sim import apply_blackouts, blackout_mask
 from mtah.sim.corrupt import corrupt, dead_ball_realism
 from mtah.sim.tag_sim import simulate_tags
 
-SEALED_MATCH = 9006
+SEALED_MATCH = 9007
 VARIANTS = ("raw_Dfull", "ctrl_Dfull", "raw_Dnarrow", "ctrl_Dnarrow")
 
 

@@ -8,7 +8,7 @@ from mtah.io.dfl_proxy import list_halves
 from mtah.io.tags import coverage
 from mtah.sim.blackout_sim import BlackoutParams
 from mtah.sim.corrupt import CorruptParams
-from mtah.sim.dataset import VARIANTS, build_half, save_half
+from mtah.sim.dataset import VARIANTS, build_half, match_id, save_half
 from mtah.sim.tag_sim import TagSimParams
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -23,6 +23,8 @@ def load_or_write(path, cls):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--dfl", default=r"E:\football-synthesizer\data\dfl_open\work\fp1d")
+    ap.add_argument("--extra-dir", default=None, help="directory with extra game_*.npz halves + its own fp1d_census.json")
+    ap.add_argument("--only", type=int, default=None, help="build only this match id")
     ap.add_argument("--seeds", type=int, nargs="+", default=[100, 101, 102, 103, 104])
     ap.add_argument("--out", default=str(ROOT / "runs" / "sim"))
     args = ap.parse_args()
@@ -31,9 +33,15 @@ def main():
     cp = load_or_write(ROOT / "configs" / "corrupt.json", CorruptParams)
     tp = load_or_write(ROOT / "configs" / "tag_sim.json", TagSimParams)
     agg = {"masked": [], "cov_in": [], "cov_out": [], **{f"D_{v}": [] for v in VARIANTS}, "dnarrow_changed_share": []}
-    for key, p in list_halves(dfl):
+    sources = [(key, p, dfl / "fp1d_census.json") for key, p in list_halves(dfl)]
+    if args.extra_dir:
+        ex = Path(args.extra_dir)
+        sources += [(key, p, ex / "fp1d_census.json") for key, p in list_halves(ex)]
+    if args.only is not None:
+        sources = [t for t in sources if match_id(t[0]) == args.only]
+    for key, p, census in sources:
         for seed in args.seeds:
-            sim = build_half(key, p, dfl / "fp1d_census.json", seed, bp, cp, tp)
+            sim = build_half(key, p, census, seed, bp, cp, tp)
             save_half(sim, args.out)
             cov = coverage(sim.tags, sim.match.n_frames)
             agg["masked"].append(sim.blackout.mean())

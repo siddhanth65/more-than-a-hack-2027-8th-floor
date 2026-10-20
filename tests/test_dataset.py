@@ -5,13 +5,14 @@ from mtah.sim.dataset import SEALED_MATCH, lomo_folds, match_id
 
 
 def test_match_id_and_folds():
-    assert match_id("game_9003_H2") == 9003 and SEALED_MATCH == 9006
-    keys = [f"game_{g}_H{h}" for g in range(9001, 9007) for h in (1, 2)]
+    assert match_id("game_9003_H2") == 9003 and SEALED_MATCH == 9007
+    keys = [f"game_{g}_H{h}" for g in range(9001, 9008) for h in (1, 2)]
     folds = lomo_folds(keys)
-    assert [f[0] for f in folds] == [9001, 9002, 9003, 9004, 9005]
+    assert [f[0] for f in folds] == [9001, 9002, 9003, 9004, 9005, 9006]
     for held, train, test in folds:
         assert all(match_id(k) == held for k in test) and len(test) == 2
-        assert all(match_id(k) not in (held, SEALED_MATCH) for k in train) and len(train) == 8
+        assert not any(match_id(k) == SEALED_MATCH for k in train + test)
+        assert all(match_id(k) not in (held, SEALED_MATCH) for k in train) and len(train) == 10
 
 
 @pytest.mark.dfl
