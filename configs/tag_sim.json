@@ -1,0 +1,9 @@
+{
+ "hysteresis_s": 1.0,
+ "min_phase_s": 3.0,
+ "sp_before_s": 5.0,
+ "sp_after_s": 30.0,
+ "keep_outside": 0.88,
+ "keep_inside": 0.75,
+ "jitter_s": 1.0
+}
