@@ -61,3 +61,11 @@ def test_truth_agreement_and_half_stats():
     st = mod.posterior_stats({"p_home": p, "imputed_frac": np.array([0, .5, 1, np.nan, 0], np.float32)},
                              np.array([1, 1, 1, 1, 0], np.int8))
     assert st["nan_share"] == pytest.approx(0.25) and st["imputed_frac_mean"] == pytest.approx(0.5)
+
+
+def test_nan_to_none_gives_strict_json():
+    import json
+    mod = _load()
+    s = {"a": float("nan"), "b": [np.float32("inf"), 1.5, np.int64(3)], "c": {"d": np.float64("nan")}}
+    out = json.dumps(mod.nan_to_none(s), allow_nan=False)
+    assert json.loads(out) == {"a": None, "b": [None, 1.5, 3], "c": {"d": None}}

@@ -58,3 +58,11 @@ interpreter; the commands above give an equivalent self-contained venv. The chec
 V3 == V4 to every digit: node ordering is immaterial, so the wrapper keeps slot order. Imputed nodes and
 identity switches are the dominant damage, which is why the evidence is down-weighted by
 `1 - conf_alpha * imputed_frac`.
+
+## Thread count is pinned
+
+The torch thread count is pinned to 4 (`PathCRFParams.threads`; `run_infer.py` calls `torch.set_num_threads` with the
+`--threads` value the Python side passes, and nothing else overrides it). The posterior can vary with the thread
+count, so it is part of the cache key and is not exposed as a CLI option in `scripts/precompute_pathcrf.py` or
+`scripts/select_lomo.py`; this keeps the cached posteriors byte-reproducible. `registration.json` records
+`pathcrf_threads: 4`.

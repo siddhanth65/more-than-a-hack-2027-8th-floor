@@ -1,7 +1,9 @@
 """LOMO selection over a grid (grid1 | grid2) on the simulated dataset; writes fold tables, summary and registration.
 
 With a real-data dir, the top-k cells by mean rank are also decoded on the real match (label-free drift metrics);
-the chosen cell is the highest-ranked one whose real non-blackout D share is plausible (select.REAL_D_SHARE_BAND)."""
+the chosen cell is the highest-ranked one whose real non-blackout D share is plausible (select.REAL_D_SHARE_BAND).
+This real-match plausibility step runs for EVERY grid (grid1 included) unless --no-real is given.
+PathCRF threads are pinned to PathCRFParams().threads (4): the posterior cache is keyed on it, no CLI knob."""
 import argparse, hashlib, itertools, json, os, subprocess, sys, time
 from pathlib import Path
 
@@ -24,7 +26,6 @@ from mtah.select import (REAL_D_SHARE_BAND, apply_cell, choose_plausible, estima
                          score_cell, train_dead)
 from mtah.sim.dataset import SEALED_MATCH, VARIANTS, list_sim_keys, load_half_sim, lomo_folds, match_id
 
-DEFAULT_DATA = os.environ.get("MTAH_DATA_DIR", r"HOME/mtah-data")
 REAL_KEYS = ("non_blackout_D_share", "tag_agreement_implied", "pred_D_share", "spells_per_HA_min")
 REAL_TOP_K = 5
 
@@ -40,10 +41,17 @@ def load_sims(sim_dir, seeds, keys):
     return [load_half_sim(sim_dir, k, s) for k in keys for s in seeds]
 
 
+def data_dir_or_exit(path):
+    """--data, defaulting to $MTAH_DATA_DIR; the real-match data location is machine specific."""
+    if not path:
+        raise SystemExit("real-match data dir needed: pass --data or set MTAH_DATA_DIR (or use --no-real)")
+    return path
+
+
 def base_for_grid(grid, threads=None):
     """Base config for a grid: the PathCRF stream is computed iff some cell gives it a positive weight
-    (w_pathcrf = 0 cells then ignore it through the zero weight). `threads` must match the precompute run:
-    the PathCRF cache is keyed on it."""
+    (w_pathcrf = 0 cells then ignore it through the zero weight). Threads stay at the pinned PathCRFParams default
+    (4; the posterior and its cache key depend on it); `threads` exists for tests only, no CLI sets it."""
     base = PipelineConfig()
     base.use_pathcrf = any(c.get("w_pathcrf", 0.0) > 0 for c in grid)
     if threads is not None:
@@ -145,13 +153,36 @@ def real_plausibility(sim_dir, seeds, keys, base, grid, ranked, data_dir, out, t
     return plaus
 
 
+GRID_PARAM_COLS = ("tau_HA", "tau_D", "w_dead", "aba_s", "w_pathcrf", "dead_policy")
+
+
+def check_resume_grid(df, grid, out):
+    """A resumed fold CSV must have been produced with the current grid: parameter columns equal grid[i] for every i."""
+    bad = SystemExit(f"fold CSVs in {out} were produced with a different grid; use a fresh --out")
+    rows = df[~df["cell"].isin(list(BASELINES))].copy()
+    if len(rows) != len(grid):
+        raise bad
+    rows["cell"] = rows["cell"].astype(int)
+    rows = rows.set_index("cell")
+    for i, cell in enumerate(grid):
+        if i not in rows.index:
+            raise bad
+        for c in GRID_PARAM_COLS:
+            if c in rows.columns and c in cell:
+                v = rows.at[i, c]
+                same = (v == cell[c]) if isinstance(cell[c], str) else bool(np.isclose(float(v), float(cell[c])))
+                if not same:
+                    raise bad
+
+
 def run_grid(sim_dir, seeds, keys, base, out, grid, real_data_dir=None, grid_name=None, top_k=REAL_TOP_K):
     fold_tables, lengths_by_fold, dead_by_fold = [], {}, {}
     policies = sorted({c.get("dead_policy", "full") for c in grid})
     for held, train_keys, test_keys in lomo_folds(keys):
         fold_csv = out / f"fold_{held}.csv"; halves_csv = out / f"fold_{held}_halves.csv"
         if fold_csv.exists() and halves_csv.exists():
-            df = pd.read_csv(fold_csv); fold_tables.append(df)
+            df = pd.read_csv(fold_csv); check_resume_grid(df, grid, out)
+            fold_tables.append(df)
             lengths_by_fold[held] = json.loads(df["lengths"].iloc[0])
             print(f"fold {held} resumed", flush=True)
             continue
@@ -291,11 +322,11 @@ def main():
     ap.add_argument("--sim", default=str(ROOT / "runs" / "sim"))
     ap.add_argument("--seeds", type=int, nargs="+", default=[100, 101])
     ap.add_argument("--out", default=str(ROOT / "runs" / "select" / time.strftime("%Y%m%d-%H%M")))
-    ap.add_argument("--grid", choices=sorted(sel.GRIDS), default="grid1")
-    ap.add_argument("--data", default=DEFAULT_DATA, help="real-match data dir for the plausibility step (MTAH_DATA_DIR)")
+    ap.add_argument("--grid", choices=sorted(sel.GRIDS), default="grid1",
+                    help="grid1 (default) | grid2; the real-match plausibility step runs for every grid unless --no-real")
+    ap.add_argument("--data", default=os.environ.get("MTAH_DATA_DIR"),
+                    help="real-match data dir for the plausibility step (default $MTAH_DATA_DIR)")
     ap.add_argument("--no-real", action="store_true", help="skip the real-match plausibility step (choose mean-rank 1)")
-    ap.add_argument("--pathcrf-threads", type=int, default=PathCRFParams().threads,
-                    help="PathCRF thread count; must equal the precompute run's (the cache is keyed on it)")
     ap.add_argument("--best-from", default=None, help="selection dir whose best.json is reused (skips the grid loop)")
     ap.add_argument("--pilot", action="store_true", help="first fold only: print L_k and the 8 corner cells; writes nothing")
     ap.add_argument("--sealed", action="store_true")
@@ -304,19 +335,26 @@ def main():
     grid = sel.GRIDS[args.grid]
     keys = [k for k in list_sim_keys(args.sim) if match_id(k) != SEALED_MATCH]
     if args.pilot:
-        run_pilot(args, keys, base_for_grid(grid, args.pathcrf_threads), grid)
+        run_pilot(args, keys, base_for_grid(grid), grid)
         return
     out = Path(args.out); out.mkdir(parents=True, exist_ok=True)
     if args.best_from:
         best_cell = json.loads((Path(args.best_from) / "best.json").read_text())["cell"]
         print("reusing best cell from", args.best_from, best_cell)
     else:
-        best_cell = run_selection(args.sim, args.seeds, out, grid=grid, base=base_for_grid(grid, args.pathcrf_threads),
-                                  real_data_dir=None if args.no_real else args.data, grid_name=args.grid)
+        best_cell = run_selection(args.sim, args.seeds, out, grid=grid, base=base_for_grid(grid),
+                                  real_data_dir=None if args.no_real else data_dir_or_exit(args.data), grid_name=args.grid)
     if args.sealed:
+        reg_path = Path(args.best_from or out) / "registration.json"
+        if not reg_path.exists():
+            raise SystemExit(f"{reg_path} missing: cannot verify the registered seeds; refusing the sealed read")
+        reg_seeds = json.loads(reg_path.read_text()).get("seeds")
+        if reg_seeds != list(args.seeds):
+            raise SystemExit(f"--seeds {list(args.seeds)} differ from the registered seeds {reg_seeds} in {reg_path}; "
+                             "refusing the sealed read")
         bar_pass = check_bar_gate(Path(args.best_from or out) / "best.json", args.force_sealed)
         log = check_sealed_guard(best_cell)
-        base = base_for_grid([best_cell], args.pathcrf_threads)   # PathCRF only if the chosen cell weights it
+        base = base_for_grid([best_cell])   # PathCRF only if the chosen cell weights it
         policy = best_cell.get("dead_policy", "full")
         train = load_sims(args.sim, args.seeds, keys); dead = train_dead(train, policy=policy)
         lengths = estimate_lengths(train, base, train_dead)

@@ -6,8 +6,8 @@ PathCRF train/val matches; never computed for the sealed match), a label-free pr
 nearest player to the ball when the ball is visible and that player is within 2 m; comparable between sim and real),
 NaN share, mean imputed_frac and seconds. Aggregates go to <cache_dir>/precompute_summary.json; no per-frame output.
 
---threads must equal the thread count the selection/candidate runs use (select_lomo --pathcrf-threads): the cache is
-keyed on it.
+The PathCRF thread count is pinned to PathCRFParams().threads (4) everywhere (cache key, byte-reproducibility); there
+is no CLI knob.
 """
 import argparse, json, os, sys, time
 from pathlib import Path
@@ -81,16 +81,29 @@ def _mean(recs, k):
     return float(np.mean(v)) if v else float("nan")
 
 
+def nan_to_none(o):
+    """Recursively replace NaN/inf floats by None so the summary is strict JSON."""
+    if isinstance(o, dict):
+        return {k: nan_to_none(v) for k, v in o.items()}
+    if isinstance(o, (list, tuple)):
+        return [nan_to_none(v) for v in o]
+    if isinstance(o, (float, np.floating)):
+        return float(o) if np.isfinite(o) else None
+    if isinstance(o, np.integer):
+        return int(o)
+    return o
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--sim", default=str(ROOT / "runs" / "sim"))
     ap.add_argument("--seeds", type=int, nargs="+", default=[100, 101])
     ap.add_argument("--real", action="store_true", help="also the real tactical match (cache key real_tactical)")
-    ap.add_argument("--data", default=os.environ.get("MTAH_DATA_DIR", r"HOME/mtah-data"))
-    ap.add_argument("--threads", type=int, default=PathCRFParams().threads,
-                    help="PathCRF threads; must equal select_lomo --pathcrf-threads (cache key)")
+    ap.add_argument("--data", default=os.environ.get("MTAH_DATA_DIR"), help="real-match data dir (default $MTAH_DATA_DIR)")
     args = ap.parse_args()
-    params = PathCRFParams(threads=args.threads)
+    if args.real and not args.data:
+        raise SystemExit("--real needs the real-match data dir: pass --data or set MTAH_DATA_DIR")
+    params = PathCRFParams()
     halves = []
     print(f"PathCRF precompute: ckpt {params.ckpt}, threads {params.threads}, cache {params.cache_dir}", flush=True)
     for key in list_sim_keys(args.sim):
@@ -125,7 +138,7 @@ def main():
               f"imputed {_fmt(rec['imputed_frac_mean'])}  {rec['seconds']:.0f}s{'' if rec['computed'] else ' (cached)'}",
               flush=True)
     out = Path(params.cache_dir) / "precompute_summary.json"; out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps(summary, indent=1))
+    out.write_text(json.dumps(nan_to_none(summary), indent=1, allow_nan=False))
     print("wrote", out)
 
 

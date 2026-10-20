@@ -21,8 +21,10 @@ ROOT = Path(__file__).resolve().parents[1]
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--select", required=True); ap.add_argument("--name", required=True)
-    ap.add_argument("--data", default=os.environ.get("MTAH_DATA_DIR", r"HOME/mtah-data"))
+    ap.add_argument("--data", default=os.environ.get("MTAH_DATA_DIR"))
     args = ap.parse_args()
+    if not args.data:
+        raise SystemExit("data dir needed: pass --data or set MTAH_DATA_DIR")
     sel = Path(args.select)
     raw = json.loads((sel / "config.json").read_text()); lengths = raw.pop("lengths")
     cfg = PipelineConfig.from_dict(raw); cfg.decoder.lengths = lengths
