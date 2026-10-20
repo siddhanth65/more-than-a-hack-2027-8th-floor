@@ -24,6 +24,9 @@ class BlackoutParams:
     live_sigma_log: float = 0.8
     live_max_s: float = 60.0
     merge_s: float = 1.0
+    short_rate_per_min: float = 0.0  # tracker re-acquisition dropouts of 5-10 s, independent of dead runs
+    short_lo_s: float = 5.0
+    short_hi_s: float = 10.0
     min_s: float = 5.0  # runs shorter than this are not emitted: the real tracker never loses the ball for 0.5-5 s
 
     def to_dict(self):
@@ -75,6 +78,10 @@ def blackout_mask(labels, ball, pitch, fps, params, rng):
         dur = float(np.exp(np.log(params.live_median_s) + params.live_sigma_log * rng.standard_normal()))
         dur = min(dur, params.live_max_s)
         mask[s:min(F, s + int(dur * fps))] = True
+    # component C: short re-acquisition dropouts
+    for _ in range(rng.poisson(params.short_rate_per_min * minutes)):
+        s = int(rng.integers(0, F))
+        mask[s:min(F, s + int(rng.uniform(params.short_lo_s, params.short_hi_s) * fps))] = True
     # merge gaps shorter than merge_s
     gap = int(params.merge_s * fps)
     runs = runs_of(mask)

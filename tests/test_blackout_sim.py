@@ -84,3 +84,11 @@ def test_min_duration_drops_short_runs():
     from mtah.sim.blackout_sim import drop_short_runs
     out = drop_short_runs(mask, 25, 5.0)
     assert runs_of(out) == [(500, 700)]
+
+
+def test_short_component_lengths():
+    labels = np.full(25 * 600, "H", dtype="<U1"); ball = np.zeros((len(labels), 2), np.float32)
+    p = BlackoutParams(p_mask_near=0.0, p_mask_far=0.0, live_rate_per_min=0.0, short_rate_per_min=1.0, merge_s=0.0)
+    mask = blackout_mask(labels, ball, (105.0, 68.0), 25, p, np.random.default_rng(3))
+    lens = np.array([e - s for s, e in runs_of(mask)]) / 25.0
+    assert len(lens) >= 5 and lens.min() >= 5.0 and lens.max() <= 10.0 + 10.0   # overlaps may chain two

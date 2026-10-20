@@ -37,7 +37,7 @@ def sample(rng):
         pre_lo_s=0.3, pre_hi_s=rng.uniform(1.0, 8.0), post_lo_s=0.3, post_hi_s=rng.uniform(1.0, 12.0),
         live_rate_per_min=rng.uniform(0.0, 1.5), live_median_s=rng.uniform(5.0, 25.0),
         live_sigma_log=rng.uniform(0.5, 1.6), live_max_s=rng.uniform(60.0, 240.0),
-        merge_s=rng.uniform(1.0, 4.0))
+        merge_s=rng.uniform(1.0, 4.0), short_rate_per_min=rng.uniform(0.1, 0.9))
 
 
 def main():
