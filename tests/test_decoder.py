@@ -36,3 +36,15 @@ def test_decode_dead_stream():
     lab = decode({"t": team, "d": dead}, np.ones(F, np.int8), p)
     assert "".join(lab[:40]) == "H" * 40 and "".join(lab[40:70]) == "D" * 30 and "".join(lab[70:]) == "H" * 30
     assert evidence_margin(team)[0] > 0
+
+
+def test_residual_margin_removes_signal():
+    from mtah.decode.scale import residual_margin
+    rng = np.random.default_rng(0)
+    truth = np.array((["H"] * 200 + ["A"] * 200) * 5, dtype="<U1")
+    margin = np.where(truth == "H", 4.0, -4.0) + rng.normal(size=len(truth))
+    res = residual_margin(margin, truth, ("H", "A"))
+    assert correlation_length(res) < 2 and correlation_length(margin) > 20
+    margin[3] = np.nan; truth[5] = "D"
+    res = residual_margin(margin, truth, ("H", "A"))
+    assert np.isnan(res[3]) and np.isnan(res[5]) and np.isfinite(res[6])

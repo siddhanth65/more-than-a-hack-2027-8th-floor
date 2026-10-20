@@ -1,5 +1,5 @@
 """LOMO selection over GRID on the simulated dataset; writes fold tables, summary and registration."""
-import argparse, hashlib, json, subprocess, sys, time
+import argparse, hashlib, itertools, json, subprocess, sys, time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -83,6 +83,24 @@ def run_grid(args, keys, base, out):
     return best_cell
 
 
+def run_pilot(args, keys, base):
+    """First fold only: print L_k and the eight tau/w_dead corner cells. Writes nothing."""
+    held, train_keys, test_keys = lomo_folds(keys)[0]
+    train = load_sims(args.sim, args.seeds, train_keys); test = load_sims(args.sim, args.seeds, test_keys)
+    lengths = estimate_lengths(train, base, train_dead)
+    print(f"PILOT fold {held} L_k:", json.dumps(lengths))
+    dead = train_dead(train)
+    cfg0 = apply_cell(base, GRID[0]); cfg0.decoder.lengths = lengths
+    ev = [compute_evidence(s.match, s.tags, cfg0, dead) for s in test]
+    strong = [compute_strong(s.match, cfg0) for s in test]
+    for a, d, w in itertools.product((3.0, 30.0), (3.0, 30.0), (0.5, 2.0)):
+        cell = {"tau_HA": a, "tau_D": d, "w_dead": w, "aba_s": 0.5}
+        cfg = apply_cell(base, cell); cfg.decoder.lengths = lengths
+        res, _ = score_cell(test, ev, cfg, ("ctrl_Dfull",), strongs=strong)
+        r = res["ctrl_Dfull"]
+        print(f"  tau_HA={a:>4} tau_D={d:>4} w_dead={w:>3}  n_pred/n_gt={r['ratio']:.3f}  spell_f1={r['spell_f1']:.3f}", flush=True)
+
+
 def check_sealed_guard(best_cell):
     log = ROOT / "runs" / "sealed_reads.jsonl"; log.parent.mkdir(parents=True, exist_ok=True)
     sha = git_sha()
@@ -102,11 +120,15 @@ def main():
     ap.add_argument("--seeds", type=int, nargs="+", default=[100, 101])
     ap.add_argument("--out", default=str(ROOT / "runs" / "select" / time.strftime("%Y%m%d-%H%M")))
     ap.add_argument("--best-from", default=None, help="selection dir whose best.json is reused (skips the grid loop)")
+    ap.add_argument("--pilot", action="store_true", help="first fold only: print L_k and the 8 corner cells; writes nothing")
     ap.add_argument("--sealed", action="store_true")
     args = ap.parse_args()
-    out = Path(args.out); out.mkdir(parents=True, exist_ok=True)
     keys = [k for k in list_sim_keys(args.sim) if match_id(k) != SEALED_MATCH]
     base = PipelineConfig()
+    if args.pilot:
+        run_pilot(args, keys, base)
+        return
+    out = Path(args.out); out.mkdir(parents=True, exist_ok=True)
     if args.best_from:
         best_cell = json.loads((Path(args.best_from) / "best.json").read_text())["cell"]
         print("reusing best cell from", args.best_from, best_cell)

@@ -24,3 +24,18 @@ def evidence_margin(ev):
     out = ev[:, 0] - ev[:, 1]
     out[~(np.isfinite(ev[:, 0]) & np.isfinite(ev[:, 1]))] = np.nan
     return out
+
+
+def residual_margin(margin, truth_labels, states):
+    """Margin minus its per-state mean (over finite frames whose truth is in `states`).
+
+    NaN where the margin is NaN or the truth is not in `states`. What is left is the stream's
+    error given the truth, which is what the correlation length must be measured on."""
+    m = np.asarray(margin, np.float64); t = np.asarray(truth_labels)
+    out = np.full(m.shape, np.nan)
+    fin = np.isfinite(m)
+    for st in states:
+        sel = (t == st) & fin
+        if sel.any():
+            out[sel] = m[sel] - m[sel].mean()
+    return out

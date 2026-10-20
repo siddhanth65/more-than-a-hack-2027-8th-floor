@@ -1,3 +1,4 @@
+import pytest
 import numpy as np
 import pandas as pd
 
@@ -53,3 +54,31 @@ def test_score_cell_one_half_two_variants():
     assert list(rows["variant"]) == ["a", "b"] and len(rows) == 2
     assert {"key", "seed", "variant", "spell_f1", "macro_f1", "n_gt", "n_pred"} <= set(rows.columns)
 
+
+
+def _fake_sims(noise_kind, n=6000, seed=0):
+    from mtah.sim.dataset import SimHalf
+    rng = np.random.default_rng(seed)
+    truth = np.array((["H"] * 300 + ["A"] * 300) * (n // 600), dtype="<U1")
+    if noise_kind == "white":
+        noise = rng.normal(size=n)
+    else:
+        noise = np.convolve(rng.normal(size=n + 24), np.ones(25) / 5.0, mode="valid")
+    m = np.where(truth == "H", 3.0, -3.0) + noise
+    ev = np.zeros((n, 3)); ev[:, 0] = m / 2; ev[:, 1] = -m / 2
+    dead = np.zeros((n, 3)); dead[:, 2] = np.where(truth == "D", 1.0, -1.0) + noise
+    s = SimpleNamespace(key="game_9001_1", seed=1, match=None, tags=TAGS, truth={"ctrl_Dfull": truth}, ev=(ev, dead))
+    return [s]
+
+
+@pytest.mark.parametrize("kind,lo,hi", [("white", 0.9, 2.0), ("ma", 15.0, 40.0)])
+def test_estimate_lengths_uses_errors_not_signal(monkeypatch, kind, lo, hi):
+    import mtah.select as sel
+    sims = _fake_sims(kind)
+    def fake_ev(match, tags, cfg, dead):
+        e, d = sims[0].ev
+        return {"ball": e, "tag": e, "dead": d}
+    monkeypatch.setattr(sel, "compute_evidence", fake_ev)
+    L = estimate_lengths(sims, PipelineConfig(), lambda s: None)
+    for k in ("ball", "tag"):
+        assert lo <= L[k] <= hi, (k, L[k])
