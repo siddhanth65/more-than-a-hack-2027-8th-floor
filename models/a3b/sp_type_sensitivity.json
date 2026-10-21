@@ -1,0 +1,43 @@
+{
+ "select": "runs\\select\\a3b",
+ "best_cell": {
+  "tau_HA": 30.0,
+  "tau_D": 100.0,
+  "w_dead": 4.0,
+  "w_pathcrf": 1.0,
+  "dead_policy": "full",
+  "sp_dead_bonus": 0.0,
+  "aba_s": 1.0
+ },
+ "const": 4.0,
+ "n_halves": 24,
+ "sim_normal": {
+  "ctrl_Dfull": 0.4813727402882427,
+  "raw_Dfull": 0.5426668592889273
+ },
+ "sim_const": {
+  "ctrl_Dfull": 0.46886991199417033,
+  "raw_Dfull": 0.5307161351763695
+ },
+ "delta_f1": {
+  "ctrl_Dfull": -0.012502828294072343,
+  "raw_Dfull": -0.01195072411255782
+ },
+ "real_normal": {
+  "non_blackout_D_share": 0.10595254158875803,
+  "pred_D_share": 0.2935533215407568
+ },
+ "real_const": {
+  "non_blackout_D_share": 0.10815004722709486,
+  "pred_D_share": 0.2883347916679781
+ },
+ "delta_share": {
+  "non_blackout_D_share": 0.00219750563833683,
+  "pred_D_share": -0.00521852987277871
+ },
+ "thresholds": {
+  "abs_dF1": 0.005,
+  "abs_dDshare": 0.01
+ },
+ "verdict": "FAIL"
+}
