@@ -294,8 +294,11 @@ class MergeModel:
         return self.model.predict_proba(self._X(table))[:, 1]
 
     def save(self, path):
+        """joblib dump WITHOUT wall-clock timings (info keys ending in "_seconds"): the artefact is byte-reproducible;
+        timings live in fold_<held>_merge.json / registration.json only."""
+        info = {k: v for k, v in self.info.items() if not str(k).endswith("_seconds")}
         joblib.dump({"model": self.model, "const": self.const, "features": list(FEATURES), "dead_cols": self.dead_cols,
-                     "info": self.info}, path)
+                     "info": info}, path)
 
     @classmethod
     def load(cls, path):

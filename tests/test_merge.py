@@ -180,3 +180,20 @@ def test_postparams_roundtrip_keeps_merge_theta():
     assert PipelineConfig.from_dict(cfg.to_dict()).post.merge_theta == 0.7
     d = cfg.to_dict(); d["post"].pop("merge_theta")
     assert PipelineConfig.from_dict(d).post.merge_theta == 1.0       # configs saved before T3: off
+
+
+def test_merge_model_save_is_byte_reproducible(tmp_path):
+    """Two fits on the same table with different wall-clock timings in info save to identical bytes (timings are not
+    pickled); the in-memory info keeps them for the fold json / registration."""
+    rng = np.random.default_rng(1)
+    pred = _random_labels(rng, 5000, "HAD", 12)
+    tab = spell_table(pred, {"ball": _ev(rng.normal(size=len(pred)))}, None, 25)
+    y = (tab["length_s"].to_numpy() < 0.5).astype(float)
+    a = MergeModel().fit(tab, y); a.info.update(held_match=9003, label_seconds=1.23, total_seconds=45.6)
+    b = MergeModel().fit(tab, y); b.info.update(held_match=9003, label_seconds=9.87, total_seconds=65.4)
+    a.save(tmp_path / "a.joblib"); a.save(tmp_path / "a2.joblib"); b.save(tmp_path / "b.joblib")
+    ba = (tmp_path / "a.joblib").read_bytes()
+    assert ba == (tmp_path / "a2.joblib").read_bytes() == (tmp_path / "b.joblib").read_bytes()
+    info = MergeModel.load(tmp_path / "a.joblib").info
+    assert info["held_match"] == 9003 and not any(k.endswith("_seconds") for k in info)
+    assert a.info["label_seconds"] == 1.23   # in memory: unchanged
