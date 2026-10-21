@@ -145,7 +145,7 @@ def out_of_sample_drift_reference(sim_dir, seeds, keys, base, best_cell, lengths
             dead = train_dead(train, policy=policy)
         cfg = apply_cell(base, best_cell); cfg.decoder.lengths = lengths
         team = team_by_fold.get(held, {}).get(tpol)
-        if team is None and cfg.use_teamctrl and cfg.decoder.weights.get("teamctrl", 1.0) > 0:
+        if team is None and cfg.use_teamctrl:   # (also at weight 0: merge features read the stream, as in the folds)
             team = train_team_ctrl(train, policy=tpol, touch_params=base.touch)   # resumed fold: retrain (deterministic HGB)
         merge = merge_by_fold.get(held)
         if merge is None and uses_merge(best_cell):
@@ -277,10 +277,11 @@ def load_candidate_artifacts(sel_dir):
 
 
 def load_team_model(sel_dir, cfg):
-    """TeamCtrlModel from a selection dir's team_model.joblib, or None when the config does not use the stream.
-    A config that uses it (use_teamctrl and a positive teamctrl weight) without the file is refused."""
+    """TeamCtrlModel from a selection dir's team_model.joblib, or None when cfg.use_teamctrl is off. Loaded whenever
+    the stream is on, also at teamctrl weight 0 (a merge cell registered with the grid's teamctrl stream: its spell
+    features read it). A config with use_teamctrl without the file is refused."""
     tp = Path(sel_dir) / TEAM_MODEL_FILE
-    if not (cfg.use_teamctrl and cfg.decoder.weights.get("teamctrl", 1.0) > 0):
+    if not cfg.use_teamctrl:
         return None
     if not tp.exists():
         raise SystemExit(f"{sel_dir}: config uses the teamctrl stream but {TEAM_MODEL_FILE} is missing; rerun the selection")
@@ -440,9 +441,15 @@ def run_grid(sim_dir, seeds, keys, base, out, grid, real_data_dir=None, grid_nam
     ref = out_of_sample_drift_reference(sim_dir, seeds, keys, base, best_cell, lengths_by_fold, dead_by_fold, team_by_fold,
                                         merge_by_fold, grid, switch_by_fold)
     (out / "drift_reference.json").write_text(json.dumps(ref, indent=1))
-    cbase = base_for_grid([best_cell])   # PathCRF / teamctrl / switch only if the chosen cell uses them
+    cbase = base_for_grid([best_cell])   # PathCRF / teamctrl / switch only if the chosen cell uses them ...
+    need_merge = uses_merge(best_cell)
+    if need_merge:
+        # ... except for a merge cell: its spell features (mtah.spells.merge.MERGE_STREAMS) read every stream the
+        # grid computed, also at decoder weight 0 (e.g. w_teamctrl 0). Register those streams (weights stay as in the
+        # cell) so the registered pipeline reproduces the selection-time labels exactly.
+        cbase.use_teamctrl = bool(base.use_teamctrl); cbase.use_pathcrf = bool(base.use_pathcrf)
     policy = best_cell.get("dead_policy", "full"); tpol = best_cell.get("team_policy", "full")
-    need_team = bool(cbase.use_teamctrl); need_merge = uses_merge(best_cell); need_switch = bool(cbase.use_switch)
+    need_team = bool(cbase.use_teamctrl); need_switch = bool(cbase.use_switch)
     if (shared and policy in shared["dead"] and (not need_team or tpol in shared.get("team", {}))
             and (not need_merge or shared.get("merge") is not None)
             and (not need_switch or shared.get("switch") is not None)):

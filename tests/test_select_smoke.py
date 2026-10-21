@@ -561,3 +561,56 @@ def test_write_candidate_artifacts_deletes_stale_models(tmp_path):
                                   merge=Dummy(), switch=Dummy())
     assert (tmp_path / mod.MERGE_MODEL_FILE).exists() and (tmp_path / mod.SWITCH_MODEL_FILE).exists()
     assert not (tmp_path / mod.TEAM_MODEL_FILE).exists()
+
+
+def _load_make_candidate():
+    spec = importlib.util.spec_from_file_location("make_candidate_script", ROOT / "scripts" / "make_candidate.py")
+    mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)
+    return mod
+
+
+def test_merge_cell_without_teamctrl_weight_registers_stream_and_reproduces_labels(tmp_path, monkeypatch):
+    """T3 review CRITICAL #2: the grid has a w_teamctrl > 0 cell, so selection decodes every cell with the teamctrl
+    stream; the chosen merge cell has w_teamctrl 0 but its merge features read that stream. Registration keeps
+    use_teamctrl (weight 0), writes team_model.joblib, and make_candidate's loader + prediction reproduce the
+    selection-time (real-plausibility) labels bit-for-bit."""
+    from mtah.spells.merge import match_spell_table
+    from mtah.pipeline import compute_strong
+    rng = np.random.default_rng(7)
+    sim_dir = tmp_path / "sim"; seeds = [100]
+    for mid in (9001, 9002, 9003):
+        for half in (1, 2):
+            save_half(_fake_half(mid, half, seeds[0], rng), sim_dir)
+    c0 = {"tau_HA": 10.0, "tau_D": 10.0, "w_dead": 1.0, "aba_s": 0.5, "w_teamctrl": 0.0, "team_policy": "no_touch",
+          "merge_theta": 0.7}
+    grid = [c0, {**c0, "w_teamctrl": 2.0, "merge_theta": 1.0}]
+    mod = _load_script()
+    real = _fake_half(9999, 1, 0, rng)
+    monkeypatch.setattr(mod, "load_tactical", lambda d: real.match)
+    monkeypatch.setattr(mod, "load_tags", lambda d: real.tags)
+    monkeypatch.setattr(mod, "choose_plausible", lambda ranked, plaus: 0)     # the merge cell is registered
+    sel_labels = []
+    orig_pr = mod.predict
+    def spy_pr(match, tags, cfg, dead, **kw):
+        lab = orig_pr(match, tags, cfg, dead, **kw)
+        if match is real.match and cfg.post.merge_theta < 1.0:
+            assert "teamctrl" in kw["evidence"]
+            sel_labels.append(lab.copy())
+        return lab
+    monkeypatch.setattr(mod, "predict", spy_pr)
+    out = tmp_path / "sel"
+    r = mod.run_selection(sim_dir, seeds, out, grid=grid, real_data_dir="fake-data-dir")
+    assert r["best_cell"] == c0 and len(sel_labels) == 1
+    reg = json.loads((out / "registration.json").read_text())
+    assert reg["use_teamctrl"] is True and reg["team_policy"] == "no_touch" and reg["use_merge"] is True
+    assert (out / "team_model.joblib").exists() and (out / "merge_model.joblib").exists()
+    mc = _load_make_candidate()
+    cfg, dead, lengths, team, merge, switch = mc.load_selection(out)
+    assert cfg.use_teamctrl and cfg.decoder.weights["teamctrl"] == 0.0 and cfg.post.merge_theta == 0.7
+    assert team is not None and team.policy == "no_touch" and merge is not None and switch is None
+    assert mod.load_team_model(out, cfg) is not None                         # the sealed path loads it too
+    lab = mc.candidate_labels(real.match, real.tags, cfg, dead, team, merge, switch)
+    assert np.array_equal(lab, sel_labels[0])
+    ev = mc.compute_evidence(real.match, real.tags, cfg, dead, cache_key="real_tactical", team_model=team)
+    tab = match_spell_table(lab, real.match, ev, compute_strong(real.match, cfg))
+    assert np.isfinite(tab["teamctrl_mean"].to_numpy(float)).any()          # merge features see the stream

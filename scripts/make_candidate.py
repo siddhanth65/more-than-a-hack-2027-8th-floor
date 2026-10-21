@@ -21,21 +21,20 @@ from mtah.submission import validate, write_submission
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--select", required=True); ap.add_argument("--name", required=True)
-    ap.add_argument("--data", default=os.environ.get("MTAH_DATA_DIR"))
-    args = ap.parse_args()
-    if not args.data:
-        raise SystemExit("data dir needed: pass --data or set MTAH_DATA_DIR")
-    sel = Path(args.select)
+def load_selection(sel):
+    """(cfg, dead, lengths, team, merge, switch) from a selection dir's registered artefacts. The team model is
+    loaded whenever cfg.use_teamctrl (also at teamctrl weight 0: a merge cell's spell features read the stream);
+    merge_model.joblib when merge_theta < 1, switch_model.joblib when use_switch; a missing needed file is refused."""
+    sel = Path(sel)
     raw = json.loads((sel / "config.json").read_text()); lengths = raw.pop("lengths")
     cfg = PipelineConfig.from_dict(raw); cfg.decoder.lengths = lengths
     dead = DeadModel.load(sel / "dead_model.joblib")
     tp = sel / "team_model.joblib"
-    team = TeamCtrlModel.load(tp) if tp.exists() else None
-    if team is None and cfg.use_teamctrl and cfg.decoder.weights.get("teamctrl", 1.0) > 0:
-        raise SystemExit(f"{sel}: config uses the teamctrl stream but team_model.joblib is missing")
+    team = None
+    if cfg.use_teamctrl:
+        if not tp.exists():
+            raise SystemExit(f"{sel}: config uses the teamctrl stream but team_model.joblib is missing")
+        team = TeamCtrlModel.load(tp)
     mp = sel / "merge_model.joblib"
     merge = None
     if cfg.post.merge_theta < 1.0:
@@ -48,12 +47,29 @@ def main():
         if not sw.exists():
             raise SystemExit(f"{sel}: config uses the switch hazard but switch_model.joblib is missing")
         switch = SwitchModel.load(sw)
+    return cfg, dead, lengths, team, merge, switch
+
+
+def candidate_labels(m, tags, cfg, dead, team=None, merge=None, switch=None, cache_key="real_tactical"):
+    """Labels of the registered pipeline on one match (the real match: cache_key "real_tactical")."""
+    ev = compute_evidence(m, tags, cfg, dead, cache_key=cache_key, team_model=team, switch_model=switch)
+    return predict(m, tags, cfg, dead, evidence=ev, merge_model=merge)
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--select", required=True); ap.add_argument("--name", required=True)
+    ap.add_argument("--data", default=os.environ.get("MTAH_DATA_DIR"))
+    args = ap.parse_args()
+    if not args.data:
+        raise SystemExit("data dir needed: pass --data or set MTAH_DATA_DIR")
+    sel = Path(args.select)
+    cfg, dead, lengths, team, merge, switch = load_selection(sel)
     d = Path(args.data) / "tactical"
     md5s = {n: hashlib.md5((d / f"{STEMS['tactical']}{suf}").read_bytes()).hexdigest()
             for n, suf in (("atd", "_atd.txt"), ("meta", "_atd.xml"), ("tags", "_smart_tagging.xml"), ("homography", "_homography.csv"))}
     m = load_tactical(args.data); tags = load_tags(args.data)
-    ev = compute_evidence(m, tags, cfg, dead, cache_key="real_tactical", team_model=team, switch_model=switch)
-    labels = predict(m, tags, cfg, dead, evidence=ev, merge_model=merge)
+    labels = candidate_labels(m, tags, cfg, dead, team, merge, switch)
     out = ROOT / "runs" / "candidates"; out.mkdir(parents=True, exist_ok=True)
     p = Path(write_submission(labels, out / f"{args.name}.csv")); reason = validate(p)
     if reason is not None:
