@@ -108,9 +108,9 @@ def test_run_selection_two_policies_pathcrf_and_real(tmp_path, monkeypatch):
         for half in (1, 2):
             for seed in seeds:
                 save_half(_fake_half(mid, half, seed, rng), sim_dir)
-    grid = [{"tau_HA": 10.0, "tau_D": 30.0, "w_dead": 1.0, "w_pathcrf": 1.0, "dead_policy": "no_ball_at_all", "aba_s": 1.0},
-            {"tau_HA": 10.0, "tau_D": 30.0, "w_dead": 1.0, "w_pathcrf": 0.0, "dead_policy": "full", "aba_s": 1.0},
-            {"tau_HA": 30.0, "tau_D": 100.0, "w_dead": 2.0, "w_pathcrf": 0.5, "dead_policy": "full", "aba_s": 1.0}]
+    grid = [{"tau_HA": 10.0, "tau_D": 30.0, "w_dead": 1.0, "w_pathcrf": 1.0, "dead_policy": "no_ball_at_all", "sp_dead_bonus": 0.0, "aba_s": 1.0},
+            {"tau_HA": 10.0, "tau_D": 30.0, "w_dead": 1.0, "w_pathcrf": 0.0, "dead_policy": "full", "sp_dead_bonus": 0.0, "aba_s": 1.0},
+            {"tau_HA": 30.0, "tau_D": 100.0, "w_dead": 2.0, "w_pathcrf": 0.5, "dead_policy": "full", "sp_dead_bonus": 3.0, "aba_s": 1.0}]
     calls = []
     monkeypatch.setattr(pl, "pathcrf_posterior", _fake_posterior(calls))
     mod = _load_script()
@@ -124,18 +124,18 @@ def test_run_selection_two_policies_pathcrf_and_real(tmp_path, monkeypatch):
     ev_keep = []
     orig_ev = mod.compute_evidence
     def spy_ev(match, tags, cfg, dead, **kw):
-        r = orig_ev(match, tags, cfg, dead, **kw); ev_policy[id(r)] = cfg.dead_policy; ev_keep.append(r); return r
+        r = orig_ev(match, tags, cfg, dead, **kw); ev_policy[id(r)] = (cfg.dead_policy, getattr(cfg.tag, "sp_dead_bonus", 0.0)); ev_keep.append(r); return r
     monkeypatch.setattr(mod, "compute_evidence", spy_ev)
     scored = []   # (cell policy, {policies of the evidence it was scored with})
     orig_sc = mod.score_cell
     def spy_sc(test, ev, cfg, *a, **kw):
-        scored.append((cfg.dead_policy, {ev_policy[id(e)] for e in ev})); return orig_sc(test, ev, cfg, *a, **kw)
+        scored.append(((cfg.dead_policy, getattr(cfg.tag, "sp_dead_bonus", 0.0)), {ev_policy[id(e)] for e in ev})); return orig_sc(test, ev, cfg, *a, **kw)
     monkeypatch.setattr(mod, "score_cell", spy_sc)
     out = tmp_path / "out"
     best = mod.run_selection(sim_dir, seeds, out, grid=grid, real_data_dir="fake-data-dir")["best_cell"]
     assert best in grid
-    assert scored and {p for p, _ in scored} == {"full", "no_ball_at_all"}
-    assert all(used == {p} for p, used in scored), scored   # every cell scored with its own policy's evidence only
+    assert scored and {p for p, _ in scored} == {("full", 0.0), ("full", 3.0), ("no_ball_at_all", 0.0)}
+    assert all(used == {p} for p, used in scored), scored   # every cell scored with its own (policy, bonus) evidence only
     assert {"full", "no_ball_at_all"} <= set(policies)
     assert any(k.startswith("game_9001_1_s") for k in calls) and "real_tactical" in calls
     summ = pd.read_csv(out / "summary.csv")
@@ -173,13 +173,13 @@ def test_sealed_bar_gate(tmp_path):
 def test_resume_rejects_fold_csv_from_other_grid(tmp_path):
     import pytest
     mod = _load_script()
-    grid = [{"tau_HA": 10.0, "tau_D": 30.0, "w_dead": 1.0, "w_pathcrf": 0.0, "dead_policy": "full", "aba_s": 1.0},
-            {"tau_HA": 30.0, "tau_D": 100.0, "w_dead": 2.0, "w_pathcrf": 0.5, "dead_policy": "no_ball_at_all", "aba_s": 1.0}]
+    grid = [{"tau_HA": 10.0, "tau_D": 30.0, "w_dead": 1.0, "w_pathcrf": 0.0, "dead_policy": "full", "sp_dead_bonus": 0.0, "aba_s": 1.0},
+            {"tau_HA": 30.0, "tau_D": 100.0, "w_dead": 2.0, "w_pathcrf": 0.5, "dead_policy": "no_ball_at_all", "sp_dead_bonus": 0.0, "aba_s": 1.0}]
     df = pd.DataFrame([{"cell": i, **c} for i, c in enumerate(grid)] + [{"cell": "smooth50"}])
     fp = mod.run_fingerprint([100, 101], grid, "grid2")
     meta = dict(fp)
     mod.check_resume(meta, df, grid, fp, tmp_path)   # same grid and seeds: fine
-    for col, val in (("tau_D", 31.0), ("dead_policy", "full")):
+    for col, val in (("tau_D", 31.0), ("dead_policy", "full"), ("sp_dead_bonus", 3.0)):
         bad = df.copy(); bad.loc[1, col] = val
         with pytest.raises(SystemExit, match="different grid"):
             mod.check_resume(meta, bad, grid, fp, tmp_path)

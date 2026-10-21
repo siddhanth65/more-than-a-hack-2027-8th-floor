@@ -168,3 +168,21 @@ def test_unit_lengths_cover_every_stream(monkeypatch):
     assert estimate_lengths([], None, None) == {k: 1.0 for k in sel.EVIDENCE_STREAMS}
     with pytest.raises(ValueError):
         estimate_lengths([], cfg, None, mode="bogus")
+
+
+def test_grid3_axes_and_apply_cell_sets_sp_dead_bonus():
+    from mtah.select import GRID3, GRIDS
+    assert len(GRID3) == 64 and GRIDS["grid3"] is GRID3
+    keys = {"tau_HA", "tau_D", "w_dead", "w_pathcrf", "dead_policy", "sp_dead_bonus", "aba_s"}
+    assert all(set(c) == keys for c in GRID3)
+    assert {c["tau_HA"] for c in GRID3} == {30.0} and {c["tau_D"] for c in GRID3} == {30.0, 100.0}
+    assert {c["w_dead"] for c in GRID3} == {2.0, 3.0, 4.0, 6.0} and {c["w_pathcrf"] for c in GRID3} == {0.5, 1.0}
+    assert {c["dead_policy"] for c in GRID3} == {"full", "no_ball_at_all"}
+    assert {c["sp_dead_bonus"] for c in GRID3} == {0.0, 3.0} and {c["aba_s"] for c in GRID3} == {1.0}
+    assert len({tuple(sorted(c.items())) for c in GRID3}) == 64
+    cell = next(c for c in GRID3 if c["sp_dead_bonus"] == 3.0 and c["dead_policy"] == "no_ball_at_all")
+    base = PipelineConfig()
+    cfg = apply_cell(base, cell)
+    assert cfg.tag.sp_dead_bonus == 3.0 and cfg.dead_policy == "no_ball_at_all"
+    assert cfg.decoder.weights["dead"] == cell["w_dead"] and cfg.decoder.weights["pathcrf"] == cell["w_pathcrf"]
+    assert not hasattr(base.tag, "sp_dead_bonus") or base.tag.sp_dead_bonus != 3.0   # base untouched

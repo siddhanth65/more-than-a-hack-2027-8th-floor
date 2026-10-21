@@ -61,12 +61,17 @@ def base_for_grid(grid, threads=None):
     return base
 
 
+def ev_key(cell):
+    return (cell.get("dead_policy", "full"), float(cell.get("sp_dead_bonus", 0.0)))
+
+
 def policy_cfgs(base, cells, lengths):
-    """{dead_policy: cfg} with cfg = apply_cell(base, first cell of that policy). Evidence depends on the cell only
-    through dead_policy (weights/taus act in the decoder), so one evidence set per policy serves every cell."""
+    """{(dead_policy, sp_dead_bonus): cfg} with cfg = apply_cell(base, first cell of that key). Evidence depends on the
+    cell only through dead_policy (dead stream) and sp_dead_bonus (tag stream); weights/taus act in the decoder, so one
+    evidence set per key serves every cell. The PathCRF posterior is disk-cached per match, so extra keys are cheap."""
     out = {}
     for c in cells:
-        p = c.get("dead_policy", "full")
+        p = ev_key(c)
         if p not in out:
             cfg = apply_cell(base, c); cfg.decoder.lengths = lengths; out[p] = cfg
     return dict(sorted(out.items()))
@@ -143,18 +148,18 @@ def real_plausibility(sim_dir, seeds, keys, base, grid, ranked, data_dir, out, t
     train = load_sims(sim_dir, seeds, keys)
     lengths = estimate_lengths(train, base, train_dead)
     cfgs = policy_cfgs(base, [grid[i] for i in top], lengths)
-    dead = {p: train_dead(train, policy=p) for p in cfgs}
+    dead = {p: train_dead(train, policy=p) for p in sorted({k[0] for k in cfgs})}
     del train
     if shared is not None:
         shared.update(lengths=lengths, dead=dead)
     m = load_tactical(data_dir); tags = load_tags(data_dir); mask = blackout_mask_from_match(m)
-    ev = {p: compute_evidence(m, tags, cfg, dead[p], cache_key="real_tactical") for p, cfg in cfgs.items()}
+    ev = {k: compute_evidence(m, tags, cfg, dead[k[0]], cache_key="real_tactical") for k, cfg in cfgs.items()}
     strong = compute_strong(m, next(iter(cfgs.values())))
     mr = dict(zip(ranked["cell"].astype(int), ranked["mean_rank"]))
     rows, plaus = [], {}
     for rank, i in enumerate(top, 1):
         cfg = apply_cell(base, grid[i]); cfg.decoder.lengths = lengths
-        lab = predict(m, tags, cfg, None, evidence=ev[cfg.dead_policy], strong=strong)
+        lab = predict(m, tags, cfg, None, evidence=ev[ev_key(grid[i])], strong=strong)
         d = drift_report(lab, m, tags, mask, code_table=cfg.tag.code_table)
         rec = {"rank": rank, "mean_rank": float(mr[i]), **{k: float(d[k]) for k in REAL_KEYS}}
         rec["real_plausible"] = is_real_plausible(rec["non_blackout_D_share"])
@@ -184,7 +189,7 @@ def load_candidate_artifacts(sel_dir):
     return cfg, DeadModel.load(dp), lengths
 
 
-GRID_PARAM_COLS = ("tau_HA", "tau_D", "w_dead", "aba_s", "w_pathcrf", "dead_policy")
+GRID_PARAM_COLS = ("tau_HA", "tau_D", "w_dead", "aba_s", "w_pathcrf", "dead_policy", "sp_dead_bonus")
 
 
 def grid_hash(grid):
@@ -250,13 +255,13 @@ def run_grid(sim_dir, seeds, keys, base, out, grid, real_data_dir=None, grid_nam
         dead = {p: train_dead(train, policy=p) for p in policies}  # final fold dead models: all train halves, one per policy
         lengths_by_fold[held] = lengths; dead_by_fold[held] = dead
         cfgs = policy_cfgs(base, grid, lengths)
-        test_ev = {p: [compute_evidence(s.match, s.tags, cfg, dead[p], cache_key=f"{s.key}_s{s.seed}") for s in test]
-                   for p, cfg in cfgs.items()}  # one evidence set per dead policy; otherwise grid-independent (tested)
-        test_strong = [compute_strong(s.match, cfgs[policies[0]]) for s in test]  # touches do not depend on the grid
+        test_ev = {k: [compute_evidence(s.match, s.tags, cfg, dead[k[0]], cache_key=f"{s.key}_s{s.seed}") for s in test]
+                   for k, cfg in cfgs.items()}  # one evidence set per (dead policy, sp_dead_bonus); otherwise grid-independent
+        test_strong = [compute_strong(s.match, next(iter(cfgs.values()))) for s in test]  # touches do not depend on the grid
         rows, halves = [], []
         for i, cell in enumerate(grid):
             cfg = apply_cell(base, cell); cfg.decoder.lengths = lengths
-            res, hdf = score_cell(test, test_ev[cfg.dead_policy], cfg, VARIANTS, strongs=test_strong)
+            res, hdf = score_cell(test, test_ev[ev_key(cell)], cfg, VARIANTS, strongs=test_strong)
             hdf.insert(0, "cell", i); halves.append(hdf)
             row = {"cell": i, **cell}
             for v in VARIANTS:

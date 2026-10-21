@@ -18,7 +18,11 @@ GRID = [{"tau_HA": a, "tau_D": d, "w_dead": w, "aba_s": m}
 GRID2 = [{"tau_HA": a, "tau_D": d, "w_dead": w, "w_pathcrf": c, "dead_policy": pol, "aba_s": 1.0}
          for a, d, w, c, pol in itertools.product((10.0, 30.0), (30.0, 100.0), (1.0, 2.0), (0.0, 0.5, 1.0, 2.0),
                                                   ("full", "no_ball_at_all"))]
-GRIDS = {"grid1": GRID, "grid2": GRID2}
+# grid 3: dead weight/policy search around grid 2's winner, plus the set-piece dead prior (tag-stream bonus)
+GRID3 = [{"tau_HA": 30.0, "tau_D": d, "w_dead": w, "w_pathcrf": c, "dead_policy": pol, "sp_dead_bonus": b, "aba_s": 1.0}
+         for d, w, c, pol, b in itertools.product((30.0, 100.0), (2.0, 3.0, 4.0, 6.0), (0.5, 1.0),
+                                                  ("full", "no_ball_at_all"), (0.0, 3.0))]
+GRIDS = {"grid1": GRID, "grid2": GRID2, "grid3": GRID3}
 
 # label-free real-match plausibility: non-blackout D share of the prediction must lie in this band
 REAL_D_SHARE_BAND = (0.10, 0.18)
@@ -31,6 +35,8 @@ def apply_cell(cfg, cell):
     cfg.dead_policy = cell.get("dead_policy", "full")
     if "w_pathcrf" in cell:
         cfg.decoder.weights["pathcrf"] = cell["w_pathcrf"]   # 0 disables the stream in cost_matrix; use_pathcrf is the caller's (base config)
+    if "sp_dead_bonus" in cell:
+        cfg.tag.sp_dead_bonus = float(cell["sp_dead_bonus"])
     return cfg
 
 
