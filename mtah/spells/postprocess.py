@@ -12,6 +12,7 @@ class PostParams:
     d_fill_s: float = 0.0
     aba_s: float = 0.5
     snap_w: int = 50       # frames; 0 disables H<->A boundary snapping
+    snap_mode: str = "touch"   # "touch": nearest touch by the new team; "hazard": switch-hazard argmax
     merge_theta: float = 1.0   # per-spell merge model threshold (mtah.spells.merge); 1.0 = off (labels unchanged)
 
     def to_dict(self):
@@ -74,12 +75,21 @@ def _one_half(x, fps, p, strong):
     return x
 
 
-def snap_team_boundaries(labels, half, touches, snap_w):
+def snap_team_boundaries(labels, half, touches, snap_w, mode="touch", hazard=None):
     """Move each H<->A boundary to the nearest touch (within +-snap_w, same half) by the new team.
 
     Left to right on already-updated labels; a move never crosses another boundary
     (both adjacent runs keep >= 1 frame); D boundaries are never moved. Ties go earlier.
+
+    mode "hazard": the boundary (first frame of the new run) moves to the argmax of the switch hazard
+    `hazard` (F,) over the admissible frames within +-snap_w (ties: nearest to the boundary, then earlier, so a
+    flat window leaves it in place; NaN frames never win; no finite hazard in the window -> unchanged). Without a
+    hazard the labels are returned unchanged.
     """
+    if mode not in ("touch", "hazard"):
+        raise ValueError(f"unknown snap mode {mode!r}; expected 'touch' or 'hazard'")
+    if mode == "hazard":
+        return _snap_hazard(labels, half, hazard, snap_w)
     out = np.asarray(labels).astype("<U1").copy()
     touches = np.asarray(touches)
     if snap_w <= 0 or len(touches) == 0:
@@ -116,12 +126,50 @@ def snap_team_boundaries(labels, half, touches, snap_w):
     return out
 
 
-def postprocess(labels, half, fps, params, strong_H=None, strong_A=None, touches=None):
+def _snap_hazard(labels, half, hazard, snap_w):
+    out = np.asarray(labels).astype("<U1").copy()
+    if snap_w <= 0 or hazard is None:
+        return out
+    hz = np.asarray(hazard, np.float64)
+    for _, hs, he in half_runs(half):
+        x = out[hs:he]; hh = hz[hs:he]
+        if len(x) == 0:
+            continue
+        cuts = np.flatnonzero(x[1:] != x[:-1]) + 1
+        starts = [0] + cuts.tolist(); stops = cuts.tolist() + [len(x)]
+        labs = [str(x[s]) for s in starts]
+        for i in range(1, len(starts)):
+            new, prev = labs[i], labs[i - 1]
+            if new not in ("H", "A") or prev not in ("H", "A"):
+                continue
+            f = starts[i]
+            lo = max(f - snap_w, starts[i - 1] + 1); hi = min(f + snap_w, stops[i] - 1)
+            w = hh[lo:hi + 1]
+            if hi < lo or not np.isfinite(w).any():
+                continue
+            wf = np.where(np.isfinite(w), w, -np.inf)
+            c = lo + np.flatnonzero(wf == wf.max())
+            fp = int(c[np.lexsort((c, np.abs(c - f)))[0]])      # ties: nearest to the boundary, then earlier
+            if fp == f:
+                continue
+            if fp < f:
+                x[fp:f] = new
+            else:
+                x[f:fp] = prev
+            starts[i] = fp; stops[i - 1] = fp
+        out[hs:he] = x
+    return out
+
+
+def postprocess(labels, half, fps, params, strong_H=None, strong_A=None, touches=None, hazard=None):
     out = np.asarray(labels).astype("<U1").copy()
     strong = {"H": strong_H, "A": strong_A}
     for _, s, e in half_runs(half):
         sub = {k: (v[s:e] if v is not None else None) for k, v in strong.items()}
         out[s:e] = _one_half(out[s:e], fps, params, sub)
-    if touches is not None and params.snap_w > 0:
-        out = snap_team_boundaries(out, half, touches, params.snap_w)
+    mode = getattr(params, "snap_mode", "touch")
+    if mode == "hazard":
+        out = snap_team_boundaries(out, half, touches, params.snap_w, mode="hazard", hazard=hazard)
+    elif touches is not None and params.snap_w > 0:
+        out = snap_team_boundaries(out, half, touches, params.snap_w, mode=mode)
     return out

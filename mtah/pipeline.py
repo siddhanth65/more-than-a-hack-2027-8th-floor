@@ -7,6 +7,7 @@ from mtah.evidence.ball_ctrl import BallCtrlParams, ball_ctrl_evidence
 from mtah.evidence.dead import dead_evidence, dead_features
 from mtah.evidence.pathcrf import PathCRFParams, pathcrf_evidence, pathcrf_posterior
 from mtah.evidence.tag_prior import TagPriorParams, load_tag_codes, tag_prior_evidence
+from mtah.evidence.switch import hazard_to_tau, switch_evidence, switch_features
 from mtah.evidence.team_ctrl import team_ctrl_evidence, team_features
 from mtah.evidence.touches import TouchParams, detect_touches, strong_touch_frames
 from mtah.spells.merge import apply_merge_model
@@ -27,6 +28,8 @@ class PipelineConfig:
     pathcrf: PathCRFParams = field(default_factory=PathCRFParams)
     use_teamctrl: bool = False    # learned team-in-control stream (needs a TeamCtrlModel passed to compute_evidence)
     team_policy: str = "full"     # training-time feature policy of the team-control model
+    use_switch: bool = False      # switch hazard (needs a SwitchModel passed to compute_evidence); not a cost stream
+    switch_policy: str = "full"   # training-time feature policy of the switch model
 
     def to_dict(self):
         d = asdict(self)
@@ -43,12 +46,16 @@ class PipelineConfig:
                    decoder=DecoderParams(**d["decoder"]), post=PostParams(**d["post"]), dead_model_path=d.get("dead_model_path"),
                    dead_policy=d.get("dead_policy", "full"), use_pathcrf=d.get("use_pathcrf", False),
                    pathcrf=PathCRFParams(**{k: v for k, v in d.get("pathcrf", {}).items() if k in ("ckpt", "eps", "conf_alpha")}),
-                   use_teamctrl=d.get("use_teamctrl", False), team_policy=d.get("team_policy", "full"))
+                   use_teamctrl=d.get("use_teamctrl", False), team_policy=d.get("team_policy", "full"),
+                   use_switch=d.get("use_switch", False), switch_policy=d.get("switch_policy", "full"))
 
 
-def compute_evidence(match, tags, cfg, dead_model, cache_key=None, team_model=None):
+def compute_evidence(match, tags, cfg, dead_model, cache_key=None, team_model=None, switch_model=None):
     """Evidence streams by name. `cache_key` names the PathCRF cache entry (required when cfg.use_pathcrf).
-    "teamctrl" is added iff cfg.use_teamctrl and a `team_model` is given (its policy must equal cfg.team_policy)."""
+    "teamctrl" is added iff cfg.use_teamctrl and a `team_model` is given (its policy must equal cfg.team_policy).
+    "switch" (the hazard, NOT centred and NOT a cost stream: column 0 of an (F, 3) array, NaN elsewhere) is added
+    iff cfg.use_switch and a `switch_model` is given (policy must equal cfg.switch_policy); its teamctrl-margin
+    features use the "teamctrl" stream computed here (required if the model was trained with it)."""
     ev = {"ball": ball_ctrl_evidence(match, cfg.ball), "tag": tag_prior_evidence(tags, match.n_frames, cfg.tag, fps=match.fps)}
     if dead_model is not None:
         if dead_model.policy != cfg.dead_policy:
@@ -63,6 +70,13 @@ def compute_evidence(match, tags, cfg, dead_model, cache_key=None, team_model=No
         if team_model.policy != cfg.team_policy:
             raise ValueError(f"team model policy {team_model.policy!r} != cfg.team_policy {cfg.team_policy!r}")
         ev["teamctrl"] = team_ctrl_evidence(team_model.predict_proba(team_features(match, cfg.touch)))
+    if cfg.use_switch and switch_model is not None:
+        if switch_model.policy != cfg.switch_policy:
+            raise ValueError(f"switch model policy {switch_model.policy!r} != cfg.switch_policy {cfg.switch_policy!r}")
+        if switch_model.with_teamctrl and "teamctrl" not in ev:
+            raise ValueError("switch model was trained with teamctrl features but no teamctrl stream is available")
+        ts = ev.get("teamctrl") if switch_model.with_teamctrl else None
+        ev["switch"] = switch_evidence(switch_model.predict_hazard(switch_features(match, ts, cfg.touch)))
     return ev
 
 
@@ -72,15 +86,25 @@ def compute_strong(match, cfg):
             strong_touch_frames(t, 1, cfg.touch, match.n_frames), t)
 
 
-def predict(match, tags, cfg, dead_model, evidence=None, strong=None, cache_key=None, team_model=None, merge_model=None):
+def predict(match, tags, cfg, dead_model, evidence=None, strong=None, cache_key=None, team_model=None, merge_model=None,
+            switch_model=None):
     """Labels. With cfg.post.merge_theta < 1 the per-spell merge model runs after post-processing (a `merge_model`
-    is then required); merge_theta = 1.0 (default) leaves the post-processed labels untouched."""
-    ev = evidence if evidence is not None else compute_evidence(match, tags, cfg, dead_model, cache_key, team_model=team_model)
-    lab = decode(ev, match.half, cfg.decoder)
+    is then required); merge_theta = 1.0 (default) leaves the post-processed labels untouched.
+    With cfg.decoder.w_switch > 0 the "switch" hazard sets a per-frame tau_HA (required then); w_switch = 0 decodes
+    exactly as before. cfg.post.snap_mode = "hazard" snaps H<->A boundaries to the hazard peak."""
+    ev = evidence if evidence is not None else compute_evidence(match, tags, cfg, dead_model, cache_key, team_model=team_model,
+                                                                switch_model=switch_model)
+    hazard = ev["switch"][:, 0] if "switch" in ev else None
+    tau_t = None
+    if cfg.decoder.w_switch > 0:
+        if hazard is None:
+            raise ValueError(f"cfg.decoder.w_switch = {cfg.decoder.w_switch} > 0 needs a 'switch' hazard in the evidence")
+        tau_t = hazard_to_tau(hazard, cfg.decoder.tau_HA, cfg.decoder.w_switch, cfg.decoder.tau_floor)
+    lab = decode(ev, match.half, cfg.decoder, tau_HA_t=tau_t)
     st = strong if strong is not None else compute_strong(match, cfg)
     sH, sA = st[0], st[1]
     touches = st[2] if len(st) > 2 else detect_touches(match, cfg.touch)   # tolerate the old 2-tuple
-    out = postprocess(lab, match.half, match.fps, cfg.post, strong_H=sH, strong_A=sA, touches=touches)
+    out = postprocess(lab, match.half, match.fps, cfg.post, strong_H=sH, strong_A=sA, touches=touches, hazard=hazard)
     theta = float(getattr(cfg.post, "merge_theta", 1.0))
     if theta < 1.0:
         if merge_model is None:
