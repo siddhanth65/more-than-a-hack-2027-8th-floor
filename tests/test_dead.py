@@ -461,3 +461,50 @@ def test_long_rel_policies_tables_and_old_models_unaffected(tmp_path):
     assert np.array_equal(dm2.predict_proba(Xr), dm.predict_proba(Xr))
     assert dm2.features(m, NO_TAGS).shape == (400, len(names))
     assert DeadModel(policy="long").features(m, NO_TAGS).shape == (400, len(DEAD_FEATURES) + len(LONG_FEATURES))
+
+
+@pytest.mark.dfl
+def test_long_rel_heldout_9001_visible_dead():
+    """Train dead models on sims 9002-9006 (seed 100, every 5th frame) for full / long / long_rel / long_rel_no_ball
+    and score 9001's visible graded frames against ctrl_Dfull D (recall / precision at P > 0.5, AP). 9007 is never
+    loaded. Gate: long_rel AP >= full AP + 0.05 (the feed-robust variant keeps most of the long-context gain)."""
+    from pathlib import Path
+    from sklearn.metrics import average_precision_score
+    from mtah.sim.dataset import load_half_sim
+    sim = Path(__file__).resolve().parents[1] / "runs" / "sim"
+    if not (sim / "game_9001_H1_s100.json").is_file():
+        pytest.skip("runs/sim absent")
+    nb, nl = len(DEAD_FEATURES), len(LONG_FEATURES)
+    cols = {"full": slice(0, nb), "long": slice(0, nb + nl),
+            "long_rel": np.r_[0:nb, nb + nl:nb + 2 * nl], "long_rel_no_ball": np.r_[0:nb, nb + nl:nb + 2 * nl]}
+
+    def table(s):
+        return np.hstack([dead_features_long(s.match, s.tags), long_features(s.match, mode="rel")])
+
+    Xs, ys = [], []
+    for mid in range(9002, 9007):
+        for h in (1, 2):
+            s = load_half_sim(sim, f"game_{mid}_H{h}", 100)
+            Xs.append(table(s)[::5]); ys.append((s.truth["ctrl_Dfull"] == "D").astype(int)[::5])
+            del s
+    X, y = np.concatenate(Xs), np.concatenate(ys); del Xs, ys
+    models = {p: DeadModel(policy=p).fit(X[:, c], y) for p, c in cols.items()}
+    del X, y
+    P = {p: [] for p in models}; Y = []
+    for h in (1, 2):
+        s = load_half_sim(sim, f"game_9001_H{h}", 100)
+        Xt = table(s)
+        vis = s.match.ball_present & (s.match.half > 0)
+        Y.append((s.truth["ctrl_Dfull"] == "D")[vis])
+        for p, m in models.items():
+            P[p].append(m.predict_proba(Xt[:, cols[p]])[vis])
+        del s, Xt
+    Y = np.concatenate(Y)
+    res = {}
+    for p in models:
+        pr = np.concatenate(P[p]); hit = pr > 0.5
+        res[p] = {"recall": float((hit & Y).sum() / max(Y.sum(), 1)), "precision": float((hit & Y).sum() / max(hit.sum(), 1)),
+                  "ap": float(average_precision_score(Y, pr))}
+        print(f"9001 visible frames n={len(Y)} dead share {Y.mean():.4f}  policy {p:17s} recall {res[p]['recall']:.4f}  "
+              f"precision {res[p]['precision']:.4f}  AP {res[p]['ap']:.4f}")
+    assert res["long_rel"]["ap"] >= res["full"]["ap"] + 0.05, res
