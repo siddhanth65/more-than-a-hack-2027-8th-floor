@@ -1,4 +1,4 @@
-# Reproduce the MTAH possession submission. Windows PowerShell 5.1.
+﻿# Reproduce the MTAH possession submission. Windows PowerShell 5.1.
 #   scripts\reproduce.ps1                  full chain: simulator -> PathCRF cache -> LOMO selection -> candidate
 #   scripts\reproduce.ps1 -CandidateOnly   regenerate the CSV from the committed models/<Name>/ (config + dead model)
 param(
@@ -32,7 +32,9 @@ if ($CandidateOnly) {
     $Sel = Join-Path $Root "runs\select\$Name"
     $Mod = Join-Path $Root "models\$Name"
     New-Item -ItemType Directory -Force $Sel | Out-Null
-    foreach ($f in @("config.json", "dead_model.joblib")) {
+    # config.json, the dead model and every other model artefact the candidate uses (team / merge / switch)
+    $Files = @("config.json", "dead_model.joblib") + @(Get-ChildItem -Path $Mod -Filter "*.joblib" | Where-Object { $_.Name -ne "dead_model.joblib" } | ForEach-Object { $_.Name })
+    foreach ($f in $Files) {
         if (-not (Test-Path (Join-Path $Mod $f))) { Write-Host "missing $Mod\$f"; exit 1 }
         Copy-Item -Force (Join-Path $Mod $f) (Join-Path $Sel $f)   # always overwrite with the committed artefact
         (Get-FileHash -Algorithm MD5 (Join-Path $Sel $f)).Hash.ToLower() + "  runs/select/$Name/$f"
