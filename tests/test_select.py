@@ -293,3 +293,17 @@ def test_grid6_long_rel_policy_x_weight_around_a4():
     assert len({evidence_key(c) for c in GRID6}) == 2
     cfg = apply_cell(PipelineConfig(), next(c for c in GRID6 if c["dead_policy"] == "long_rel" and c["w_dead"] == 4.0))
     assert cfg.dead_policy == "long_rel" and cfg.decoder.weights["dead"] == 4.0 and cfg.post.merge_theta == 0.7
+
+def test_grid7_dead_offset_and_config():
+    from mtah.select import GRID4, GRID5, GRID7, GRIDS, apply_cell, evidence_key, uses_switch
+    assert len(GRID7) == 20 and GRIDS["grid7"] is GRID7
+    assert {c["dead_offset"] for c in GRID7} == {0.0, -0.5, -1.0, -1.5, -2.0}
+    assert {c["dead_policy"] for c in GRID7} == {"long_rel", "full"} and {c["w_dead"] for c in GRID7} == {3.0, 4.0}
+    assert len({tuple(sorted(c.items())) for c in GRID7}) == 20 and not any(uses_switch(c) for c in GRID7)
+    assert {**GRID4[41], "dead_offset": 0.0} in GRID7
+    assert len({evidence_key(c) for c in GRID7}) == 10     # 2 policies x 5 offsets (w_dead does not enter the evidence)
+    cfg = apply_cell(PipelineConfig(), {**GRID5[0], "dead_offset": -1.5})
+    assert cfg.dead_offset == -1.5 and apply_cell(PipelineConfig(), GRID5[0]).dead_offset == 0.0
+    d = cfg.to_dict(); assert d["dead_offset"] == -1.5
+    assert PipelineConfig.from_dict(d).dead_offset == -1.5
+    del d["dead_offset"]; assert PipelineConfig.from_dict(d).dead_offset == 0.0

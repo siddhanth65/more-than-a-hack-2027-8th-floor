@@ -100,7 +100,7 @@ def _fake_posterior(calls):
 
 def test_run_selection_two_policies_pathcrf_and_real(tmp_path, monkeypatch):
     """grid2/grid4-style cells: per-policy dead and team-control models (no policy-mismatch error), PathCRF and teamctrl
-    streams, evidence routed by (dead_policy, sp_dead_bonus, team_policy), real-match plausibility, team artefact."""
+    streams, evidence routed by (dead_policy, sp_dead_bonus, team_policy, dead_offset), real-match plausibility, team artefact."""
     import mtah.pipeline as pl
     rng = np.random.default_rng(1)
     sim_dir = tmp_path / "sim"
@@ -110,7 +110,7 @@ def test_run_selection_two_policies_pathcrf_and_real(tmp_path, monkeypatch):
             for seed in seeds:
                 save_half(_fake_half(mid, half, seed, rng), sim_dir)
     grid = [{"tau_HA": 10.0, "tau_D": 30.0, "w_dead": 1.0, "w_pathcrf": 1.0, "dead_policy": "no_ball_at_all", "sp_dead_bonus": 0.0, "aba_s": 1.0},
-            {"tau_HA": 10.0, "tau_D": 30.0, "w_dead": 1.0, "w_pathcrf": 0.0, "dead_policy": "full", "sp_dead_bonus": 0.0, "aba_s": 1.0},
+            {"tau_HA": 10.0, "tau_D": 30.0, "w_dead": 1.0, "w_pathcrf": 0.0, "dead_policy": "full", "sp_dead_bonus": 0.0, "aba_s": 1.0, "dead_offset": -1.0},
             {"tau_HA": 30.0, "tau_D": 100.0, "w_dead": 2.0, "w_pathcrf": 0.5, "dead_policy": "full", "sp_dead_bonus": 3.0, "aba_s": 1.0},
             {"tau_HA": 30.0, "tau_D": 100.0, "w_dead": 2.0, "w_pathcrf": 0.5, "dead_policy": "full", "sp_dead_bonus": 0.0,
              "w_teamctrl": 2.0, "w_ball": 0.5, "team_policy": "no_touch", "aba_s": 1.0}]
@@ -136,19 +136,19 @@ def test_run_selection_two_policies_pathcrf_and_real(tmp_path, monkeypatch):
         assert tm is None or tm.policy == cfg.team_policy
         r = orig_ev(match, tags, cfg, dead, **kw)
         assert "teamctrl" in r   # some cell weights it: every evidence set carries the stream
-        ev_policy[id(r)] = (cfg.dead_policy, getattr(cfg.tag, "sp_dead_bonus", 0.0), cfg.team_policy); ev_keep.append(r); return r
+        ev_policy[id(r)] = (cfg.dead_policy, getattr(cfg.tag, "sp_dead_bonus", 0.0), cfg.team_policy, cfg.dead_offset); ev_keep.append(r); return r
     monkeypatch.setattr(mod, "compute_evidence", spy_ev)
     scored = []   # (cell policy, {policies of the evidence it was scored with})
     orig_sc = mod.score_cell
     def spy_sc(test, ev, cfg, *a, **kw):
-        scored.append(((cfg.dead_policy, getattr(cfg.tag, "sp_dead_bonus", 0.0), cfg.team_policy), {ev_policy[id(e)] for e in ev})); return orig_sc(test, ev, cfg, *a, **kw)
+        scored.append(((cfg.dead_policy, getattr(cfg.tag, "sp_dead_bonus", 0.0), cfg.team_policy, cfg.dead_offset), {ev_policy[id(e)] for e in ev})); return orig_sc(test, ev, cfg, *a, **kw)
     monkeypatch.setattr(mod, "score_cell", spy_sc)
     out = tmp_path / "out"
     best = mod.run_selection(sim_dir, seeds, out, grid=grid, real_data_dir="fake-data-dir")["best_cell"]
     assert best in grid
-    assert scored and {p for p, _ in scored} == {("full", 0.0, "full"), ("full", 3.0, "full"), ("no_ball_at_all", 0.0, "full"),
-                                                 ("full", 0.0, "no_touch")}
-    assert all(used == {p} for p, used in scored), scored   # every cell scored with its own (policy, bonus, team) evidence only
+    assert scored and {p for p, _ in scored} == {("full", 0.0, "full", -1.0), ("full", 3.0, "full", 0.0),
+                                                 ("no_ball_at_all", 0.0, "full", 0.0), ("full", 0.0, "no_touch", 0.0)}
+    assert all(used == {p} for p, used in scored), scored   # every cell scored with its own (policy, bonus, team, offset) evidence only
     assert {"full", "no_ball_at_all"} <= set(policies)
     assert {"full", "no_touch"} <= set(team_policies)
     assert touch_seen and all(tp is not None for tp in touch_seen)   # base.touch reaches every team-model fit

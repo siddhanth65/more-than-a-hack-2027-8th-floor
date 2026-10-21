@@ -508,3 +508,12 @@ def test_long_rel_heldout_9001_visible_dead():
         print(f"9001 visible frames n={len(Y)} dead share {Y.mean():.4f}  policy {p:17s} recall {res[p]['recall']:.4f}  "
               f"precision {res[p]['precision']:.4f}  AP {res[p]['ap']:.4f}")
     assert res["long_rel"]["ap"] >= res["full"]["ap"] + 0.05, res
+
+def test_dead_evidence_logit_offset():
+    p = np.array([0.5, 0.2, 0.9, 0.0, 1.0], np.float32)
+    assert np.array_equal(dead_evidence(p, logit_offset=0.0), dead_evidence(p))
+    ev = dead_evidence(np.array([0.5], np.float32), logit_offset=-1.0)
+    s = np.float32(1 / (1 + np.exp(1.0)))
+    np.testing.assert_allclose(ev[0, 2], np.log(s + 1e-3), rtol=1e-5)
+    np.testing.assert_allclose(ev[0, 0], np.log(1 - s + 1e-3), rtol=1e-5)
+    assert np.isfinite(dead_evidence(p, logit_offset=-2.0)).all()
