@@ -58,7 +58,11 @@ GRID6 = [{**GRID5[0], "dead_policy": pol, "w_dead": w}
 # x dead_policy {long_rel, full} x w_dead {3, 4} x dead_offset {0, -0.5, -1, -1.5, -2} = 20 cells.
 GRID7 = [{**GRID5[0], "dead_policy": pol, "w_dead": w, "dead_offset": o}
          for pol, w, o in itertools.product(("long_rel", "full"), (3.0, 4.0), (0.0, -0.5, -1.0, -1.5, -2.0))]
-GRIDS = {"grid1": GRID, "grid2": GRID2, "grid3": GRID3, "grid4": GRID4, "grid5": GRID5, "grid6": GRID6, "grid7": GRID7}
+# grid8: registration grid for the long_rel dead policy with the real-band offsets found by the a5b sweep
+# (real visible-dead share 0.178 / 0.161 / 0.142 at -2.0 / -2.5 / -3.0; see runs/select/a5b/offset_sweep_real.json)
+GRID8 = [{**GRID5[0], "dead_policy": "long_rel", "w_dead": 4.0, "dead_offset": o} for o in (-2.0, -2.5, -3.0)]
+GRIDS = {"grid1": GRID, "grid2": GRID2, "grid3": GRID3, "grid4": GRID4, "grid5": GRID5, "grid6": GRID6, "grid7": GRID7,
+         "grid8": GRID8}
 
 # label-free real-match plausibility: non-blackout D share of the prediction must lie in this band
 REAL_D_SHARE_BAND = (0.10, 0.18)
