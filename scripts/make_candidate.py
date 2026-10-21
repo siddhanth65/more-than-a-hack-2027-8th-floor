@@ -10,6 +10,7 @@ import sklearn
 from mtah import N_FRAMES
 from mtah.eval.drift import blackout_mask_from_match, drift_report
 from mtah.evidence.dead import DeadModel
+from mtah.evidence.team_ctrl import TeamCtrlModel
 from mtah.io.metrica_loader import STEMS, load_tactical
 from mtah.io.tags import load_tags
 from mtah.pipeline import PipelineConfig, compute_evidence, predict
@@ -29,11 +30,15 @@ def main():
     raw = json.loads((sel / "config.json").read_text()); lengths = raw.pop("lengths")
     cfg = PipelineConfig.from_dict(raw); cfg.decoder.lengths = lengths
     dead = DeadModel.load(sel / "dead_model.joblib")
+    tp = sel / "team_model.joblib"
+    team = TeamCtrlModel.load(tp) if tp.exists() else None
+    if team is None and cfg.use_teamctrl and cfg.decoder.weights.get("teamctrl", 1.0) > 0:
+        raise SystemExit(f"{sel}: config uses the teamctrl stream but team_model.joblib is missing")
     d = Path(args.data) / "tactical"
     md5s = {n: hashlib.md5((d / f"{STEMS['tactical']}{suf}").read_bytes()).hexdigest()
             for n, suf in (("atd", "_atd.txt"), ("meta", "_atd.xml"), ("tags", "_smart_tagging.xml"), ("homography", "_homography.csv"))}
     m = load_tactical(args.data); tags = load_tags(args.data)
-    ev = compute_evidence(m, tags, cfg, dead, cache_key="real_tactical")
+    ev = compute_evidence(m, tags, cfg, dead, cache_key="real_tactical", team_model=team)
     labels = predict(m, tags, cfg, dead, evidence=ev)
     out = ROOT / "runs" / "candidates"; out.mkdir(parents=True, exist_ok=True)
     p = Path(write_submission(labels, out / f"{args.name}.csv")); reason = validate(p)

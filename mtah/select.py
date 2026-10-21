@@ -23,7 +23,14 @@ GRID2 = [{"tau_HA": a, "tau_D": d, "w_dead": w, "w_pathcrf": c, "dead_policy": p
 GRID3 = [{"tau_HA": 30.0, "tau_D": d, "w_dead": w, "w_pathcrf": c, "dead_policy": pol, "sp_dead_bonus": b, "aba_s": 1.0}
          for d, w, c, pol, b in itertools.product((30.0, 100.0), (2.0, 3.0, 4.0, 6.0), (0.5, 1.0),
                                                   ("full", "no_ball_at_all"), (0.0, 3.0))]
-GRIDS = {"grid1": GRID, "grid2": GRID2, "grid3": GRID3}
+# grid 4 (Plan 2d T1): learned team-control stream weight/policy and ball-stream weight around a3b's cell 52
+# (tau_D 100, w_pathcrf 1, full dead policy, no set-piece bonus); stickier tau_HA 60 and aba_s 2.0 join the search.
+# w_teamctrl 0 cells repeat across team_policy (identical labels): kept so the grid is a full product.
+GRID4 = [{"tau_HA": a, "tau_D": 100.0, "w_dead": w, "w_pathcrf": 1.0, "dead_policy": "full", "sp_dead_bonus": 0.0,
+          "w_teamctrl": t, "w_ball": b, "team_policy": tp, "aba_s": m}
+         for a, t, b, w, tp, m in itertools.product((30.0, 60.0), (0.0, 1.0, 2.0), (1.0, 0.5), (3.0, 4.0),
+                                                    ("full", "no_touch"), (1.0, 2.0))]
+GRIDS = {"grid1": GRID, "grid2": GRID2, "grid3": GRID3, "grid4": GRID4}
 
 # label-free real-match plausibility: non-blackout D share of the prediction must lie in this band
 REAL_D_SHARE_BAND = (0.10, 0.18)
@@ -38,6 +45,11 @@ def apply_cell(cfg, cell):
         cfg.decoder.weights["pathcrf"] = cell["w_pathcrf"]   # 0 disables the stream in cost_matrix; use_pathcrf is the caller's (base config)
     if "sp_dead_bonus" in cell:
         cfg.tag.sp_dead_bonus = float(cell["sp_dead_bonus"])
+    if "w_teamctrl" in cell:
+        cfg.decoder.weights["teamctrl"] = cell["w_teamctrl"]   # weight only; use_teamctrl is the caller's (base config)
+    if "w_ball" in cell:
+        cfg.decoder.weights["ball"] = cell["w_ball"]
+    cfg.team_policy = cell.get("team_policy", cfg.team_policy)
     return cfg
 
 

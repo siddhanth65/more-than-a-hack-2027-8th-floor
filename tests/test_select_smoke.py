@@ -99,7 +99,8 @@ def _fake_posterior(calls):
 
 
 def test_run_selection_two_policies_pathcrf_and_real(tmp_path, monkeypatch):
-    """grid2-style cells: per-policy dead models (no policy-mismatch error), PathCRF stream, real-match plausibility."""
+    """grid2/grid4-style cells: per-policy dead and team-control models (no policy-mismatch error), PathCRF and teamctrl
+    streams, evidence routed by (dead_policy, sp_dead_bonus, team_policy), real-match plausibility, team artefact."""
     import mtah.pipeline as pl
     rng = np.random.default_rng(1)
     sim_dir = tmp_path / "sim"
@@ -110,13 +111,18 @@ def test_run_selection_two_policies_pathcrf_and_real(tmp_path, monkeypatch):
                 save_half(_fake_half(mid, half, seed, rng), sim_dir)
     grid = [{"tau_HA": 10.0, "tau_D": 30.0, "w_dead": 1.0, "w_pathcrf": 1.0, "dead_policy": "no_ball_at_all", "sp_dead_bonus": 0.0, "aba_s": 1.0},
             {"tau_HA": 10.0, "tau_D": 30.0, "w_dead": 1.0, "w_pathcrf": 0.0, "dead_policy": "full", "sp_dead_bonus": 0.0, "aba_s": 1.0},
-            {"tau_HA": 30.0, "tau_D": 100.0, "w_dead": 2.0, "w_pathcrf": 0.5, "dead_policy": "full", "sp_dead_bonus": 3.0, "aba_s": 1.0}]
+            {"tau_HA": 30.0, "tau_D": 100.0, "w_dead": 2.0, "w_pathcrf": 0.5, "dead_policy": "full", "sp_dead_bonus": 3.0, "aba_s": 1.0},
+            {"tau_HA": 30.0, "tau_D": 100.0, "w_dead": 2.0, "w_pathcrf": 0.5, "dead_policy": "full", "sp_dead_bonus": 0.0,
+             "w_teamctrl": 2.0, "w_ball": 0.5, "team_policy": "no_touch", "aba_s": 1.0}]
     calls = []
     monkeypatch.setattr(pl, "pathcrf_posterior", _fake_posterior(calls))
     mod = _load_script()
     policies = []
     orig = mod.train_dead
     monkeypatch.setattr(mod, "train_dead", lambda sims, variant="ctrl_Dfull", policy="full": policies.append(policy) or orig(sims, variant, policy))
+    team_policies = []
+    orig_tt = mod.train_team_ctrl
+    monkeypatch.setattr(mod, "train_team_ctrl", lambda sims, variant="ctrl_Dfull", policy="full": team_policies.append(policy) or orig_tt(sims, variant, policy))
     real = _fake_half(9999, 1, 0, rng)
     monkeypatch.setattr(mod, "load_tactical", lambda d: real.match)
     monkeypatch.setattr(mod, "load_tags", lambda d: real.tags)
@@ -124,36 +130,48 @@ def test_run_selection_two_policies_pathcrf_and_real(tmp_path, monkeypatch):
     ev_keep = []
     orig_ev = mod.compute_evidence
     def spy_ev(match, tags, cfg, dead, **kw):
-        r = orig_ev(match, tags, cfg, dead, **kw); ev_policy[id(r)] = (cfg.dead_policy, getattr(cfg.tag, "sp_dead_bonus", 0.0)); ev_keep.append(r); return r
+        tm = kw.get("team_model")
+        assert tm is None or tm.policy == cfg.team_policy
+        r = orig_ev(match, tags, cfg, dead, **kw)
+        assert "teamctrl" in r   # some cell weights it: every evidence set carries the stream
+        ev_policy[id(r)] = (cfg.dead_policy, getattr(cfg.tag, "sp_dead_bonus", 0.0), cfg.team_policy); ev_keep.append(r); return r
     monkeypatch.setattr(mod, "compute_evidence", spy_ev)
     scored = []   # (cell policy, {policies of the evidence it was scored with})
     orig_sc = mod.score_cell
     def spy_sc(test, ev, cfg, *a, **kw):
-        scored.append(((cfg.dead_policy, getattr(cfg.tag, "sp_dead_bonus", 0.0)), {ev_policy[id(e)] for e in ev})); return orig_sc(test, ev, cfg, *a, **kw)
+        scored.append(((cfg.dead_policy, getattr(cfg.tag, "sp_dead_bonus", 0.0), cfg.team_policy), {ev_policy[id(e)] for e in ev})); return orig_sc(test, ev, cfg, *a, **kw)
     monkeypatch.setattr(mod, "score_cell", spy_sc)
     out = tmp_path / "out"
     best = mod.run_selection(sim_dir, seeds, out, grid=grid, real_data_dir="fake-data-dir")["best_cell"]
     assert best in grid
-    assert scored and {p for p, _ in scored} == {("full", 0.0), ("full", 3.0), ("no_ball_at_all", 0.0)}
-    assert all(used == {p} for p, used in scored), scored   # every cell scored with its own (policy, bonus) evidence only
+    assert scored and {p for p, _ in scored} == {("full", 0.0, "full"), ("full", 3.0, "full"), ("no_ball_at_all", 0.0, "full"),
+                                                 ("full", 0.0, "no_touch")}
+    assert all(used == {p} for p, used in scored), scored   # every cell scored with its own (policy, bonus, team) evidence only
     assert {"full", "no_ball_at_all"} <= set(policies)
+    assert {"full", "no_touch"} <= set(team_policies)
     assert any(k.startswith("game_9001_1_s") for k in calls) and "real_tactical" in calls
     summ = pd.read_csv(out / "summary.csv")
-    assert set(summ["cell"]) == {0, 1, 2}
+    assert set(summ["cell"]) == {0, 1, 2, 3}
     real_tab = pd.read_csv(out / "summary_real.csv")
     assert {"cell", "mean_rank", "non_blackout_D_share", "tag_agreement_implied", "pred_D_share",
             "spells_per_HA_min", "real_plausible"} <= set(real_tab.columns)
-    assert set(real_tab["cell"]) == {0, 1, 2}
+    assert set(real_tab["cell"]) == {0, 1, 2, 3}
     b = json.loads((out / "best.json").read_text()); reg = json.loads((out / "registration.json").read_text())
-    assert set(b["real_plausibility"]) == {"0", "1", "2"} and reg["real_plausibility"] == b["real_plausibility"]
+    assert set(b["real_plausibility"]) == {"0", "1", "2", "3"} and reg["real_plausibility"] == b["real_plausibility"]
     want = sel.choose_plausible(summ, {int(k): v for k, v in b["real_plausibility"].items()})
     assert b["cell"] == grid[want] == best
     for v in b["real_plausibility"].values():
         assert v["real_plausible"] == sel.is_real_plausible(v["non_blackout_D_share"])
+    uses_team = best.get("w_teamctrl", 0.0) > 0
+    assert (out / "team_model.joblib").exists() == uses_team and reg["use_teamctrl"] == uses_team
+    assert reg["team_policy"] == (best["team_policy"] if uses_team else None)
 
 
 def test_base_for_grid_enables_pathcrf_only_when_weighted():
     mod = _load_script()
+    assert mod.base_for_grid(sel.GRID4).use_teamctrl is True and mod.base_for_grid(sel.GRID3).use_teamctrl is False
+    assert mod.base_for_grid([c for c in sel.GRID4 if c["w_teamctrl"] == 0]).use_teamctrl is False
+    assert mod.ev_key(sel.GRID4[0]) == ("full", 0.0, sel.GRID4[0]["team_policy"]) and mod.ev_key(sel.GRID[0]) == ("full", 0.0, "full")
     assert mod.base_for_grid(sel.GRID).use_pathcrf is False
     assert mod.base_for_grid(sel.GRID2).use_pathcrf is True
     assert mod.base_for_grid([{**sel.GRID2[0], "w_pathcrf": 0.0}]).use_pathcrf is False
@@ -264,3 +282,58 @@ def test_sealed_main_defaults_out_to_best_from_and_guards_registration(tmp_path,
     with pytest.raises(SystemExit, match="real_plausible"):
         mod.main()
     assert len(readlog.read_log("sealed")) == 2
+
+
+def test_candidate_artifacts_with_team_model_and_sealed_path(tmp_path, monkeypatch):
+    """A teamctrl cell writes team_model.joblib at registration; the sealed path loads it (never retrains) and
+    feeds it to compute_evidence; a teamctrl config without the file is refused."""
+    import pytest
+    from mtah.io import readlog
+    from mtah.pipeline import PipelineConfig
+    from mtah.sim.dataset import SEALED_MATCH
+    monkeypatch.setattr(readlog, "READS_DIR", tmp_path / "reads")
+    rng = np.random.default_rng(3)
+    sim_dir = tmp_path / "sim"; seeds = [100]
+    for mid in (9001, 9002, 9003, SEALED_MATCH):
+        for half in (1, 2):
+            save_half(_fake_half(mid, half, seeds[0], rng), sim_dir)
+    grid = [{"tau_HA": 10.0, "tau_D": 10.0, "w_dead": 1.0, "w_teamctrl": 2.0, "w_ball": 0.5, "team_policy": "no_touch",
+             "aba_s": 0.5}]
+    mod = _load_script()
+    out = tmp_path / "sel"
+    mod.run_selection(sim_dir, seeds, out, grid=grid, base=mod.base_for_grid(grid))
+    assert (out / "team_model.joblib").exists()
+    cfg, dead, lengths = mod.load_candidate_artifacts(out)
+    assert cfg.use_teamctrl and cfg.team_policy == "no_touch" and cfg.decoder.weights["teamctrl"] == 2.0
+    assert mod.load_team_model(out, cfg).policy == "no_touch"
+    reg = json.loads((out / "registration.json").read_text())
+    assert reg["use_teamctrl"] is True and reg["team_policy"] == "no_touch"
+    b = json.loads((out / "best.json").read_text()); b["spec_bar"]["bar_pass"] = True
+    (out / "best.json").write_text(json.dumps(b))
+    trained, used = [], []
+    monkeypatch.setattr(mod, "train_team_ctrl", lambda *a, **k: trained.append(1))
+    orig_ev = mod.compute_evidence
+    def spy_ev(match, tags, cfg, dead, **kw):
+        used.append(kw.get("team_model")); return orig_ev(match, tags, cfg, dead, **kw)
+    monkeypatch.setattr(mod, "compute_evidence", spy_ev)
+    monkeypatch.setattr(sys, "argv", ["select_lomo", "--sim", str(sim_dir), "--seeds", "100", "--sealed", "--best-from", str(out)])
+    mod.main()
+    assert trained == [] and used and all(t is not None and t.policy == "no_touch" for t in used)
+    assert readlog.read_log("sealed")[-1]["match"] == SEALED_MATCH
+    (out / "team_model.joblib").unlink()
+    with pytest.raises(SystemExit, match="team_model"):
+        mod.load_team_model(out, cfg)
+    assert mod.load_team_model(out, PipelineConfig()) is None    # stream off: nothing needed
+
+
+def test_resume_rejects_changed_team_columns(tmp_path):
+    import pytest
+    mod = _load_script()
+    grid = [dict(c) for c in sel.GRID4[:3]]
+    df = pd.DataFrame([{"cell": i, **c} for i, c in enumerate(grid)] + [{"cell": "smooth50"}])
+    fp = mod.run_fingerprint([100], grid, "grid4")
+    mod.check_resume(dict(fp), df, grid, fp, tmp_path)
+    for col, val in (("w_teamctrl", 9.0), ("w_ball", 9.0), ("team_policy", "x")):
+        bad = df.copy(); bad.loc[1, col] = val
+        with pytest.raises(SystemExit, match="different grid"):
+            mod.check_resume(dict(fp), bad, grid, fp, tmp_path)

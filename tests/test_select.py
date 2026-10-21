@@ -186,3 +186,30 @@ def test_grid3_axes_and_apply_cell_sets_sp_dead_bonus():
     assert cfg.tag.sp_dead_bonus == 3.0 and cfg.dead_policy == "no_ball_at_all"
     assert cfg.decoder.weights["dead"] == cell["w_dead"] and cfg.decoder.weights["pathcrf"] == cell["w_pathcrf"]
     assert not hasattr(base.tag, "sp_dead_bonus") or base.tag.sp_dead_bonus != 3.0   # base untouched
+
+
+def test_grid4_axes_and_apply_cell_sets_team_fields():
+    from mtah.select import GRID4, GRIDS
+    assert len(GRID4) == 96 and GRIDS["grid4"] is GRID4
+    keys = {"tau_HA", "tau_D", "w_dead", "w_pathcrf", "dead_policy", "sp_dead_bonus", "w_teamctrl", "w_ball",
+            "team_policy", "aba_s"}
+    assert all(set(c) == keys for c in GRID4)
+    assert {c["tau_HA"] for c in GRID4} == {30.0, 60.0} and {c["w_teamctrl"] for c in GRID4} == {0.0, 1.0, 2.0}
+    assert {c["w_ball"] for c in GRID4} == {1.0, 0.5} and {c["w_dead"] for c in GRID4} == {3.0, 4.0}
+    assert {c["team_policy"] for c in GRID4} == {"full", "no_touch"} and {c["aba_s"] for c in GRID4} == {1.0, 2.0}
+    assert {c["w_pathcrf"] for c in GRID4} == {1.0} and {c["tau_D"] for c in GRID4} == {100.0}
+    assert {c["dead_policy"] for c in GRID4} == {"full"} and {c["sp_dead_bonus"] for c in GRID4} == {0.0}
+    assert len({tuple(sorted(c.items())) for c in GRID4}) == 96
+    # a3b's cell 52 (tau_HA 30, w_dead 4, w_pathcrf 1, full, no bonus, aba 1) with the stream off is in the grid
+    assert any(c["tau_HA"] == 30.0 and c["w_dead"] == 4.0 and c["w_teamctrl"] == 0.0 and c["w_ball"] == 1.0
+               and c["aba_s"] == 1.0 for c in GRID4)
+    cell = next(c for c in GRID4 if c["w_teamctrl"] == 2.0 and c["team_policy"] == "no_touch" and c["w_ball"] == 0.5
+                and c["aba_s"] == 2.0 and c["tau_HA"] == 60.0)
+    base = PipelineConfig()
+    cfg = apply_cell(base, cell)
+    assert cfg.decoder.weights["teamctrl"] == 2.0 and cfg.decoder.weights["ball"] == 0.5 and cfg.team_policy == "no_touch"
+    assert cfg.post.aba_s == 2.0 and cfg.decoder.tau_HA == 60.0 and cfg.decoder.tau_HD == cfg.decoder.tau_DH == 100.0
+    assert cfg.use_teamctrl is False      # the stream switch belongs to the base config (select_lomo.base_for_grid)
+    assert base.decoder.weights["ball"] == 1.0 and base.team_policy == "full"   # base untouched
+    old = apply_cell(base, GRID[0])
+    assert old.decoder.weights["ball"] == 1.0 and old.team_policy == "full" and old.decoder.weights["teamctrl"] == 1.0

@@ -19,13 +19,14 @@ from mtah.eval.drift import blackout_mask_from_match, drift_report
 from mtah.eval.scorer import OFFICIAL_PATH, score
 from mtah.evidence.dead import DeadModel
 from mtah.evidence.pathcrf import PathCRFParams
+from mtah.evidence.team_ctrl import TeamCtrlModel
 from mtah.io import readlog
 from mtah.io.metrica_loader import load_tactical
 from mtah.io.tags import load_tags
 from mtah.pipeline import PipelineConfig, compute_evidence, compute_strong, predict
 import mtah.select as sel
 from mtah.select import (LENGTHS_MODE, REAL_D_SHARE_BAND, apply_cell, choose_plausible, estimate_lengths, is_real_plausible, mean_rank,
-                         score_cell, train_dead)
+                         score_cell, train_dead, train_team_ctrl)
 from mtah.sim.dataset import SEALED_MATCH, VARIANTS, list_sim_keys, load_half_sim, lomo_folds, match_id
 
 REAL_KEYS = ("non_blackout_D_share", "tag_agreement_implied", "pred_D_share", "spells_per_HA_min")
@@ -52,29 +53,38 @@ def data_dir_or_exit(path):
 
 def base_for_grid(grid, threads=None):
     """Base config for a grid: the PathCRF stream is computed iff some cell gives it a positive weight
-    (w_pathcrf = 0 cells then ignore it through the zero weight). Threads stay at the pinned PathCRFParams default
+    (w_pathcrf = 0 cells then ignore it through the zero weight); likewise the learned team-control stream
+    (use_teamctrl iff some cell has w_teamctrl > 0; team models are then trained per needed team_policy).
+    Threads stay at the pinned PathCRFParams default
     (4; the posterior and its cache key depend on it); `threads` exists for tests only, no CLI sets it."""
     base = PipelineConfig()
     base.use_pathcrf = any(c.get("w_pathcrf", 0.0) > 0 for c in grid)
+    base.use_teamctrl = any(c.get("w_teamctrl", 0.0) > 0 for c in grid)
     if threads is not None:
         base.pathcrf.threads = int(threads)
     return base
 
 
 def ev_key(cell):
-    return (cell.get("dead_policy", "full"), float(cell.get("sp_dead_bonus", 0.0)))
+    return (cell.get("dead_policy", "full"), float(cell.get("sp_dead_bonus", 0.0)), cell.get("team_policy", "full"))
 
 
 def policy_cfgs(base, cells, lengths):
-    """{(dead_policy, sp_dead_bonus): cfg} with cfg = apply_cell(base, first cell of that key). Evidence depends on the
-    cell only through dead_policy (dead stream) and sp_dead_bonus (tag stream); weights/taus act in the decoder, so one
-    evidence set per key serves every cell. The PathCRF posterior is disk-cached per match, so extra keys are cheap."""
+    """{(dead_policy, sp_dead_bonus, team_policy): cfg} with cfg = apply_cell(base, first cell of that key). Evidence
+    depends on the cell only through dead_policy (dead stream), sp_dead_bonus (tag stream) and team_policy (teamctrl
+    stream); weights/taus act in the decoder, so one evidence set per key serves every cell. The PathCRF posterior is
+    disk-cached per match, so extra keys are cheap."""
     out = {}
     for c in cells:
         p = ev_key(c)
         if p not in out:
             cfg = apply_cell(base, c); cfg.decoder.lengths = lengths; out[p] = cfg
     return dict(sorted(out.items()))
+
+
+def train_team_models(train, base, policies):
+    """{team_policy: TeamCtrlModel} trained on `train` when base.use_teamctrl, else {} (no stream, no training)."""
+    return {p: train_team_ctrl(train, policy=p) for p in sorted(set(policies))} if base.use_teamctrl else {}
 
 
 BASELINES = {"smooth50": lambda m: baselines.smooth_vote(m, 50), "b4": baselines.b4_blackout_dead}
@@ -89,10 +99,11 @@ def _drift_summary(rows):
     return ref
 
 
-def out_of_sample_drift_reference(sim_dir, seeds, keys, base, best_cell, lengths_by_fold, dead_by_fold):
-    """Re-decode the best cell on every fold's TEST halves and summarise the drift metrics."""
+def out_of_sample_drift_reference(sim_dir, seeds, keys, base, best_cell, lengths_by_fold, dead_by_fold, team_by_fold=None):
+    """Re-decode the best cell on every fold's TEST halves and summarise the drift metrics (fold dead/team models)."""
     rows = []
-    policy = best_cell.get("dead_policy", "full")
+    policy = best_cell.get("dead_policy", "full"); tpol = best_cell.get("team_policy", "full")
+    team_by_fold = team_by_fold or {}
     for held, train_keys, test_keys in lomo_folds(keys):
         train = load_sims(sim_dir, seeds, train_keys); test = load_sims(sim_dir, seeds, test_keys)
         lengths = lengths_by_fold.get(held) or estimate_lengths(train, base, train_dead)
@@ -100,8 +111,11 @@ def out_of_sample_drift_reference(sim_dir, seeds, keys, base, best_cell, lengths
         if dead is None:
             dead = train_dead(train, policy=policy)
         cfg = apply_cell(base, best_cell); cfg.decoder.lengths = lengths
+        team = team_by_fold.get(held, {}).get(tpol)
+        if team is None and cfg.use_teamctrl and cfg.decoder.weights.get("teamctrl", 1.0) > 0:
+            team = train_team_ctrl(train, policy=tpol)   # resumed fold: retrain (deterministic HGB)
         for s in test:
-            ev = compute_evidence(s.match, s.tags, cfg, dead, cache_key=f"{s.key}_s{s.seed}")
+            ev = compute_evidence(s.match, s.tags, cfg, dead, cache_key=f"{s.key}_s{s.seed}", team_model=team)
             lab = predict(s.match, s.tags, cfg, dead, evidence=ev)
             rows.append(drift_report(lab, s.match, s.tags, blackout_mask_from_match(s.match), code_table=cfg.tag.code_table))
     return _drift_summary(rows)
@@ -143,17 +157,20 @@ def real_plausibility(sim_dir, seeds, keys, base, grid, ranked, data_dir, out, t
     """Decode the top-k cells (by mean rank) on the real match; label-free drift metrics per cell.
 
     Dead models (one per needed policy) and lengths come from ALL non-sealed sim halves, as in the sealed/candidate
-    path. If `shared` is a dict it receives {"lengths", "dead"} so registration reuses them. Writes summary_real.csv; returns {cell index: {metric: value, "real_plausible": bool, ...}}."""
+    path (team-control models likewise, one per needed team_policy, when base.use_teamctrl).
+    If `shared` is a dict it receives {"lengths", "dead", "team"} so registration reuses them. Writes summary_real.csv; returns {cell index: {metric: value, "real_plausible": bool, ...}}."""
     top = [int(c) for c in ranked["cell"].head(top_k)]
     train = load_sims(sim_dir, seeds, keys)
     lengths = estimate_lengths(train, base, train_dead)
     cfgs = policy_cfgs(base, [grid[i] for i in top], lengths)
     dead = {p: train_dead(train, policy=p) for p in sorted({k[0] for k in cfgs})}
+    team = train_team_models(train, base, [k[2] for k in cfgs])
     del train
     if shared is not None:
-        shared.update(lengths=lengths, dead=dead)
+        shared.update(lengths=lengths, dead=dead, team=team)
     m = load_tactical(data_dir); tags = load_tags(data_dir); mask = blackout_mask_from_match(m)
-    ev = {k: compute_evidence(m, tags, cfg, dead[k[0]], cache_key="real_tactical") for k, cfg in cfgs.items()}
+    ev = {k: compute_evidence(m, tags, cfg, dead[k[0]], cache_key="real_tactical", team_model=team.get(k[2]))
+          for k, cfg in cfgs.items()}
     strong = compute_strong(m, next(iter(cfgs.values())))
     mr = dict(zip(ranked["cell"].astype(int), ranked["mean_rank"]))
     rows, plaus = [], {}
@@ -171,11 +188,17 @@ def real_plausibility(sim_dir, seeds, keys, base, grid, ranked, data_dir, out, t
     return plaus
 
 
-def write_candidate_artifacts(out, base, best_cell, lengths, dead):
-    """config.json (selected PipelineConfig + lengths) and dead_model.joblib (chosen policy, all non-sealed keys):
-    the one artefact pair used by make_candidate.py AND the sealed read."""
+TEAM_MODEL_FILE = "team_model.joblib"
+
+
+def write_candidate_artifacts(out, base, best_cell, lengths, dead, team=None):
+    """config.json (selected PipelineConfig + lengths), dead_model.joblib (chosen policy, all non-sealed keys) and,
+    when the chosen config uses the teamctrl stream, team_model.joblib next to it: the artefacts used by
+    make_candidate.py AND the sealed read."""
     cfg = apply_cell(base, best_cell); cfg.decoder.lengths = lengths
     dead.save(out / "dead_model.joblib")
+    if team is not None:
+        team.save(out / TEAM_MODEL_FILE)
     (out / "config.json").write_text(json.dumps({**cfg.to_dict(), "lengths": lengths}, indent=1))
 
 
@@ -189,7 +212,19 @@ def load_candidate_artifacts(sel_dir):
     return cfg, DeadModel.load(dp), lengths
 
 
-GRID_PARAM_COLS = ("tau_HA", "tau_D", "w_dead", "aba_s", "w_pathcrf", "dead_policy", "sp_dead_bonus")
+def load_team_model(sel_dir, cfg):
+    """TeamCtrlModel from a selection dir's team_model.joblib, or None when the config does not use the stream.
+    A config that uses it (use_teamctrl and a positive teamctrl weight) without the file is refused."""
+    tp = Path(sel_dir) / TEAM_MODEL_FILE
+    if not (cfg.use_teamctrl and cfg.decoder.weights.get("teamctrl", 1.0) > 0):
+        return None
+    if not tp.exists():
+        raise SystemExit(f"{sel_dir}: config uses the teamctrl stream but {TEAM_MODEL_FILE} is missing; rerun the selection")
+    return TeamCtrlModel.load(tp)
+
+
+GRID_PARAM_COLS = ("tau_HA", "tau_D", "w_dead", "aba_s", "w_pathcrf", "dead_policy", "sp_dead_bonus", "w_teamctrl",
+                   "w_ball", "team_policy")
 
 
 def grid_hash(grid):
@@ -236,8 +271,9 @@ def check_resume(meta, df, grid, fp, out, held=None):
 
 
 def run_grid(sim_dir, seeds, keys, base, out, grid, real_data_dir=None, grid_name=None, top_k=REAL_TOP_K):
-    fold_tables, lengths_by_fold, dead_by_fold = [], {}, {}
+    fold_tables, lengths_by_fold, dead_by_fold, team_by_fold = [], {}, {}, {}
     policies = sorted({c.get("dead_policy", "full") for c in grid})
+    team_policies = sorted({c.get("team_policy", "full") for c in grid})
     resumed_folds = []
     fp = run_fingerprint(seeds, grid, grid_name)
     for held, train_keys, test_keys in lomo_folds(keys):
@@ -253,10 +289,12 @@ def run_grid(sim_dir, seeds, keys, base, out, grid, real_data_dir=None, grid_nam
         train = load_sims(sim_dir, seeds, train_keys); test = load_sims(sim_dir, seeds, test_keys)
         lengths = estimate_lengths(train, base, train_dead)  # inner split: see estimate_lengths (policy-independent)
         dead = {p: train_dead(train, policy=p) for p in policies}  # final fold dead models: all train halves, one per policy
-        lengths_by_fold[held] = lengths; dead_by_fold[held] = dead
+        team = train_team_models(train, base, team_policies)   # fold team-control models (none unless base.use_teamctrl)
+        lengths_by_fold[held] = lengths; dead_by_fold[held] = dead; team_by_fold[held] = team
         cfgs = policy_cfgs(base, grid, lengths)
-        test_ev = {k: [compute_evidence(s.match, s.tags, cfg, dead[k[0]], cache_key=f"{s.key}_s{s.seed}") for s in test]
-                   for k, cfg in cfgs.items()}  # one evidence set per (dead policy, sp_dead_bonus); otherwise grid-independent
+        test_ev = {k: [compute_evidence(s.match, s.tags, cfg, dead[k[0]], cache_key=f"{s.key}_s{s.seed}",
+                                        team_model=team.get(k[2])) for s in test]
+                   for k, cfg in cfgs.items()}  # one evidence set per (dead policy, sp_dead_bonus, team policy)
         test_strong = [compute_strong(s.match, next(iter(cfgs.values()))) for s in test]  # touches do not depend on the grid
         rows, halves = [], []
         for i, cell in enumerate(grid):
@@ -305,17 +343,20 @@ def run_grid(sim_dir, seeds, keys, base, out, grid, real_data_dir=None, grid_nam
     bar, base_rows = compute_bar(allf, halves, best, str(best_i))
     print(base_rows.to_string())
     print("SPEC BAR", json.dumps(bar, indent=1))
-    ref = out_of_sample_drift_reference(sim_dir, seeds, keys, base, best_cell, lengths_by_fold, dead_by_fold)
+    ref = out_of_sample_drift_reference(sim_dir, seeds, keys, base, best_cell, lengths_by_fold, dead_by_fold, team_by_fold)
     (out / "drift_reference.json").write_text(json.dumps(ref, indent=1))
-    cbase = base_for_grid([best_cell])   # PathCRF only if the chosen cell weights it
-    policy = best_cell.get("dead_policy", "full")
-    if shared and policy in shared["dead"]:
+    cbase = base_for_grid([best_cell])   # PathCRF / teamctrl only if the chosen cell weights them
+    policy = best_cell.get("dead_policy", "full"); tpol = best_cell.get("team_policy", "full")
+    need_team = bool(cbase.use_teamctrl)
+    if shared and policy in shared["dead"] and (not need_team or tpol in shared.get("team", {})):
         c_lengths, c_dead = shared["lengths"], shared["dead"][policy]   # already trained by the plausibility step
+        c_team = shared["team"][tpol] if need_team else None
     else:
         c_train = load_sims(sim_dir, seeds, keys)
         c_lengths = estimate_lengths(c_train, cbase, train_dead); c_dead = train_dead(c_train, policy=policy)
+        c_team = train_team_ctrl(c_train, policy=tpol) if need_team else None
         del c_train
-    write_candidate_artifacts(out, cbase, best_cell, c_lengths, c_dead)
+    write_candidate_artifacts(out, cbase, best_cell, c_lengths, c_dead, c_team)
     selection = "mean rank over 4 variants, tie ctrl_Dfull"
     if plaus is not None:
         selection += (f"; highest-ranked real-plausible cell among the top {top_k} "
@@ -328,6 +369,7 @@ def run_grid(sim_dir, seeds, keys, base, out, grid, real_data_dir=None, grid_nam
            "best": {v: best[v] for v in VARIANTS}, "baselines": base_rows.to_dict(),
            "seed_sd": bar["seed_sd"], "baseline_used": bar["baseline_used"], "spec_bar": bar,
            "use_pathcrf": bool(base.use_pathcrf), "pathcrf_threads": int(base.pathcrf.threads),
+           "use_teamctrl": bool(cbase.use_teamctrl), "team_policy": tpol if cbase.use_teamctrl else None,
            "real_plausibility": real_json, "chosen_real_plausible": chosen_real_plausible,
            "pathcrf_train_matches": [9001, 9002, 9003, 9004, 9005], "pathcrf_val": 9006, "clean": 9007,
            "sealed_match": SEALED_MATCH, "lengths_mode": LENGTHS_MODE}
@@ -362,7 +404,8 @@ def run_pilot(args, keys, base, grid):
     print(f"PILOT fold {held} L_k:", json.dumps(lengths))
     cfg0 = apply_cell(base, grid[0]); cfg0.decoder.lengths = lengths
     dead = train_dead(train, policy=cfg0.dead_policy)
-    ev = [compute_evidence(s.match, s.tags, cfg0, dead, cache_key=f"{s.key}_s{s.seed}") for s in test]
+    team = train_team_models(train, base, [cfg0.team_policy]).get(cfg0.team_policy)
+    ev = [compute_evidence(s.match, s.tags, cfg0, dead, cache_key=f"{s.key}_s{s.seed}", team_model=team) for s in test]
     strong = [compute_strong(s.match, cfg0) for s in test]
     for a, d, w in itertools.product((3.0, 100.0), (3.0, 100.0), (0.5, 2.0)):
         cell = {**grid[0], "tau_HA": a, "tau_D": d, "w_dead": w, "aba_s": 0.5 if grid is sel.GRID else grid[0]["aba_s"]}
@@ -440,7 +483,7 @@ def main():
     ap.add_argument("--out", default=None,
                     help="selection dir (default runs/select/<timestamp>; with --sealed --best-from X, default X)")
     ap.add_argument("--grid", choices=sorted(sel.GRIDS), default="grid1",
-                    help="grid1 (default) | grid2; the real-match plausibility step runs for every grid unless --no-real")
+                    help="grid1 (default) | grid2 | grid3 | grid4; the real-match plausibility step runs for every grid unless --no-real")
     ap.add_argument("--data", default=os.environ.get("MTAH_DATA_DIR"),
                     help="real-match data dir for the plausibility step (default $MTAH_DATA_DIR)")
     ap.add_argument("--no-real", action="store_true", help="skip the real-match plausibility step (choose mean-rank 1)")
@@ -483,7 +526,9 @@ def main():
         failed = check_bar_gate(best, args.force_sealed)
         prev = check_sealed_guard(reg_id, args.force_sealed)
         cfg, dead, lengths = load_candidate_artifacts(sel_dir)   # byte-identical to what make_candidate.py uses
-        for name in ("config.json", "dead_model.joblib"):
+        team = load_team_model(sel_dir, cfg)
+        names = ("config.json", "dead_model.joblib") + ((TEAM_MODEL_FILE,) if team is not None else ())
+        for name in names:
             if not (out / name).exists() or (out / name).read_bytes() != (sel_dir / name).read_bytes():
                 (out / name).write_bytes((sel_dir / name).read_bytes())
         ref_path = out / "drift_reference.json"
@@ -492,12 +537,13 @@ def main():
         if not ref_path.exists():
             print("WARNING: drift_reference.json absent; writing an IN-SAMPLE reference (train halves)")
             train = load_sims(args.sim, args.seeds, keys)
-            rows = [drift_report(predict(s.match, s.tags, cfg, dead, cache_key=f"{s.key}_s{s.seed}"), s.match, s.tags,
+            rows = [drift_report(predict(s.match, s.tags, cfg, dead, cache_key=f"{s.key}_s{s.seed}", team_model=team),
+                                 s.match, s.tags,
                                  blackout_mask_from_match(s.match), code_table=cfg.tag.code_table)
                     for s in train]
             ref_path.write_text(json.dumps(_drift_summary(rows), indent=1))
         sealed = load_sims(args.sim, args.seeds, [k for k in list_sim_keys(args.sim) if match_id(k) == SEALED_MATCH])
-        ev = [compute_evidence(s.match, s.tags, cfg, dead, cache_key=f"{s.key}_s{s.seed}") for s in sealed]
+        ev = [compute_evidence(s.match, s.tags, cfg, dead, cache_key=f"{s.key}_s{s.seed}", team_model=team) for s in sealed]
         res = {v: m["spell_f1"] for v, m in score_cell(sealed, ev, cfg, VARIANTS)[0].items()}
         forced_over = failed + (["repeat_read"] if prev else [])
         rec = {"time": time.strftime("%Y-%m-%d %H:%M"), "git": git_sha(), "match": SEALED_MATCH, "registration": reg_id,
