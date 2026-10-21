@@ -416,3 +416,89 @@ def test_run_selection_merge_cells_route_model_and_artifacts(tmp_path, monkeypat
         mod.load_merge_model(out, cfg)
     from mtah.pipeline import PipelineConfig
     assert mod.load_merge_model(out, PipelineConfig()) is None
+
+
+def test_run_selection_switch_cells_route_model_and_artifacts(tmp_path, monkeypatch):
+    """w_switch / snap_mode cells: one switch model per fold on the fold's TRAIN halves (the merge model's inner split
+    trains its own on the inner matches), the hazard rides in every evidence set, w_switch = 0 cells decode exactly
+    as without it; the registered switch_model.joblib is written, reloaded by the sealed path (never retrained) and
+    refused when missing; w_switch / snap_mode join the resume columns."""
+    import pytest
+    from mtah.evidence.switch import SwitchModel
+    from mtah.io import readlog
+    from mtah.pipeline import PipelineConfig, predict
+    from mtah.sim.dataset import SEALED_MATCH, match_id
+    monkeypatch.setattr(readlog, "READS_DIR", tmp_path / "reads")
+    rng = np.random.default_rng(5)
+    sim_dir = tmp_path / "sim"; seeds = [100]
+    for mid in (9001, 9002, 9003, SEALED_MATCH):
+        for half in (1, 2):
+            save_half(_fake_half(mid, half, seeds[0], rng), sim_dir)
+    c0 = {"tau_HA": 10.0, "tau_D": 10.0, "w_dead": 1.0, "aba_s": 0.5, "w_switch": 0.0, "snap_mode": "touch"}
+    grid = [{**c0, "w_switch": 2.0, "snap_mode": "hazard"}, c0, {**c0, "w_switch": 2.0, "snap_mode": "hazard", "merge_theta": 0.7}]
+    mod = _load_script()
+    base = mod.base_for_grid(grid)
+    assert base.use_switch and base.switch_policy == sel.SWITCH_POLICY == "no_team"
+    assert not mod.base_for_grid([c0]).use_switch and mod.base_for_grid([{**c0, "snap_mode": "hazard"}]).use_switch
+    switch_calls = []   # (sorted training match ids, policy)
+    orig_ts = mod.train_switch
+    def spy_ts(sims, **kw):
+        switch_calls.append((sorted({match_id(s.key) for s in sims}), kw.get("policy")))
+        return orig_ts(sims, **kw)
+    monkeypatch.setattr(mod, "train_switch", spy_ts)
+    orig_ev = mod.compute_evidence
+    def spy_ev(match, tags, cfg, dead, **kw):
+        r = orig_ev(match, tags, cfg, dead, **kw)
+        assert "switch" in r and isinstance(kw.get("switch_model"), SwitchModel)
+        return r
+    monkeypatch.setattr(mod, "compute_evidence", spy_ev)
+    scored, identical = [], []
+    orig_sc = mod.score_cell
+    def spy_sc(test, ev, cfg, *a, **kw):
+        scored.append((cfg.decoder.w_switch, cfg.post.snap_mode))
+        if cfg.decoder.w_switch == 0 and cfg.post.snap_mode == "touch" and cfg.post.merge_theta >= 1.0:
+            for s, e in zip(test, ev):
+                assert "switch" in e
+                with_h = predict(s.match, s.tags, cfg, None, evidence=e)
+                without = predict(s.match, s.tags, cfg, None, evidence={k: v for k, v in e.items() if k != "switch"})
+                identical.append(bool(np.array_equal(with_h, without)))
+        return orig_sc(test, ev, cfg, *a, **kw)
+    monkeypatch.setattr(mod, "score_cell", spy_sc)
+    monkeypatch.setattr(mod, "mean_rank", lambda t, v: t.assign(mean_rank=t["cell"].astype(float) + 1.0)
+                        .sort_values("mean_rank").reset_index(drop=True))   # cell 0 (switch, no merge) wins
+    out = tmp_path / "sel"
+    r = mod.run_selection(sim_dir, seeds, out, grid=grid, base=base)
+    assert r["best_cell"] == grid[0]
+    folds = {9001: [9002, 9003], 9002: [9001, 9003], 9003: [9001, 9002]}
+    fold_calls = [c for c in switch_calls if len(c[0]) == 2]
+    assert [c[0] for c in fold_calls[:3]] == [folds[h] for h in (9001, 9002, 9003)]   # once per fold, train matches
+    assert len([c for c in switch_calls[:6] if len(c[0]) == 2]) == 3                 # ... and only once
+    assert all(len(c[0]) == 1 for c in switch_calls[:6] if len(c[0]) != 2)            # merge inner split: 1 match
+    assert all(SEALED_MATCH not in c[0] and c[1] == "no_team" for c in switch_calls)
+    assert identical and all(identical)                                               # w_switch 0: hazard unused
+    assert {(0.0, "touch"), (2.0, "hazard")} <= set(scored)
+    assert (out / "switch_model.joblib").exists()
+    reg = json.loads((out / "registration.json").read_text())
+    assert reg["use_switch"] is True and reg["switch_policy"] == "no_team"
+    cfg, dead, lengths = mod.load_candidate_artifacts(out)
+    assert cfg.use_switch and cfg.switch_policy == "no_team" and cfg.decoder.w_switch == 2.0 and cfg.post.snap_mode == "hazard"
+    sw = mod.load_switch_model(out, cfg)
+    assert isinstance(sw, SwitchModel) and sw.policy == "no_team" and not sw.with_teamctrl
+    df = pd.read_csv(out / "fold_9001.csv")
+    assert {"w_switch", "snap_mode"} <= set(df.columns) and {"w_switch", "snap_mode"} <= set(mod.GRID_PARAM_COLS)
+    fp = mod.run_fingerprint(seeds, grid, "custom")
+    for col, val in (("w_switch", 0.0), ("snap_mode", "touch")):
+        bad = df.copy(); bad.loc[0, col] = val
+        with pytest.raises(SystemExit, match="different grid"):
+            mod.check_resume(dict(fp), bad, grid, fp, tmp_path)
+    # sealed path: loads the registered switch model, never retrains it, feeds it to compute_evidence
+    b = json.loads((out / "best.json").read_text()); b["spec_bar"]["bar_pass"] = True; b["chosen_real_plausible"] = None
+    (out / "best.json").write_text(json.dumps(b))
+    switch_calls.clear()
+    monkeypatch.setattr(sys, "argv", ["select_lomo", "--sim", str(sim_dir), "--seeds", "100", "--sealed", "--best-from", str(out)])
+    mod.main()
+    assert switch_calls == [] and readlog.read_log("sealed")[-1]["match"] == SEALED_MATCH
+    (out / "switch_model.joblib").unlink()
+    with pytest.raises(SystemExit, match="switch_model"):
+        mod.load_switch_model(out, cfg)
+    assert mod.load_switch_model(out, PipelineConfig()) is None    # use_switch off: nothing needed

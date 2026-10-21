@@ -59,6 +59,7 @@ TEAMCTRL_COLS = tuple(n for n in SWITCH_FEATURES if n.startswith("tc_"))
 FEATURE_POLICIES = {
     "full": (),
     "no_touch": tuple(n for n in SWITCH_FEATURES if n.startswith("touch_")),
+    "no_team": TEAMCTRL_COLS,   # no teamctrl margin features: needs no (out-of-fold) teamctrl stream (selection T2b)
 }
 
 
@@ -211,7 +212,8 @@ class SwitchModel:
                 sw = np.where(y == c, sw * (0.5 * sw.sum() / tot), sw)
         self.const_cols = tuple(int(j) for j in np.flatnonzero(np.isnan(X).all(0)))
         tci = [SWITCH_FEATURES.index(n) for n in TEAMCTRL_COLS]
-        self.with_teamctrl = bool(np.isfinite(X[:, tci]).any())
+        self.with_teamctrl = (bool(np.isfinite(X[:, tci]).any())
+                              and not set(TEAMCTRL_COLS) <= set(FEATURE_POLICIES[self.policy]))
         self.model.fit(self._prep(X), y, sample_weight=sw)
         return self
 

@@ -7,7 +7,9 @@ import numpy as np
 import pandas as pd
 
 from mtah.decode.scale import correlation_length, evidence_margin, residual_margin
+from mtah.decode.viterbi import AUX_STREAMS
 from mtah.eval.scorer import score
+from mtah.evidence import switch as switch_mod
 from mtah.evidence.dead import DeadModel, dead_features
 from mtah.evidence.team_ctrl import TeamCtrlModel, team_features
 from mtah.pipeline import compute_evidence, predict
@@ -24,16 +26,21 @@ GRID2 = [{"tau_HA": a, "tau_D": d, "w_dead": w, "w_pathcrf": c, "dead_policy": p
 GRID3 = [{"tau_HA": 30.0, "tau_D": d, "w_dead": w, "w_pathcrf": c, "dead_policy": pol, "sp_dead_bonus": b, "aba_s": 1.0}
          for d, w, c, pol, b in itertools.product((30.0, 100.0), (2.0, 3.0, 4.0, 6.0), (0.5, 1.0),
                                                   ("full", "no_ball_at_all"), (0.0, 3.0))]
-# grid 4 (Plan 2d T1 + T3): learned team-control stream weight/policy around a3b's cell 52 (tau_D 100, w_pathcrf 1,
-# full dead policy, no set-piece bonus); stickier tau_HA 60 and aba_s 2.0, and the per-spell merge model threshold
-# merge_theta (1.0 = off, 0.7 = merge spells with P(merge) > 0.7; mtah.spells.merge) join the search.
-# Final axes (96 cells): tau_HA {30, 60} x w_teamctrl {0, 1, 2} x w_ball {1.0} x w_dead {3, 4} x team_policy
-# {full, no_touch} x aba_s {1, 2} x merge_theta {1.0, 0.7}. w_ball 0.5 was dropped (T3) to keep the grid at 96 cells.
-# w_teamctrl 0 cells repeat across team_policy (identical labels): kept so the grid is a full product.
+# grid 4 (Plan 2d T1 + T2b + T3): learned team-control stream weight/policy around a3b's cell 52 (tau_D 100,
+# w_pathcrf 1, full dead policy, no set-piece bonus); stickier tau_HA 60, the per-spell merge model threshold
+# merge_theta (1.0 = off, 0.7 = merge spells with P(merge) > 0.7; mtah.spells.merge) and the switch hazard
+# (mtah.evidence.switch; T2b) join the search.
+# FINAL axes (96 cells): tau_HA {30, 60} x w_teamctrl {0, 1, 2} x w_dead {3, 4} x team_policy {full, no_touch}
+# x w_switch {0, 2} x merge_theta {1.0, 0.7}; fixed: tau_D 100, w_pathcrf 1, dead_policy full, sp_dead_bonus 0,
+# w_ball 1.0 (0.5 dropped in T3), aba_s 1.0 (the aba_s {1, 2} axis was replaced by w_switch in T2b).
+# snap_mode is tied to w_switch: "hazard" (boundary snap to the hazard argmax) when w_switch > 0, else "touch".
+# w_teamctrl 0 cells repeat across team_policy (identical labels when merge is off): kept so the grid is a full
+# product.
 GRID4 = [{"tau_HA": a, "tau_D": 100.0, "w_dead": w, "w_pathcrf": 1.0, "dead_policy": "full", "sp_dead_bonus": 0.0,
-          "w_teamctrl": t, "w_ball": b, "team_policy": tp, "aba_s": m, "merge_theta": q}
-         for a, t, b, w, tp, m, q in itertools.product((30.0, 60.0), (0.0, 1.0, 2.0), (1.0,), (3.0, 4.0),
-                                                       ("full", "no_touch"), (1.0, 2.0), (1.0, 0.7))]
+          "w_teamctrl": t, "w_ball": 1.0, "team_policy": tp, "aba_s": 1.0, "w_switch": s,
+          "snap_mode": "hazard" if s > 0 else "touch", "merge_theta": q}
+         for a, t, w, tp, s, q in itertools.product((30.0, 60.0), (0.0, 1.0, 2.0), (3.0, 4.0), ("full", "no_touch"),
+                                                    (0.0, 2.0), (1.0, 0.7))]
 GRIDS = {"grid1": GRID, "grid2": GRID2, "grid3": GRID3, "grid4": GRID4}
 
 # label-free real-match plausibility: non-blackout D share of the prediction must lie in this band
@@ -59,11 +66,22 @@ def apply_cell(cfg, cell):
     cfg.team_policy = cell.get("team_policy", cfg.team_policy)
     if "merge_theta" in cell:
         cfg.post.merge_theta = float(cell["merge_theta"])
+    if "w_switch" in cell:
+        cfg.decoder.w_switch = float(cell["w_switch"])   # weight only; use_switch is the caller's (base config)
+    if "snap_mode" in cell:
+        cfg.post.snap_mode = cell["snap_mode"]
     return cfg
 
 
+def uses_switch(cell):
+    """The cell reads the switch hazard: per-frame tau_HA (w_switch > 0) or hazard boundary snapping."""
+    return float(cell.get("w_switch", 0.0)) > 0 or cell.get("snap_mode", "touch") == "hazard"
+
+
 def evidence_key(cell):
-    """Evidence depends on a cell only through (dead_policy, sp_dead_bonus, team_policy)."""
+    """Evidence depends on a cell only through (dead_policy, sp_dead_bonus, team_policy). The switch hazard (when
+    the base config has use_switch) is the same for every key: the selection's switch model is trained without the
+    teamctrl margin features (SWITCH_POLICY), so it does not depend on the dead or team policy."""
     return (cell.get("dead_policy", "full"), float(cell.get("sp_dead_bonus", 0.0)), cell.get("team_policy", "full"))
 
 
@@ -82,6 +100,20 @@ def train_team_ctrl(sims, variant="ctrl_Dfull", policy="full", stride=5, touch_p
         idx = np.flatnonzero(np.isin(t, ("H", "A")) & s.match.ball_present)[::stride]
         Xs.append(team_features(s.match, touch_params)[idx]); ys.append((t[idx] == "H").astype(int))
     return TeamCtrlModel(policy=policy).fit(np.concatenate(Xs), np.concatenate(ys))
+
+
+# Switch-hazard feature policy used by the selection. "no_team": trained WITHOUT the teamctrl margin features, so no
+# out-of-fold teamctrl streams (an inner split like the merge model's) are needed and the hazard does not depend on
+# the cell's team_policy. A richer variant ("full" with out-of-fold team_streams) can be added later under its own
+# policy name; PipelineConfig.switch_policy / the registration's switch_policy record which one was used.
+SWITCH_POLICY = "no_team"
+
+
+def train_switch(sims, variant="ctrl_Dfull", policy=SWITCH_POLICY, touch_params=None, team_streams=None):
+    """SwitchModel (mtah.evidence.switch.train_switch) on the labelled frames of `sims`. `team_streams` (one (F, 3)
+    teamctrl evidence per sim) must be out-of-sample when given; the selection passes None (SWITCH_POLICY)."""
+    return switch_mod.train_switch(sims, variant=variant, policy=policy, touch_params=touch_params,
+                                   team_streams=team_streams)
 
 
 LENGTHS_MODE = "unit"   # "unit": L_k = 1 for every stream (the tau grid absorbs the scale);
@@ -119,11 +151,14 @@ def estimate_lengths(train_sims, cfg, train_fn, mode=None):
         inner = [s for s in train_sims if match_id(s.key) != mids[-1]]
         held = [s for s in train_sims if match_id(s.key) == mids[-1]]
     dead_model = train_fn(inner)
+    cfg = copy.deepcopy(cfg); cfg.use_teamctrl = False; cfg.use_switch = False   # no team/switch models here
     acc = {}
     for s in held:
         ev = compute_evidence(s.match, s.tags, cfg, dead_model, cache_key=f"{s.key}_s{s.seed}")
         truth = s.truth["ctrl_Dfull"]
         for k, e in ev.items():
+            if k in AUX_STREAMS:
+                continue   # the switch hazard is not an evidence stream
             if k == "dead":
                 res = residual_margin(e[:, 2] - e[:, 0], np.where(truth == "D", "D", "N"), ("D", "N"))
             else:
@@ -214,11 +249,12 @@ def merge_ref_cells(grid, k=MERGE_REF_CELLS):
 
 
 def merge_training_table(train_sims, base, ref_cells, lengths, train_dead_fn=None, train_team_fn=None,
-                         max_rows=MERGE_MAX_ROWS_PER_HALF):
+                         max_rows=MERGE_MAX_ROWS_PER_HALF, train_switch_fn=None):
     """Spell tables + merge labels on honest (out-of-sample) predictions.
 
     Inner split as in estimate_lengths: the stream models (dead per dead_policy; teamctrl per team_policy when
-    base.use_teamctrl) are trained on all train matches except the last one (by match_id), and the reference cells
+    base.use_teamctrl; the switch hazard model when base.use_switch) are trained on all train matches except the
+    last one (by match_id), and the reference cells
     are decoded (pre-merge) on that held-out match's halves (all seeds). Only the fold's TRAIN matches are touched.
     Returns (DataFrame of mergeable spells with label column "y", info dict incl. label/total seconds)."""
     import time
@@ -226,6 +262,7 @@ def merge_training_table(train_sims, base, ref_cells, lengths, train_dead_fn=Non
     from mtah.spells.merge import match_spell_table, merge_labels
     train_dead_fn = train_dead_fn or train_dead
     train_team_fn = train_team_fn or train_team_ctrl
+    train_switch_fn = train_switch_fn or train_switch
     t0 = time.time()
     mids = sorted({match_id(s.key) for s in train_sims})
     if len(mids) < 2:
@@ -237,6 +274,8 @@ def merge_training_table(train_sims, base, ref_cells, lengths, train_dead_fn=Non
     keys = sorted({evidence_key(c) for c in ref_cells})
     dead = {p: train_dead_fn(inner, policy=p) for p in sorted({k[0] for k in keys})}
     team = {p: train_team_fn(inner, policy=p) for p in sorted({k[2] for k in keys})} if base.use_teamctrl else {}
+    switch = (train_switch_fn(inner, policy=base.switch_policy, touch_params=base.touch)
+              if base.use_switch else None)
     cfgs = {}
     for c in ref_cells:
         k = evidence_key(c)
@@ -246,7 +285,7 @@ def merge_training_table(train_sims, base, ref_cells, lengths, train_dead_fn=Non
     for s in held:
         strong = compute_strong(s.match, next(iter(cfgs.values())))
         evs = {k: compute_evidence(s.match, s.tags, cfg, dead[k[0]], cache_key=f"{s.key}_s{s.seed}",
-                                   team_model=team.get(k[2])) for k, cfg in cfgs.items()}
+                                   team_model=team.get(k[2]), switch_model=switch) for k, cfg in cfgs.items()}
         for ci, c in enumerate(ref_cells):
             cfg = apply_cell(base, {**c, "merge_theta": 1.0}); cfg.decoder.lengths = lengths
             ev = evs[evidence_key(c)]
@@ -264,13 +303,14 @@ def merge_training_table(train_sims, base, ref_cells, lengths, train_dead_fn=Non
     return df, info
 
 
-def train_merge_model(train_sims, base, grid, lengths, train_dead_fn=None, train_team_fn=None):
+def train_merge_model(train_sims, base, grid, lengths, train_dead_fn=None, train_team_fn=None, train_switch_fn=None):
     """MergeModel for one fold (None when no grid cell has merge_theta < 1); model.info carries the training stats."""
     from mtah.spells.merge import MergeModel
     refs = merge_ref_cells(grid)
     if not refs:
         return None
-    df, info = merge_training_table(train_sims, base, refs, lengths, train_dead_fn, train_team_fn)
+    df, info = merge_training_table(train_sims, base, refs, lengths, train_dead_fn, train_team_fn,
+                                    train_switch_fn=train_switch_fn)
     m = MergeModel().fit(df, df["y"].to_numpy(float) if len(df) else np.zeros(0))
     m.info.update(info)
     print(f"merge model: {json.dumps(m.info)}", flush=True)

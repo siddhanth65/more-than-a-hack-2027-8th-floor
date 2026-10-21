@@ -53,7 +53,8 @@ def test_features_shape_nan_rows_and_teamctrl_columns():
     Xt = switch_features(m, ts)
     assert Xt[100, FI["tc_d_margin_0.25s"]] > 3.0 and Xt[50, FI["tc_d_margin_0.25s"]] == 0.0
     assert np.isnan(Xt[220]).all()
-    assert all(n.startswith("touch_") for n in FEATURE_POLICIES["no_touch"]) and set(FEATURE_POLICIES) == {"full", "no_touch"}
+    assert all(n.startswith("touch_") for n in FEATURE_POLICIES["no_touch"]) and set(FEATURE_POLICIES) == {"full", "no_touch", "no_team"}
+    assert FEATURE_POLICIES["no_team"] == TEAMCTRL_COLS
 
 
 def test_features_are_team_swap_invariant():
@@ -78,6 +79,11 @@ def test_model_learns_saves_and_loads(tmp_path):
     assert m2.policy == "full" and np.array_equal(m2.predict_hazard(X), h, equal_nan=True)
     m3 = SwitchModel(policy="no_touch").fit(X, y); m3.save(path)
     assert SwitchModel.load(path).policy == "no_touch"
+    # "no_team" (the selection's policy): teamctrl columns dropped, so the model never requires the stream
+    Xt = X.copy(); Xt[:, [FI[n] for n in TEAMCTRL_COLS]] = np.where(np.isnan(X[:, :1]), np.nan, 0.5)
+    assert SwitchModel(policy="full").fit(Xt, y).with_teamctrl
+    m4 = SwitchModel(policy="no_team").fit(Xt, y)
+    assert not m4.with_teamctrl and np.array_equal(m4.predict_hazard(Xt), m4.predict_hazard(X), equal_nan=True)
     with pytest.raises(KeyError):
         SwitchModel(policy="bogus")
 

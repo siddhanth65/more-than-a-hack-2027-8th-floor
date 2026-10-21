@@ -199,12 +199,16 @@ def test_grid4_axes_and_apply_cell_sets_team_fields():
     from mtah.select import GRID4, GRIDS
     assert len(GRID4) == 96 and GRIDS["grid4"] is GRID4
     keys = {"tau_HA", "tau_D", "w_dead", "w_pathcrf", "dead_policy", "sp_dead_bonus", "w_teamctrl", "w_ball",
-            "team_policy", "aba_s", "merge_theta"}
+            "team_policy", "aba_s", "merge_theta", "w_switch", "snap_mode"}
     assert all(set(c) == keys for c in GRID4)
     assert {c["tau_HA"] for c in GRID4} == {30.0, 60.0} and {c["w_teamctrl"] for c in GRID4} == {0.0, 1.0, 2.0}
     assert {c["w_ball"] for c in GRID4} == {1.0} and {c["w_dead"] for c in GRID4} == {3.0, 4.0}
     assert {c["merge_theta"] for c in GRID4} == {1.0, 0.7} and GRID4[0]["merge_theta"] == 1.0
-    assert {c["team_policy"] for c in GRID4} == {"full", "no_touch"} and {c["aba_s"] for c in GRID4} == {1.0, 2.0}
+    assert {c["team_policy"] for c in GRID4} == {"full", "no_touch"} and {c["aba_s"] for c in GRID4} == {1.0}
+    # T2b: the aba_s axis became w_switch {0, 2}; snap_mode is tied to it (hazard iff w_switch > 0)
+    assert {c["w_switch"] for c in GRID4} == {0.0, 2.0} and GRID4[0]["w_switch"] == 0.0
+    assert all(c["snap_mode"] == ("hazard" if c["w_switch"] > 0 else "touch") for c in GRID4)
+    assert sum(c["w_switch"] > 0 for c in GRID4) == 48
     assert {c["w_pathcrf"] for c in GRID4} == {1.0} and {c["tau_D"] for c in GRID4} == {100.0}
     assert {c["dead_policy"] for c in GRID4} == {"full"} and {c["sp_dead_bonus"] for c in GRID4} == {0.0}
     assert len({tuple(sorted(c.items())) for c in GRID4}) == 96
@@ -212,17 +216,23 @@ def test_grid4_axes_and_apply_cell_sets_team_fields():
     assert any(c["tau_HA"] == 30.0 and c["w_dead"] == 4.0 and c["w_teamctrl"] == 0.0 and c["w_ball"] == 1.0
                and c["aba_s"] == 1.0 and c["merge_theta"] == 1.0 for c in GRID4)
     cell = next(c for c in GRID4 if c["w_teamctrl"] == 2.0 and c["team_policy"] == "no_touch" and c["merge_theta"] == 0.7
-                and c["aba_s"] == 2.0 and c["tau_HA"] == 60.0)
+                and c["w_switch"] == 2.0 and c["tau_HA"] == 60.0)
     base = PipelineConfig()
     cfg = apply_cell(base, cell)
     assert cfg.post.merge_theta == 0.7 and base.post.merge_theta == 1.0
     assert apply_cell(base, {**cell, "merge_theta": 1.0}).post.merge_theta == 1.0
     assert cfg.decoder.weights["teamctrl"] == 2.0 and cfg.decoder.weights["ball"] == 1.0 and cfg.team_policy == "no_touch"
-    assert cfg.post.aba_s == 2.0 and cfg.decoder.tau_HA == 60.0 and cfg.decoder.tau_HD == cfg.decoder.tau_DH == 100.0
+    assert cfg.post.aba_s == 1.0 and cfg.decoder.tau_HA == 60.0 and cfg.decoder.tau_HD == cfg.decoder.tau_DH == 100.0
+    assert cfg.decoder.w_switch == 2.0 and cfg.post.snap_mode == "hazard"
     assert cfg.use_teamctrl is False      # the stream switch belongs to the base config (select_lomo.base_for_grid)
+    assert cfg.use_switch is False        # likewise use_switch
     assert base.decoder.weights["ball"] == 1.0 and base.team_policy == "full"   # base untouched
+    assert base.decoder.w_switch == 0.0 and base.post.snap_mode == "touch"
+    off = apply_cell(base, {**cell, "w_switch": 0.0, "snap_mode": "touch"})
+    assert off.decoder.w_switch == 0.0 and off.post.snap_mode == "touch"
     old = apply_cell(base, GRID[0])
     assert old.post.merge_theta == 1.0
+    assert old.decoder.w_switch == 0.0 and old.post.snap_mode == "touch"   # cells without the keys: defaults
     assert old.decoder.weights["ball"] == 1.0 and old.team_policy == "full" and old.decoder.weights["teamctrl"] == 1.0
 
 
@@ -234,3 +244,10 @@ def test_merge_ref_cells_spread_and_strip_theta():
     assert len({tuple(sorted(c.items())) for c in refs}) == 4
     assert {c["tau_HA"] for c in refs} == {30.0, 60.0}
     assert merge_ref_cells(GRID4, k=1) == [{**merge_cells(GRID4)[0], "merge_theta": 1.0}]
+    assert {c["w_switch"] for c in refs} == {0.0, 2.0}   # merge training must then decode with a switch hazard
+
+
+def test_uses_switch():
+    from mtah.select import uses_switch
+    assert not uses_switch({}) and not uses_switch({"w_switch": 0.0, "snap_mode": "touch"})
+    assert uses_switch({"w_switch": 2.0}) and uses_switch({"w_switch": 0.0, "snap_mode": "hazard"})
