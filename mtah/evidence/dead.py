@@ -137,20 +137,143 @@ def dead_features(match, tags, fps=None):
     return X
 
 
+# ---- long-context, ball-independent player-motion features (Plan 2e T1) ----
+# Computed from players only (match.pos / match.speed / match.team), per half (half_runs; the whole match when no
+# half is graded; frames outside every half stay NaN). Per-frame quantities are NaN when fewer than
+# LONG_MIN_PLAYERS players are visible (n_visible excepted: it is the raw count); each is then averaged over a
+# centred window of +-w s (NaN frames ignored; NaN when the window holds no valid frame), clipped at the half edges.
+LONG_WINDOWS_S = (2, 5, 10)
+LONG_MIN_PLAYERS = 6
+LONG_SLOW_MPS = 1.0
+LONG_BASE = ("lc_speed",          # mean player speed (m/s)
+             "lc_slow_share",     # share of visible players slower than LONG_SLOW_MPS
+             "lc_accel",          # mean |speed change| (m/s^2) over players tracked on both frames
+             "lc_team_spread",    # mean over teams (>= 2 visible players) of (std x + std y) / 2
+             "lc_centroid_dist",  # distance between the two team centroids
+             "lc_compactness",    # mean distance of the visible players to their own team centroid
+             "lc_n_visible")      # number of visible players
+# Column order: window-major (all LONG_BASE at +-2 s, then +-5 s, then +-10 s), then the two onset trends
+# (+-2 s value minus +-10 s value) for mean speed and slow share.
+LONG_FEATURES = (tuple(f"{n}_{w}s" for w in LONG_WINDOWS_S for n in LONG_BASE)
+                 + ("lc_speed_trend", "lc_slow_trend"))
+
+_NO_BALL_AT_ALL = ("ball_speed", "ball_line_dist", "ball_out", "ball_static_1s", "ball_present",
+                   "entry_line_dist", "entry_outward")
 FEATURE_POLICIES = {
     "full": (),
     "no_ball_cues": ("ball_speed", "ball_line_dist", "ball_out", "ball_static_1s"),
-    "no_ball_at_all": ("ball_speed", "ball_line_dist", "ball_out", "ball_static_1s", "ball_present",
-                       "entry_line_dist", "entry_outward"),
+    "no_ball_at_all": _NO_BALL_AT_ALL,
+    "long": (),                       # full + LONG_FEATURES
+    "long_no_ball": _NO_BALL_AT_ALL,  # no_ball_at_all + LONG_FEATURES
 }
+LONG_POLICIES = frozenset({"long", "long_no_ball"})
+
+
+def policy_feature_names(policy):
+    """Column names of the feature table a model with this policy is trained on / predicts from:
+    DEAD_FEATURES for the base policies, DEAD_FEATURES + LONG_FEATURES for LONG_POLICIES."""
+    if policy not in FEATURE_POLICIES:
+        raise KeyError(policy)
+    return DEAD_FEATURES + LONG_FEATURES if policy in LONG_POLICIES else DEAD_FEATURES
 
 
 def apply_policy(X, policy):
-    """Copy of X with the policy's dropped columns set to 0.0 (constant: HGB cannot take all-NaN columns)."""
+    """Copy of X with the policy's dropped columns set to 0.0 (constant: HGB cannot take all-NaN columns).
+    X must be the policy's table (policy_feature_names(policy) columns)."""
+    names = policy_feature_names(policy)
+    if X.shape[1] != len(names):
+        raise ValueError(f"policy {policy!r} expects {len(names)} feature columns, got {X.shape[1]}")
     Y = np.array(X, np.float32, copy=True)
     for n in FEATURE_POLICIES[policy]:
-        Y[:, DEAD_FEATURES.index(n)] = 0.0
+        Y[:, names.index(n)] = 0.0
     return Y
+
+
+def _centred_mean(x, w):
+    """Centred mean over [t - w, t + w] clipped to the array (NaN-aware; NaN when no finite sample)."""
+    x = np.asarray(x, np.float64); n = len(x)
+    f = np.isfinite(x)
+    cv = np.concatenate([[0.0], np.cumsum(np.where(f, x, 0.0))]); cf = np.concatenate([[0], np.cumsum(f)])
+    t = np.arange(n); lo = np.maximum(0, t - w); hi = np.minimum(n, t + w + 1)
+    cnt = cf[hi] - cf[lo]
+    out = np.full(n, np.nan)
+    ok = cnt > 0
+    out[ok] = (cv[hi] - cv[lo])[ok] / cnt[ok]
+    return out
+
+
+def _frame_motion(pos, speed, team, fps):
+    """Per-frame LONG_BASE quantities for one contiguous span: dict name -> (n,) float64."""
+    n = len(pos)
+    pos = pos.astype(np.float64); speed = speed.astype(np.float64)
+    on = np.isfinite(pos[..., 0]) & np.isfinite(pos[..., 1])
+    nvis = on.sum(1)
+    enough = nvis >= LONG_MIN_PLAYERS
+    ok = on & np.isfinite(speed)
+    cnt = ok.sum(1); has = enough & (cnt > 0)
+    sp = np.where(ok, speed, 0.0)
+    out = {k: np.full(n, np.nan) for k in LONG_BASE}
+    out["lc_speed"][has] = sp.sum(1)[has] / cnt[has]
+    out["lc_slow_share"][has] = (ok & (sp < LONG_SLOW_MPS)).sum(1)[has] / cnt[has]
+    if n > 1:
+        okd = ok[1:] & ok[:-1]; cd = okd.sum(1)
+        dsum = np.where(okd, np.abs(sp[1:] - sp[:-1]) * fps, 0.0).sum(1)
+        g = (cd > 0) & enough[1:]
+        a = out["lc_accel"][1:]
+        a[g] = dsum[g] / cd[g]
+    x = np.where(on, pos[..., 0], 0.0); y = np.where(on, pos[..., 1], 0.0)
+    cx = np.full((n, 2), np.nan); cy = np.full((n, 2), np.nan); spread = np.zeros((n, 2)); nk = np.zeros((n, 2), int)
+    dist_sum = np.zeros(n); dist_cnt = np.zeros(n)
+    for k in (0, 1):
+        sel = team == k
+        m = on[:, sel]; c = m.sum(1); nk[:, k] = c
+        xs, ys = x[:, sel], y[:, sel]
+        g = c > 0
+        cx[g, k] = xs[g].sum(1) / c[g]; cy[g, k] = ys[g].sum(1) / c[g]
+        g2 = c >= 2
+        vx = np.maximum(0.0, (xs[g2] ** 2).sum(1) / c[g2] - cx[g2, k] ** 2)
+        vy = np.maximum(0.0, (ys[g2] ** 2).sum(1) / c[g2] - cy[g2, k] ** 2)
+        spread[g2, k] = (np.sqrt(vx) + np.sqrt(vy)) / 2
+        if g.any():
+            d = np.hypot(xs[g] - cx[g, k:k + 1], ys[g] - cy[g, k:k + 1])
+            dist_sum[g] += np.where(m[g], d, 0.0).sum(1); dist_cnt[g] += c[g]
+    nsp = (nk >= 2).sum(1)
+    g = enough & (nsp > 0)
+    out["lc_team_spread"][g] = spread.sum(1)[g] / nsp[g]
+    g = enough & (nk >= 1).all(1)
+    out["lc_centroid_dist"][g] = np.hypot(cx[g, 0] - cx[g, 1], cy[g, 0] - cy[g, 1])
+    g = enough & (dist_cnt > 0)
+    out["lc_compactness"][g] = dist_sum[g] / dist_cnt[g]
+    out["lc_n_visible"] = nvis.astype(np.float64)
+    return out
+
+
+def long_features(match, fps=None):
+    """(F, len(LONG_FEATURES)) float32 long-context player-motion table (see LONG_FEATURES for the column order)."""
+    fps = fps or match.fps; F = match.n_frames
+    X = np.full((F, len(LONG_FEATURES)), np.nan, np.float32)
+    spans = [(a, b) for _, a, b in half_runs(match.half)] or [(0, F)]
+    col = {n: i for i, n in enumerate(LONG_FEATURES)}
+    lo, hi = LONG_WINDOWS_S[0], LONG_WINDOWS_S[-1]
+    for a, b in spans:
+        q = _frame_motion(match.pos[a:b], match.speed[a:b], np.asarray(match.team), fps)
+        for w in LONG_WINDOWS_S:
+            hw = int(round(w * fps))
+            for name in LONG_BASE:
+                X[a:b, col[f"{name}_{w}s"]] = _centred_mean(q[name], hw)
+        X[a:b, col["lc_speed_trend"]] = X[a:b, col[f"lc_speed_{lo}s"]] - X[a:b, col[f"lc_speed_{hi}s"]]
+        X[a:b, col["lc_slow_trend"]] = X[a:b, col[f"lc_slow_share_{lo}s"]] - X[a:b, col[f"lc_slow_share_{hi}s"]]
+    return X
+
+
+def dead_features_long(match, tags, fps=None):
+    """(F, len(DEAD_FEATURES) + len(LONG_FEATURES)) float32: the base table, then the long-context columns."""
+    return np.hstack([dead_features(match, tags, fps), long_features(match, fps)])
+
+
+def dead_table(match, tags, policy, fps=None):
+    """The feature table a dead model with `policy` reads: dead_features_long for LONG_POLICIES, else dead_features."""
+    return dead_features_long(match, tags, fps) if policy in LONG_POLICIES else dead_features(match, tags, fps)
 
 
 class DeadModel:
@@ -158,8 +281,13 @@ class DeadModel:
         if policy not in FEATURE_POLICIES:
             raise KeyError(policy)
         self.policy = policy
+        self.feature_names = policy_feature_names(policy)   # the table it reads: dead_table(match, tags, policy)
         self.model = HistGradientBoostingClassifier(max_iter=300, max_leaf_nodes=31, learning_rate=0.1,
                                                     min_samples_leaf=200, random_state=0, early_stopping=False)
+
+    def features(self, match, tags):
+        """The feature table this model reads (base or base + long, by policy)."""
+        return dead_table(match, tags, self.policy)
 
     def fit(self, X, y, sample_weight=None):
         self.model.fit(apply_policy(X, self.policy), y, sample_weight=sample_weight); return self

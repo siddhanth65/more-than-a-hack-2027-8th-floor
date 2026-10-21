@@ -155,3 +155,138 @@ def test_load_old_model_file_defaults_to_full(tmp_path):
     m = DeadModel().fit(X, (X[:, 0] > 0).astype(int))
     joblib.dump(m.model, tmp_path / "old.joblib")           # old format: bare sklearn model
     assert DeadModel.load(tmp_path / "old.joblib").policy == "full"
+
+
+# ---- Plan 2e T1: long-context player-motion features and the long / long_no_ball policies ----
+from mtah.evidence.dead import (FEATURE_POLICIES, LONG_FEATURES, LONG_POLICIES, apply_policy,  # noqa: E402
+                                dead_features_long, dead_table, long_features, policy_feature_names)
+
+LI = {n: i for i, n in enumerate(LONG_FEATURES)}
+
+
+def _move_then_stand(F=1000, stop=500, P=12, v=3.0):
+    """P players (6 per team) running along x at v m/s until `stop`, then standing still."""
+    pos = np.zeros((F, P, 2)); pos[:, :, 1] = np.linspace(-25, 25, P)
+    pos[:, :6, 0] = -20.0; pos[:, 6:, 0] = 5.0
+    t = np.minimum(np.arange(F), stop) / 25.0
+    pos[:, :, 0] += (v * t)[:, None]
+    return make_match(pos, [0] * 6 + [1] * 6)
+
+
+def test_long_feature_names_and_shape():
+    assert len(LONG_FEATURES) == 7 * 3 + 2 and len(set(LONG_FEATURES)) == len(LONG_FEATURES)
+    assert LONG_FEATURES[:7] == tuple(f"{n}_2s" for n in ("lc_speed", "lc_slow_share", "lc_accel", "lc_team_spread",
+                                                          "lc_centroid_dist", "lc_compactness", "lc_n_visible"))
+    assert LONG_FEATURES[-2:] == ("lc_speed_trend", "lc_slow_trend")
+    m = _move_then_stand()
+    L = long_features(m)
+    assert L.shape == (m.n_frames, len(LONG_FEATURES)) and L.dtype == np.float32
+    X = dead_features_long(m, NO_TAGS)
+    assert X.shape == (m.n_frames, len(DEAD_FEATURES) + len(LONG_FEATURES))
+    np.testing.assert_array_equal(X[:, :len(DEAD_FEATURES)], dead_features(m, NO_TAGS))
+    np.testing.assert_array_equal(X[:, len(DEAD_FEATURES):], L)
+
+
+def test_long_features_stoppage_onset():
+    m = _move_then_stand(F=1000, stop=500)
+    L = long_features(m)
+    sp, slow = L[:, LI["lc_speed_2s"]], L[:, LI["lc_slow_share_2s"]]
+    assert sp[200] == pytest.approx(3.0, abs=0.05) and slow[200] == 0
+    assert sp[800] == pytest.approx(0.0, abs=1e-6) and slow[800] == 1
+    assert slow[800] > slow[200]
+    k = 500 + 40                                       # 1.6 s after the stop
+    assert L[k, LI["lc_speed_trend"]] < -0.5 and L[k, LI["lc_slow_trend"]] > 0.2
+    assert L[200, LI["lc_speed_trend"]] == pytest.approx(0.0, abs=1e-5)
+    assert L[200, LI["lc_n_visible_10s"]] == 12
+    assert L[200, LI["lc_centroid_dist_5s"]] == pytest.approx(np.hypot(25.0, 2 * (25 - 2.5 * 50 / 11)), abs=1e-3)
+    assert L[200, LI["lc_accel_2s"]] == pytest.approx(0.0, abs=0.5)
+
+
+def test_long_features_nan_below_six_players_and_per_half():
+    m = _move_then_stand(F=1000, stop=1000)
+    m.pos[290:810, 5:] = np.nan; m.speed[290:810, 5:] = np.nan    # 5 visible players for 20.8 s
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", RuntimeWarning)
+        L = long_features(m)
+    for n in ("lc_speed", "lc_slow_share", "lc_accel", "lc_team_spread", "lc_centroid_dist", "lc_compactness"):
+        assert np.isnan(L[550, LI[f"{n}_10s"]]), n
+        assert np.isfinite(L[200, LI[f"{n}_10s"]]), n
+    assert L[550, LI["lc_n_visible_10s"]] == 5
+    assert np.isfinite(L[310, LI["lc_speed_2s"]])      # the window still reaches valid frames before the gap
+    # halves: windows do not cross the half boundary; frames outside every half stay NaN
+    pos = np.zeros((1000, 12, 2)); pos[:, :, 1] = np.linspace(-25, 25, 12); pos[:, 6:, 0] = 10.0
+    pos[:, :, 0] += (3.0 * np.minimum(np.arange(1000), 499) / 25.0)[:, None]      # half 1 moving, half 2 still
+    half = np.r_[np.ones(500), np.full(480, 2), np.zeros(20)].astype(np.int8)
+    L2 = long_features(make_match(pos, [0] * 6 + [1] * 6, half=half))
+    assert L2[501, LI["lc_speed_10s"]] == pytest.approx(0.0, abs=1e-6)
+    assert L2[498, LI["lc_speed_10s"]] == pytest.approx(3.0, abs=0.05)
+    assert np.isnan(L2[990]).all()
+
+
+def test_long_policies_tables_and_apply_policy():
+    assert {"long", "long_no_ball"} <= LONG_POLICIES and set(LONG_POLICIES) <= set(FEATURE_POLICIES)
+    assert FEATURE_POLICIES["long"] == FEATURE_POLICIES["full"]
+    assert FEATURE_POLICIES["long_no_ball"] == FEATURE_POLICIES["no_ball_at_all"]
+    for p in ("full", "no_ball_cues", "no_ball_at_all"):
+        assert policy_feature_names(p) == DEAD_FEATURES
+    for p in LONG_POLICIES:
+        assert policy_feature_names(p) == DEAD_FEATURES + LONG_FEATURES
+    names = DEAD_FEATURES + LONG_FEATURES
+    X = np.ones((5, len(names)), np.float32)
+    Y = apply_policy(X, "long_no_ball")
+    idx = [names.index(n) for n in FEATURE_POLICIES["long_no_ball"]]
+    assert (Y[:, idx] == 0).all() and (np.delete(Y, idx, axis=1) == 1).all()
+    assert np.array_equal(apply_policy(X, "long"), X)
+    with pytest.raises(ValueError):
+        apply_policy(X, "full")                        # base policy on the long table
+    with pytest.raises(ValueError):
+        apply_policy(np.ones((5, len(DEAD_FEATURES)), np.float32), "long")
+    m = _move_then_stand(F=300, stop=150)
+    assert dead_table(m, NO_TAGS, "long").shape[1] == len(names)
+    assert dead_table(m, NO_TAGS, "no_ball_at_all").shape[1] == len(DEAD_FEATURES)
+
+
+def test_long_model_roundtrip(tmp_path):
+    names = DEAD_FEATURES + LONG_FEATURES
+    rng = np.random.default_rng(3)
+    X = rng.normal(size=(600, len(names))).astype(np.float32)
+    y = (X[:, names.index("lc_speed_5s")] > 0).astype(int)
+    m = DeadModel(policy="long_no_ball").fit(X, y)
+    assert m.feature_names == names
+    p = tmp_path / "m.joblib"; m.save(p)
+    m2 = DeadModel.load(p)
+    assert m2.policy == "long_no_ball" and m2.feature_names == names
+    assert np.array_equal(m2.predict_proba(X), m.predict_proba(X))
+    X2 = X.copy(); X2[:, names.index("ball_present")] = 7.0          # dropped column: ignored
+    assert np.array_equal(m2.predict_proba(X2), m.predict_proba(X))
+    mm = _move_then_stand(F=300, stop=150)
+    assert m2.features(mm, NO_TAGS).shape == (300, len(names))
+    assert DeadModel().features(mm, NO_TAGS).shape == (300, len(DEAD_FEATURES))
+
+
+def test_compute_evidence_and_train_dead_pick_the_table_by_policy():
+    from types import SimpleNamespace
+    from mtah.pipeline import PipelineConfig, compute_evidence
+    from mtah.select import train_dead
+    m = _move_then_stand(F=400, stop=200)
+
+    class Stub:
+        def __init__(self, policy):
+            self.policy = policy; self.seen = None
+
+        def predict_proba(self, X):
+            self.seen = X.shape; return np.full(len(X), 0.5, np.float32)
+
+    for pol, width in (("full", len(DEAD_FEATURES)), ("long", len(DEAD_FEATURES) + len(LONG_FEATURES)),
+                       ("long_no_ball", len(DEAD_FEATURES) + len(LONG_FEATURES))):
+        cfg = PipelineConfig(); cfg.dead_policy = pol
+        stub = Stub(pol)
+        ev = compute_evidence(m, NO_TAGS, cfg, stub)
+        assert stub.seen == (400, width) and ev["dead"].shape == (400, 3)
+    truth = np.array(["H"] * 200 + ["D"] * 200)
+    m.ball[:, 0] = np.linspace(-50, 50, 400); m.ball[100:130] = np.nan; m.ball[300:330] = np.nan   # ball gaps:
+    m.ball_speed[:] = 1.0                                                  # no all-NaN entry_* columns for HGB
+    sims = [SimpleNamespace(match=m, tags=NO_TAGS, truth={"ctrl_Dfull": truth})]
+    dm = train_dead(sims, policy="long")
+    assert dm.policy == "long" and len(dm.feature_names) == len(DEAD_FEATURES) + len(LONG_FEATURES)
+    assert dm.predict_proba(dm.features(m, NO_TAGS)).shape == (400,)

@@ -10,7 +10,7 @@ from mtah.decode.scale import correlation_length, evidence_margin, residual_marg
 from mtah.decode.viterbi import AUX_STREAMS
 from mtah.eval.scorer import score
 from mtah.evidence import switch as switch_mod
-from mtah.evidence.dead import DeadModel, dead_features
+from mtah.evidence.dead import DeadModel, dead_table
 from mtah.evidence.team_ctrl import TeamCtrlModel, team_features
 from mtah.pipeline import compute_evidence, predict
 from mtah.sim.dataset import VARIANTS, match_id
@@ -88,7 +88,7 @@ def evidence_key(cell):
 
 
 def train_dead(sims, variant="ctrl_Dfull", policy="full"):
-    X = np.concatenate([dead_features(s.match, s.tags) for s in sims])
+    X = np.concatenate([dead_table(s.match, s.tags, policy) for s in sims])   # base or base+long table by policy
     y = np.concatenate([(s.truth[variant] == "D").astype(int) for s in sims])
     return DeadModel(policy=policy).fit(X, y)
 

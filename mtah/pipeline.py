@@ -4,7 +4,7 @@ from typing import Optional
 
 from mtah.decode.viterbi import DecoderParams, decode
 from mtah.evidence.ball_ctrl import BallCtrlParams, ball_ctrl_evidence
-from mtah.evidence.dead import dead_evidence, dead_features
+from mtah.evidence.dead import dead_evidence, dead_table
 from mtah.evidence.pathcrf import PathCRFParams, pathcrf_evidence, pathcrf_posterior
 from mtah.evidence.tag_prior import TagPriorParams, load_tag_codes, tag_prior_evidence
 from mtah.evidence.switch import hazard_to_tau, switch_evidence, switch_features
@@ -61,7 +61,7 @@ def compute_evidence(match, tags, cfg, dead_model, cache_key=None, team_model=No
     if dead_model is not None:
         if dead_model.policy != cfg.dead_policy:
             raise ValueError(f"dead model policy {dead_model.policy!r} != cfg.dead_policy {cfg.dead_policy!r}")
-        ev["dead"] = dead_evidence(dead_model.predict_proba(dead_features(match, tags)))
+        ev["dead"] = dead_evidence(dead_model.predict_proba(dead_table(match, tags, dead_model.policy)))  # base or base+long
     if cfg.use_pathcrf:
         if cache_key is None:
             raise ValueError("cfg.use_pathcrf needs a cache_key")
