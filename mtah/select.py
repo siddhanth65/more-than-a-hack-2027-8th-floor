@@ -116,6 +116,22 @@ def train_switch(sims, variant="ctrl_Dfull", policy=SWITCH_POLICY, touch_params=
                                    team_streams=team_streams)
 
 
+def label_duplicate_cells(grid):
+    """Indices of cells whose labels equal those of another grid cell: w_teamctrl 0 (stream unweighted) with
+    team_policy != "full" when the same cell with team_policy "full" is in the grid. Not for merge cells (the merge
+    features read the cell's teamctrl stream) nor for switch cells when the selection's switch policy keeps the
+    teamctrl features. real_plausibility drops them before taking the top-k (they would waste real-match slots)."""
+    hazard_reads_team = not set(switch_mod.TEAMCTRL_COLS) <= set(switch_mod.FEATURE_POLICIES[SWITCH_POLICY])
+    keys = {json.dumps(c, sort_keys=True) for c in grid}
+    out = set()
+    for i, c in enumerate(grid):
+        if (float(c.get("w_teamctrl", 0.0)) == 0.0 and c.get("team_policy", "full") != "full"
+                and float(c.get("merge_theta", 1.0)) >= 1.0 and not (hazard_reads_team and uses_switch(c))
+                and json.dumps({**c, "team_policy": "full"}, sort_keys=True) in keys):
+            out.add(i)
+    return out
+
+
 LENGTHS_MODE = "unit"   # "unit": L_k = 1 for every stream (the tau grid absorbs the scale);
                         # "residual": integrated autocorrelation of the errors (pilot 2026-10-20: 164/606/380 -> too sticky)
 EVIDENCE_STREAMS = ("ball", "tag", "dead", "pathcrf")
@@ -273,7 +289,8 @@ def merge_training_table(train_sims, base, ref_cells, lengths, train_dead_fn=Non
         held = [s for s in train_sims if match_id(s.key) == mids[-1]]
     keys = sorted({evidence_key(c) for c in ref_cells})
     dead = {p: train_dead_fn(inner, policy=p) for p in sorted({k[0] for k in keys})}
-    team = {p: train_team_fn(inner, policy=p) for p in sorted({k[2] for k in keys})} if base.use_teamctrl else {}
+    team = ({p: train_team_fn(inner, policy=p, touch_params=base.touch) for p in sorted({k[2] for k in keys})}
+            if base.use_teamctrl else {})
     switch = (train_switch_fn(inner, policy=base.switch_policy, touch_params=base.touch)
               if base.use_switch else None)
     cfgs = {}

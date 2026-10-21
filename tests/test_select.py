@@ -251,3 +251,14 @@ def test_uses_switch():
     from mtah.select import uses_switch
     assert not uses_switch({}) and not uses_switch({"w_switch": 0.0, "snap_mode": "touch"})
     assert uses_switch({"w_switch": 2.0}) and uses_switch({"w_switch": 0.0, "snap_mode": "hazard"})
+
+
+def test_label_duplicate_cells_grid4():
+    from mtah.select import GRID4, label_duplicate_cells
+    dup = label_duplicate_cells(GRID4)
+    assert len(dup) == 8   # w_teamctrl 0 x no_touch x no merge: 2 tau_HA x 2 w_dead x 2 w_switch
+    for i in dup:
+        c = GRID4[i]
+        assert c["w_teamctrl"] == 0.0 and c["team_policy"] == "no_touch" and c["merge_theta"] == 1.0
+        assert {**c, "team_policy": "full"} in GRID4
+    assert label_duplicate_cells([{"tau_HA": 1.0, "w_teamctrl": 0.0, "team_policy": "no_touch"}]) == set()

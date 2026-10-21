@@ -88,7 +88,11 @@ def test_compute_evidence_teamctrl_gating_and_policy_mismatch():
     cfg = PipelineConfig()
     assert "teamctrl" not in compute_evidence(m, TAGS0, cfg, None, team_model=team)      # use_teamctrl False
     cfg.use_teamctrl = True
-    assert "teamctrl" not in compute_evidence(m, TAGS0, cfg, None)                       # no model
+    with pytest.raises(ValueError, match="team_model"):
+        compute_evidence(m, TAGS0, cfg, None)                                            # weighted stream, no model
+    cfg.decoder.weights["teamctrl"] = 0.0
+    assert "teamctrl" not in compute_evidence(m, TAGS0, cfg, None)                       # weight 0, no model: absent
+    cfg.decoder.weights["teamctrl"] = 1.0
     ev = compute_evidence(m, TAGS0, cfg, None, team_model=team)["teamctrl"]
     assert ev.shape == (300, 3) and ev.dtype == np.float32
     assert np.isnan(ev[250:]).all() and np.isnan(ev[:, 2]).all() and np.isfinite(ev[5:240, :2]).all()

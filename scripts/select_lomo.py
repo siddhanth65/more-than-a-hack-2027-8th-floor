@@ -113,7 +113,8 @@ def policy_cfgs(base, cells, lengths):
 
 def train_team_models(train, base, policies):
     """{team_policy: TeamCtrlModel} trained on `train` when base.use_teamctrl, else {} (no stream, no training)."""
-    return {p: train_team_ctrl(train, policy=p) for p in sorted(set(policies))} if base.use_teamctrl else {}
+    return ({p: train_team_ctrl(train, policy=p, touch_params=base.touch) for p in sorted(set(policies))}
+            if base.use_teamctrl else {})
 
 
 BASELINES = {"smooth50": lambda m: baselines.smooth_vote(m, 50), "b4": baselines.b4_blackout_dead}
@@ -144,7 +145,7 @@ def out_of_sample_drift_reference(sim_dir, seeds, keys, base, best_cell, lengths
         cfg = apply_cell(base, best_cell); cfg.decoder.lengths = lengths
         team = team_by_fold.get(held, {}).get(tpol)
         if team is None and cfg.use_teamctrl and cfg.decoder.weights.get("teamctrl", 1.0) > 0:
-            team = train_team_ctrl(train, policy=tpol)   # resumed fold: retrain (deterministic HGB)
+            team = train_team_ctrl(train, policy=tpol, touch_params=base.touch)   # resumed fold: retrain (deterministic HGB)
         merge = merge_by_fold.get(held)
         if merge is None and uses_merge(best_cell):
             merge = train_merge(train, base, grid if grid is not None else [best_cell], lengths)
@@ -192,7 +193,8 @@ def compute_bar(allf, halves, best, best_i):
 
 
 def real_plausibility(sim_dir, seeds, keys, base, grid, ranked, data_dir, out, top_k=REAL_TOP_K, shared=None):
-    """Decode the top-k cells (by mean rank) on the real match; label-free drift metrics per cell.
+    """Decode the top-k cells (by mean rank; label-identical duplicates, select.label_duplicate_cells, skipped) on the
+    real match; label-free drift metrics per cell.
 
     Dead models (one per needed policy) and lengths come from ALL non-sealed sim halves, as in the sealed/candidate
     path (team-control models likewise, one per needed team_policy, when base.use_teamctrl; the switch model when
@@ -201,7 +203,8 @@ def real_plausibility(sim_dir, seeds, keys, base, grid, ranked, data_dir, out, t
     Plausible = D-share band AND spell-rate band (both recorded); tag_agreement_implied is reported, not gated.
     If `shared` is a dict it receives {"lengths", "dead", "team", "merge", "switch"} so registration reuses them. Writes
     summary_real.csv; returns {cell index: {metric: value, "d_share_ok", "spell_rate_ok", "real_plausible", ...}}."""
-    top = [int(c) for c in ranked["cell"].head(top_k)]
+    dup = sel.label_duplicate_cells(grid)   # label-identical repeats (w_teamctrl 0 across team_policy): one real slot each
+    top = [int(c) for c in ranked["cell"] if int(c) not in dup][:top_k]
     train = load_sims(sim_dir, seeds, keys)
     lengths = estimate_lengths(train, base, train_dead)
     cfgs = policy_cfgs(base, [grid[i] for i in top], lengths)
@@ -244,19 +247,20 @@ def write_candidate_artifacts(out, base, best_cell, lengths, dead, team=None, me
     """config.json (selected PipelineConfig + lengths), dead_model.joblib (chosen policy, all non-sealed keys) and,
     when the chosen config uses the teamctrl stream, team_model.joblib, when it has merge_theta < 1,
     merge_model.joblib, and when it uses the switch hazard (use_switch), switch_model.joblib next to it: the
-    artefacts used by make_candidate.py AND the sealed read."""
+    artefacts used by make_candidate.py AND the sealed read. An unused model file left in `out` is deleted."""
     cfg = apply_cell(base, best_cell); cfg.decoder.lengths = lengths
     if cfg.post.merge_theta < 1.0 and merge is None:
         raise ValueError("chosen cell has merge_theta < 1 but no merge model was given")
     if cfg.use_switch and switch is None:
         raise ValueError("chosen config uses the switch hazard but no switch model was given")
     dead.save(out / "dead_model.joblib")
-    if team is not None:
-        team.save(out / TEAM_MODEL_FILE)
-    if merge is not None and cfg.post.merge_theta < 1.0:
-        merge.save(out / MERGE_MODEL_FILE)
-    if switch is not None and cfg.use_switch:
-        switch.save(out / SWITCH_MODEL_FILE)
+    written = {TEAM_MODEL_FILE: team, MERGE_MODEL_FILE: merge if cfg.post.merge_theta < 1.0 else None,
+               SWITCH_MODEL_FILE: switch if cfg.use_switch else None}
+    for name, model in written.items():
+        if model is not None:
+            model.save(out / name)
+        elif (out / name).exists():
+            (out / name).unlink()   # stale artefact of an earlier registration in this dir: never left behind
     (out / "config.json").write_text(json.dumps({**cfg.to_dict(), "lengths": lengths}, indent=1))
 
 
@@ -447,7 +451,7 @@ def run_grid(sim_dir, seeds, keys, base, out, grid, real_data_dir=None, grid_nam
     else:
         c_train = load_sims(sim_dir, seeds, keys)
         c_lengths = estimate_lengths(c_train, cbase, train_dead); c_dead = train_dead(c_train, policy=policy)
-        c_team = train_team_ctrl(c_train, policy=tpol) if need_team else None
+        c_team = train_team_ctrl(c_train, policy=tpol, touch_params=cbase.touch) if need_team else None
         c_merge = train_merge(c_train, base, grid, c_lengths) if need_merge else None   # base: the grid's streams
         c_switch = train_switch_model(c_train, cbase) if need_switch else None
         del c_train

@@ -122,7 +122,9 @@ def test_run_selection_two_policies_pathcrf_and_real(tmp_path, monkeypatch):
     monkeypatch.setattr(mod, "train_dead", lambda sims, variant="ctrl_Dfull", policy="full": policies.append(policy) or orig(sims, variant, policy))
     team_policies = []
     orig_tt = mod.train_team_ctrl
-    monkeypatch.setattr(mod, "train_team_ctrl", lambda sims, variant="ctrl_Dfull", policy="full": team_policies.append(policy) or orig_tt(sims, variant, policy))
+    touch_seen = []
+    monkeypatch.setattr(mod, "train_team_ctrl", lambda sims, variant="ctrl_Dfull", policy="full", **kw: team_policies.append(policy)
+                        or touch_seen.append(kw.get("touch_params")) or orig_tt(sims, variant, policy, **kw))
     real = _fake_half(9999, 1, 0, rng)
     monkeypatch.setattr(mod, "load_tactical", lambda d: real.match)
     monkeypatch.setattr(mod, "load_tags", lambda d: real.tags)
@@ -149,6 +151,7 @@ def test_run_selection_two_policies_pathcrf_and_real(tmp_path, monkeypatch):
     assert all(used == {p} for p, used in scored), scored   # every cell scored with its own (policy, bonus, team) evidence only
     assert {"full", "no_ball_at_all"} <= set(policies)
     assert {"full", "no_touch"} <= set(team_policies)
+    assert touch_seen and all(tp is not None for tp in touch_seen)   # base.touch reaches every team-model fit
     assert any(k.startswith("game_9001_1_s") for k in calls) and "real_tactical" in calls
     summ = pd.read_csv(out / "summary.csv")
     assert set(summ["cell"]) == {0, 1, 2, 3}
@@ -502,3 +505,58 @@ def test_run_selection_switch_cells_route_model_and_artifacts(tmp_path, monkeypa
     with pytest.raises(SystemExit, match="switch_model"):
         mod.load_switch_model(out, cfg)
     assert mod.load_switch_model(out, PipelineConfig()) is None    # use_switch off: nothing needed
+
+
+def test_sealed_match_never_reaches_model_training(tmp_path, monkeypatch):
+    """Teamctrl + switch + merge cells with the sealed match present in the sim dir: no dead/team/switch/merge training
+    set (folds, merge inner splits, real-plausibility, registration) ever contains SEALED_MATCH. Also: label-identical
+    duplicate cells (w_teamctrl 0, team_policy no_touch, no merge) take no real-match slot."""
+    from mtah.sim.dataset import SEALED_MATCH, match_id
+    rng = np.random.default_rng(6)
+    sim_dir = tmp_path / "sim"; seeds = [100]
+    for mid in (9001, 9002, 9003, SEALED_MATCH):
+        for half in (1, 2):
+            save_half(_fake_half(mid, half, seeds[0], rng), sim_dir)
+    c0 = {"tau_HA": 10.0, "tau_D": 10.0, "w_dead": 1.0, "aba_s": 0.5, "w_teamctrl": 0.0, "team_policy": "full",
+          "w_switch": 0.0, "snap_mode": "touch", "merge_theta": 1.0}
+    grid = [{**c0, "w_teamctrl": 2.0, "w_switch": 2.0, "snap_mode": "hazard", "merge_theta": 0.7},
+            c0, {**c0, "team_policy": "no_touch"}, {**c0, "team_policy": "no_touch", "merge_theta": 0.7}]
+    assert sel.label_duplicate_cells(grid) == {2}
+    mod = _load_script()
+    seen = []   # (trainer, sorted match ids)
+    def spy(name, fn):
+        def f(sims, *a, **kw):
+            seen.append((name, sorted({match_id(s.key) for s in sims}))); return fn(sims, *a, **kw)
+        return f
+    monkeypatch.setattr(mod, "train_dead", spy("dead", mod.train_dead))
+    monkeypatch.setattr(mod, "train_team_ctrl", spy("team", mod.train_team_ctrl))
+    monkeypatch.setattr(mod, "train_switch", spy("switch", mod.train_switch))
+    monkeypatch.setattr(sel, "merge_training_table", spy("merge", sel.merge_training_table))
+    real = _fake_half(9999, 1, 0, rng)
+    monkeypatch.setattr(mod, "load_tactical", lambda d: real.match)
+    monkeypatch.setattr(mod, "load_tags", lambda d: real.tags)
+    out = tmp_path / "sel"
+    mod.run_selection(sim_dir, seeds, out, grid=grid, real_data_dir="fake-data-dir")
+    assert {n for n, _ in seen} == {"dead", "team", "switch", "merge"}
+    assert all(SEALED_MATCH not in mids and mids for _, mids in seen), seen
+    real_tab = pd.read_csv(out / "summary_real.csv")
+    assert set(real_tab["cell"]) == {0, 1, 3}          # cell 2 repeats cell 1's labels: skipped
+
+
+def test_write_candidate_artifacts_deletes_stale_models(tmp_path):
+    from mtah.pipeline import PipelineConfig
+    mod = _load_script()
+    class Dummy:
+        def save(self, p):
+            Path(p).write_bytes(b"x")
+    for name in (mod.TEAM_MODEL_FILE, mod.MERGE_MODEL_FILE, mod.SWITCH_MODEL_FILE):
+        (tmp_path / name).write_bytes(b"stale")
+    cell = {"tau_HA": 10.0, "tau_D": 10.0, "w_dead": 1.0, "aba_s": 0.5}
+    mod.write_candidate_artifacts(tmp_path, PipelineConfig(), cell, {"ball": 1.0}, Dummy())
+    assert (tmp_path / "dead_model.joblib").exists() and (tmp_path / "config.json").exists()
+    assert not any((tmp_path / n).exists() for n in (mod.TEAM_MODEL_FILE, mod.MERGE_MODEL_FILE, mod.SWITCH_MODEL_FILE))
+    base = PipelineConfig(); base.use_switch = True; base.switch_policy = sel.SWITCH_POLICY
+    mod.write_candidate_artifacts(tmp_path, base, {**cell, "merge_theta": 0.7, "w_switch": 2.0}, {"ball": 1.0}, Dummy(),
+                                  merge=Dummy(), switch=Dummy())
+    assert (tmp_path / mod.MERGE_MODEL_FILE).exists() and (tmp_path / mod.SWITCH_MODEL_FILE).exists()
+    assert not (tmp_path / mod.TEAM_MODEL_FILE).exists()

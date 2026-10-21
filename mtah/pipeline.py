@@ -52,7 +52,8 @@ class PipelineConfig:
 
 def compute_evidence(match, tags, cfg, dead_model, cache_key=None, team_model=None, switch_model=None):
     """Evidence streams by name. `cache_key` names the PathCRF cache entry (required when cfg.use_pathcrf).
-    "teamctrl" is added iff cfg.use_teamctrl and a `team_model` is given (its policy must equal cfg.team_policy).
+    "teamctrl" is added iff cfg.use_teamctrl and a `team_model` is given (its policy must equal cfg.team_policy);
+    cfg.use_teamctrl with a positive teamctrl weight and no `team_model` raises (the stream would silently vanish).
     "switch" (the hazard, NOT centred and NOT a cost stream: column 0 of an (F, 3) array, NaN elsewhere) is added
     iff cfg.use_switch and a `switch_model` is given (policy must equal cfg.switch_policy); its teamctrl-margin
     features use the "teamctrl" stream computed here (required if the model was trained with it)."""
@@ -66,6 +67,9 @@ def compute_evidence(match, tags, cfg, dead_model, cache_key=None, team_model=No
             raise ValueError("cfg.use_pathcrf needs a cache_key")
         r = pathcrf_posterior(match, cache_key, cfg.pathcrf)
         ev["pathcrf"] = pathcrf_evidence(r["p_home"], r["imputed_frac"], cfg.pathcrf.eps, cfg.pathcrf.conf_alpha)
+    if cfg.use_teamctrl and team_model is None and cfg.decoder.weights.get("teamctrl", 1.0) > 0:
+        raise ValueError(f"cfg.use_teamctrl with teamctrl weight {cfg.decoder.weights.get('teamctrl', 1.0)} > 0 "
+                         "needs a team_model")
     if cfg.use_teamctrl and team_model is not None:
         if team_model.policy != cfg.team_policy:
             raise ValueError(f"team model policy {team_model.policy!r} != cfg.team_policy {cfg.team_policy!r}")
