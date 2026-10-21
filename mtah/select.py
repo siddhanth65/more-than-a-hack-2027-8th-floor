@@ -41,7 +41,14 @@ GRID4 = [{"tau_HA": a, "tau_D": 100.0, "w_dead": w, "w_pathcrf": 1.0, "dead_poli
           "snap_mode": "hazard" if s > 0 else "touch", "merge_theta": q}
          for a, t, w, tp, s, q in itertools.product((30.0, 60.0), (0.0, 1.0, 2.0), (3.0, 4.0), ("full", "no_touch"),
                                                     (0.0, 2.0), (1.0, 0.7))]
-GRIDS = {"grid1": GRID, "grid2": GRID2, "grid3": GRID3, "grid4": GRID4}
+# grid 5 (Plan 2e T1): a4's cell 41 (tau_HA 30, tau_D 100, w_pathcrf 1, w_teamctrl 2 team_policy full, merge_theta 0.7,
+# no switch, aba_s 1, w_ball 1, sp_dead_bonus 0) with the dead model's feature policy (long-context player-motion
+# features: mtah.evidence.dead.LONG_FEATURES) x the dead weight. 9 cells; GRID4[41] == GRID5 cell (full, 4).
+GRID5 = [{"tau_HA": 30.0, "tau_D": 100.0, "w_dead": w, "w_pathcrf": 1.0, "dead_policy": pol, "sp_dead_bonus": 0.0,
+          "w_teamctrl": 2.0, "w_ball": 1.0, "team_policy": "full", "aba_s": 1.0, "w_switch": 0.0,
+          "snap_mode": "touch", "merge_theta": 0.7}
+         for pol, w in itertools.product(("full", "long", "long_no_ball"), (3.0, 4.0, 6.0))]
+GRIDS = {"grid1": GRID, "grid2": GRID2, "grid3": GRID3, "grid4": GRID4, "grid5": GRID5}
 
 # label-free real-match plausibility: non-blackout D share of the prediction must lie in this band
 REAL_D_SHARE_BAND = (0.10, 0.18)

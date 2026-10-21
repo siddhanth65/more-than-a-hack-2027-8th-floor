@@ -262,3 +262,19 @@ def test_label_duplicate_cells_grid4():
         assert c["w_teamctrl"] == 0.0 and c["team_policy"] == "no_touch" and c["merge_theta"] == 1.0
         assert {**c, "team_policy": "full"} in GRID4
     assert label_duplicate_cells([{"tau_HA": 1.0, "w_teamctrl": 0.0, "team_policy": "no_touch"}]) == set()
+
+
+def test_grid5_dead_policy_x_weight_around_a4():
+    from mtah.select import GRID4, GRID5, GRIDS, apply_cell, evidence_key, uses_switch
+    assert len(GRID5) == 9 and GRIDS["grid5"] is GRID5
+    assert {c["dead_policy"] for c in GRID5} == {"full", "long", "long_no_ball"}
+    assert {c["w_dead"] for c in GRID5} == {3.0, 4.0, 6.0}
+    assert len({tuple(sorted(c.items())) for c in GRID5}) == 9
+    a4 = GRID4[41]
+    assert a4 in GRID5                                    # a4's cell is the (full, 4) cell
+    fixed = {k: v for k, v in a4.items() if k not in ("dead_policy", "w_dead")}
+    assert all({k: c[k] for k in fixed} == fixed for c in GRID5)
+    assert not any(uses_switch(c) for c in GRID5)
+    assert len({evidence_key(c) for c in GRID5}) == 3
+    cfg = apply_cell(PipelineConfig(), next(c for c in GRID5 if c["dead_policy"] == "long_no_ball" and c["w_dead"] == 6.0))
+    assert cfg.dead_policy == "long_no_ball" and cfg.decoder.weights["dead"] == 6.0 and cfg.post.merge_theta == 0.7
