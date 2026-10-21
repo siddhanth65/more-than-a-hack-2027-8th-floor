@@ -48,7 +48,12 @@ GRID5 = [{"tau_HA": 30.0, "tau_D": 100.0, "w_dead": w, "w_pathcrf": 1.0, "dead_p
           "w_teamctrl": 2.0, "w_ball": 1.0, "team_policy": "full", "aba_s": 1.0, "w_switch": 0.0,
           "snap_mode": "touch", "merge_theta": 0.7}
          for pol, w in itertools.product(("full", "long", "long_no_ball"), (3.0, 4.0, 6.0))]
-GRIDS = {"grid1": GRID, "grid2": GRID2, "grid3": GRID3, "grid4": GRID4, "grid5": GRID5}
+# grid 6 (Plan 2e T2): the same a4 cell-41 base with the per-match standardised long features
+# (mtah.evidence.dead.LONG_REL_FEATURES; policies long_rel / long_rel_no_ball) x the dead weight. 6 cells; the full
+# policy is already measured in grid5 and left out.
+GRID6 = [{**GRID5[0], "dead_policy": pol, "w_dead": w}
+         for pol, w in itertools.product(("long_rel", "long_rel_no_ball"), (3.0, 4.0, 6.0))]
+GRIDS = {"grid1": GRID, "grid2": GRID2, "grid3": GRID3, "grid4": GRID4, "grid5": GRID5, "grid6": GRID6}
 
 # label-free real-match plausibility: non-blackout D share of the prediction must lie in this band
 REAL_D_SHARE_BAND = (0.10, 0.18)

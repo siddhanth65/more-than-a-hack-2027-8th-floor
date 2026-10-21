@@ -278,3 +278,18 @@ def test_grid5_dead_policy_x_weight_around_a4():
     assert len({evidence_key(c) for c in GRID5}) == 3
     cfg = apply_cell(PipelineConfig(), next(c for c in GRID5 if c["dead_policy"] == "long_no_ball" and c["w_dead"] == 6.0))
     assert cfg.dead_policy == "long_no_ball" and cfg.decoder.weights["dead"] == 6.0 and cfg.post.merge_theta == 0.7
+
+
+def test_grid6_long_rel_policy_x_weight_around_a4():
+    from mtah.select import GRID4, GRID6, GRIDS, apply_cell, evidence_key, uses_switch
+    assert len(GRID6) == 6 and GRIDS["grid6"] is GRID6
+    assert {c["dead_policy"] for c in GRID6} == {"long_rel", "long_rel_no_ball"}
+    assert {c["w_dead"] for c in GRID6} == {3.0, 4.0, 6.0}
+    assert len({tuple(sorted(c.items())) for c in GRID6}) == 6
+    a4 = GRID4[41]
+    fixed = {k: v for k, v in a4.items() if k not in ("dead_policy", "w_dead")}
+    assert all({k: c[k] for k in fixed} == fixed and set(c) == set(a4) for c in GRID6)
+    assert not any(uses_switch(c) for c in GRID6)
+    assert len({evidence_key(c) for c in GRID6}) == 2
+    cfg = apply_cell(PipelineConfig(), next(c for c in GRID6 if c["dead_policy"] == "long_rel" and c["w_dead"] == 4.0))
+    assert cfg.dead_policy == "long_rel" and cfg.decoder.weights["dead"] == 4.0 and cfg.post.merge_theta == 0.7

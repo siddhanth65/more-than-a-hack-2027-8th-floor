@@ -229,7 +229,7 @@ def test_long_policies_tables_and_apply_policy():
     assert FEATURE_POLICIES["long_no_ball"] == FEATURE_POLICIES["no_ball_at_all"]
     for p in ("full", "no_ball_cues", "no_ball_at_all"):
         assert policy_feature_names(p) == DEAD_FEATURES
-    for p in LONG_POLICIES:
+    for p in ("long", "long_no_ball"):
         assert policy_feature_names(p) == DEAD_FEATURES + LONG_FEATURES
     names = DEAD_FEATURES + LONG_FEATURES
     X = np.ones((5, len(names)), np.float32)
@@ -333,3 +333,131 @@ def test_long_policies_heldout_9001_visible_dead():
         print(f"9001 visible frames n={len(Y)} dead share {Y.mean():.4f}  policy {p:13s} recall {res[p]['recall']:.4f}  "
               f"precision {res[p]['precision']:.4f}  AP {res[p]['ap']:.4f}")
     assert res["long"]["ap"] >= res["full"]["ap"] - 0.01, res
+
+
+# ---- Plan 2e T2: per-match standardised long features (long_rel / long_rel_no_ball) ----
+from mtah.evidence.dead import (LONG_REL_FEATURES, LONG_REL_POLICIES, _standardise, dead_features_long_rel,  # noqa: E402
+                                smooth_player_speed)
+
+
+def _varying_match(F=1500, P=12, seed=0, half=None):
+    """P players (6 per team) running along x with smoothly varying speeds (0.2 .. 4.2 m/s, different phases)."""
+    rng = np.random.default_rng(seed)
+    t = np.arange(F) / 25.0
+    per = rng.uniform(8, 30, P); ph = rng.uniform(0, 2 * np.pi, P)
+    v = 2.2 + 2.0 * np.sin(2 * np.pi * t[:, None] / per + ph)
+    pos = np.zeros((F, P, 2)); pos[:, :, 1] = np.linspace(-25, 25, P)
+    pos[:, :, 0] = np.cumsum(v, axis=0) / 25.0 + np.where(np.arange(P) < 6, -20.0, 5.0)
+    return make_match(pos, [0] * 6 + [1] * 6, half=half)
+
+
+def test_long_rel_names_shape_and_dispatch():
+    assert len(LONG_REL_FEATURES) == len(LONG_FEATURES) and all(n.startswith("lr_") for n in LONG_REL_FEATURES)
+    assert LONG_REL_FEATURES[0] == "lr_speed_2s" and LONG_REL_FEATURES[-2:] == ("lr_speed_trend", "lr_slow_trend")
+    m = _varying_match()
+    R = long_features(m, mode="rel")
+    assert R.shape == (m.n_frames, len(LONG_REL_FEATURES)) and R.dtype == np.float32
+    X = dead_table(m, NO_TAGS, "long_rel")
+    np.testing.assert_array_equal(X, dead_features_long_rel(m, NO_TAGS))
+    np.testing.assert_array_equal(X[:, :len(DEAD_FEATURES)], dead_features(m, NO_TAGS))
+    np.testing.assert_array_equal(X[:, len(DEAD_FEATURES):], R)
+    with pytest.raises(ValueError):
+        long_features(m, mode="relative")
+
+
+def test_standardise_is_nan_aware_and_uses_the_reference_rows():
+    col = np.arange(100, dtype=float); col[[3, 70]] = np.nan
+    ref = np.zeros(100, bool); ref[:50] = True
+    z = _standardise(col, ref, eps=0.0)
+    v = col[:50][np.isfinite(col[:50])]
+    q25, q50, q75 = np.percentile(v, [25, 50, 75])
+    assert z[10] == pytest.approx((10 - q50) / (q75 - q25)) and np.isnan(z[3]) and np.isnan(z[70])
+    assert np.isfinite(z[90])                                         # non-reference rows are scaled too
+    few = np.zeros(100, bool); few[:5] = True                         # < LONG_REL_MIN_REF reference rows: all rows
+    z2 = _standardise(col, few, eps=0.0)
+    assert np.nanmedian(z2) == pytest.approx(0.0, abs=1e-9)
+    assert np.isnan(_standardise(np.full(20, np.nan), np.ones(20, bool), 0.1)).all()
+
+
+def test_long_rel_standardised_per_half_over_ball_visible_frames():
+    half = np.r_[np.ones(1500), np.full(1500, 2)].astype(np.int8)
+    m = _varying_match(F=3000, half=half)
+    m.ball[2000:2300] = np.nan                                        # ball gap in half 2: not a reference row
+    m.pos[400:900, 8:] = np.nan; m.speed[400:900, 8:] = np.nan        # 8 visible: still >= 6
+    m.pos[1000:1200, 4:] = np.nan; m.speed[1000:1200, 4:] = np.nan    # 4 visible: NaN quantities
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", RuntimeWarning)
+        R = long_features(m, mode="rel")
+    vis = m.ball_present
+    for i, n in enumerate(LONG_REL_FEATURES):
+        if n.startswith("lr_n_visible"):
+            continue
+        for h in (1, 2):
+            rows = (m.half == h) & vis & np.isfinite(R[:, i])
+            assert np.median(R[rows, i]) == pytest.approx(0.0, abs=1e-4), (n, h)
+    assert np.isnan(R[1100, LONG_REL_FEATURES.index("lr_speed_2s")])
+    # a speed offset in half 2 only changes nothing in either half (each half is standardised on its own)
+    m2 = _varying_match(F=3000, half=half)
+    m2.ball[2000:2300] = np.nan
+    m2.pos[400:900, 8:] = np.nan; m2.speed[400:900, 8:] = np.nan
+    m2.pos[1000:1200, 4:] = np.nan; m2.speed[1000:1200, 4:] = np.nan
+    m2.speed[1500:] += 1.5
+    np.testing.assert_allclose(long_features(m2, mode="rel"), R, atol=1e-4, equal_nan=True)
+    assert not np.allclose(long_features(m2)[1600:], long_features(m)[1600:], equal_nan=True)   # abs mode moves
+
+
+def test_long_rel_invariant_to_a_constant_speed_offset():
+    m1 = _varying_match(seed=1)
+    m2 = _varying_match(seed=1); m2.speed = (m2.speed + 0.8).astype(np.float32)
+    R1, R2 = long_features(m1, mode="rel"), long_features(m2, mode="rel")
+    assert np.isfinite(R1[:, :6]).all()
+    np.testing.assert_allclose(R2, R1, atol=1e-4, equal_nan=True)
+    A1, A2 = long_features(m1), long_features(m2)
+    assert np.abs(A2[:, LI["lc_speed_5s"]] - A1[:, LI["lc_speed_5s"]]).min() > 0.7     # abs features shift
+
+
+def test_smoothing_reduces_jitter_only_speed():
+    rng = np.random.default_rng(5)
+    F, P = 1000, 12
+    pos = np.zeros((F, P, 2)); pos[:, :, 1] = np.linspace(-25, 25, P)
+    pos += rng.normal(0, 0.05, pos.shape)                             # standing players, 5 cm tracking jitter
+    m = make_match(pos, [0] * 6 + [1] * 6)
+    on = np.isfinite(m.pos[..., 0]); on[100:200, 0] = False
+    raw = np.where(on, m.speed, np.nan).astype(float)
+    sm = smooth_player_speed(m.speed, on, 25.0)
+    assert np.isnan(sm[150, 0]) and np.isnan(sm[0]).all()             # untracked / no speed stays NaN
+    inner = slice(20, -20)
+    assert np.nanstd(sm[inner]) < np.nanstd(raw[inner]) / 3
+    d_raw = np.nanmean(np.abs(np.diff(raw[inner], axis=0))); d_sm = np.nanmean(np.abs(np.diff(sm[inner], axis=0)))
+    assert d_sm < d_raw / 5                                           # |accel| from smoothed speed: jitter mostly gone
+    assert np.nanmean(sm[inner]) == pytest.approx(np.nanmean(raw[inner]), rel=0.05)
+
+
+def test_long_rel_policies_tables_and_old_models_unaffected(tmp_path):
+    assert LONG_REL_POLICIES == {"long_rel", "long_rel_no_ball"} and LONG_REL_POLICIES <= LONG_POLICIES
+    assert FEATURE_POLICIES["long_rel"] == FEATURE_POLICIES["full"]
+    assert FEATURE_POLICIES["long_rel_no_ball"] == FEATURE_POLICIES["no_ball_at_all"]
+    names = DEAD_FEATURES + LONG_REL_FEATURES
+    for p in LONG_REL_POLICIES:
+        assert policy_feature_names(p) == names
+    X = np.ones((5, len(names)), np.float32)
+    Y = apply_policy(X, "long_rel_no_ball")
+    idx = [names.index(n) for n in FEATURE_POLICIES["long_rel_no_ball"]]
+    assert (Y[:, idx] == 0).all() and (np.delete(Y, idx, axis=1) == 1).all()
+    with pytest.raises(ValueError):
+        apply_policy(np.ones((5, len(DEAD_FEATURES)), np.float32), "long_rel")
+    m = _varying_match(F=400)
+    for pol, width in (("full", len(DEAD_FEATURES)), ("long", len(DEAD_FEATURES) + len(LONG_FEATURES)),
+                       ("long_rel", len(names)), ("long_rel_no_ball", len(names))):
+        assert dead_table(m, NO_TAGS, pol).shape == (400, width)
+    # old models: the abs table and the long / full models are untouched by the rel variant
+    np.testing.assert_array_equal(long_features(m), long_features(m, mode="abs"))
+    np.testing.assert_array_equal(dead_table(m, NO_TAGS, "long"), dead_features_long(m, NO_TAGS))
+    rng = np.random.default_rng(4)
+    Xr = rng.normal(size=(600, len(names))).astype(np.float32)
+    dm = DeadModel(policy="long_rel").fit(Xr, (Xr[:, names.index("lr_speed_5s")] > 0).astype(int))
+    dm.save(tmp_path / "r.joblib"); dm2 = DeadModel.load(tmp_path / "r.joblib")
+    assert dm2.policy == "long_rel" and dm2.feature_names == names
+    assert np.array_equal(dm2.predict_proba(Xr), dm.predict_proba(Xr))
+    assert dm2.features(m, NO_TAGS).shape == (400, len(names))
+    assert DeadModel(policy="long").features(m, NO_TAGS).shape == (400, len(DEAD_FEATURES) + len(LONG_FEATURES))

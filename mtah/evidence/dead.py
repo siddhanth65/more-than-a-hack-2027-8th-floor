@@ -159,21 +159,45 @@ LONG_FEATURES = (tuple(f"{n}_{w}s" for w in LONG_WINDOWS_S for n in LONG_BASE)
 
 _NO_BALL_AT_ALL = ("ball_speed", "ball_line_dist", "ball_out", "ball_static_1s", "ball_present",
                    "entry_line_dist", "entry_outward")
+# ---- relative variant (Plan 2e T2): the same quantities and windows, made feed-independent ----
+# runs/select/a5/long_shift.json: lc_accel is a pure level shift between the feeds (DFL sims ~11 m/s^2 from
+# central-difference position jitter, Metrica real ~0.8), so a model trained on sims reads every real frame as
+# "everyone stopped accelerating". The relative table (a) smooths each player's speed with a centred
+# LONG_REL_SMOOTH_S box before any threshold / mean / |accel| (after smoothing both feeds sit at ~0.6-0.8 m/s^2 and
+# |accel| still separates dead from alive, so it is kept, smoothed and standardised), (b) counts a player as slow
+# when below the half's median smoothed player speed minus LONG_REL_SLOW_BELOW (~1 m/s on DFL; a constant speed
+# offset leaves it unchanged), and (c) standardises every column per half: (x - median) / (IQR + eps) over that
+# half's ball-visible frames (NaN-aware; all of the half's frames when fewer than LONG_REL_MIN_REF are finite).
+# The model then sees "slower / tighter than this match half's typical" rather than absolute m/s.
+LONG_REL_FEATURES = tuple("lr_" + n[len("lc_"):] for n in LONG_FEATURES)   # lc_speed_2s -> lr_speed_2s
+LONG_REL_SMOOTH_S = 1.0
+LONG_REL_SLOW_BELOW = 0.6       # m/s below the half's median smoothed player speed (DFL median ~1.6 -> ~1.0 m/s)
+LONG_REL_MIN_REF = 10
+# eps of the IQR denominator, in each quantity's own unit (keeps near-constant columns, e.g. n_visible, finite)
+LONG_REL_EPS = {"lc_speed": 0.05, "lc_slow_share": 0.02, "lc_accel": 0.02, "lc_team_spread": 0.1,
+                "lc_centroid_dist": 0.1, "lc_compactness": 0.1, "lc_n_visible": 1.0}
+
 FEATURE_POLICIES = {
     "full": (),
     "no_ball_cues": ("ball_speed", "ball_line_dist", "ball_out", "ball_static_1s"),
     "no_ball_at_all": _NO_BALL_AT_ALL,
-    "long": (),                       # full + LONG_FEATURES
-    "long_no_ball": _NO_BALL_AT_ALL,  # no_ball_at_all + LONG_FEATURES
+    "long": (),                           # full + LONG_FEATURES
+    "long_no_ball": _NO_BALL_AT_ALL,      # no_ball_at_all + LONG_FEATURES
+    "long_rel": (),                       # full + LONG_REL_FEATURES
+    "long_rel_no_ball": _NO_BALL_AT_ALL,  # no_ball_at_all + LONG_REL_FEATURES
 }
-LONG_POLICIES = frozenset({"long", "long_no_ball"})
+LONG_REL_POLICIES = frozenset({"long_rel", "long_rel_no_ball"})
+LONG_POLICIES = frozenset({"long", "long_no_ball"}) | LONG_REL_POLICIES   # every policy with a long-context table
 
 
 def policy_feature_names(policy):
     """Column names of the feature table a model with this policy is trained on / predicts from:
-    DEAD_FEATURES for the base policies, DEAD_FEATURES + LONG_FEATURES for LONG_POLICIES."""
+    DEAD_FEATURES for the base policies, DEAD_FEATURES + LONG_FEATURES for long / long_no_ball,
+    DEAD_FEATURES + LONG_REL_FEATURES for LONG_REL_POLICIES."""
     if policy not in FEATURE_POLICIES:
         raise KeyError(policy)
+    if policy in LONG_REL_POLICIES:
+        return DEAD_FEATURES + LONG_REL_FEATURES
     return DEAD_FEATURES + LONG_FEATURES if policy in LONG_POLICIES else DEAD_FEATURES
 
 
@@ -190,19 +214,21 @@ def apply_policy(X, policy):
 
 
 def _centred_mean(x, w):
-    """Centred mean over [t - w, t + w] clipped to the array (NaN-aware; NaN when no finite sample)."""
+    """Centred mean over [t - w, t + w] clipped to the array, along axis 0 (1-D or 2-D x; NaN-aware; NaN when no
+    finite sample)."""
     x = np.asarray(x, np.float64); n = len(x)
     f = np.isfinite(x)
-    cv = np.concatenate([[0.0], np.cumsum(np.where(f, x, 0.0))]); cf = np.concatenate([[0], np.cumsum(f)])
+    z = np.zeros((1,) + x.shape[1:])
+    cv = np.concatenate([z, np.cumsum(np.where(f, x, 0.0), axis=0)]); cf = np.concatenate([z, np.cumsum(f, axis=0)])
     t = np.arange(n); lo = np.maximum(0, t - w); hi = np.minimum(n, t + w + 1)
     cnt = cf[hi] - cf[lo]
-    out = np.full(n, np.nan)
+    out = np.full(x.shape, np.nan)
     ok = cnt > 0
     out[ok] = (cv[hi] - cv[lo])[ok] / cnt[ok]
     return out
 
 
-def _frame_motion(pos, speed, team, fps):
+def _frame_motion(pos, speed, team, fps, slow_mps=LONG_SLOW_MPS):
     """Per-frame LONG_BASE quantities for one contiguous span: dict name -> (n,) float64."""
     n = len(pos)
     pos = pos.astype(np.float64); speed = speed.astype(np.float64)
@@ -214,7 +240,7 @@ def _frame_motion(pos, speed, team, fps):
     sp = np.where(ok, speed, 0.0)
     out = {k: np.full(n, np.nan) for k in LONG_BASE}
     out["lc_speed"][has] = sp.sum(1)[has] / cnt[has]
-    out["lc_slow_share"][has] = (ok & (sp < LONG_SLOW_MPS)).sum(1)[has] / cnt[has]
+    out["lc_slow_share"][has] = (ok & (sp < slow_mps)).sum(1)[has] / cnt[has]
     if n > 1:
         okd = ok[1:] & ok[:-1]; cd = okd.sum(1)
         dsum = np.where(okd, np.abs(sp[1:] - sp[:-1]) * fps, 0.0).sum(1)
@@ -248,21 +274,79 @@ def _frame_motion(pos, speed, team, fps):
     return out
 
 
-def long_features(match, fps=None):
-    """(F, len(LONG_FEATURES)) float32 long-context player-motion table (see LONG_FEATURES for the column order)."""
+def smooth_player_speed(speed, on, fps, seconds=LONG_REL_SMOOTH_S):
+    """(n, S) per-player speed smoothed with a centred `seconds` box (NaN-aware); NaN where the player is not
+    tracked (`on` False) or has no speed."""
+    sp = np.where(on, np.asarray(speed, np.float64), np.nan)
+    out = _centred_mean(sp, int(round(seconds * fps / 2)))
+    out[~np.isfinite(sp)] = np.nan
+    return out
+
+
+def _ref_values(col, ref):
+    """Finite values of col on the reference rows (every finite value when fewer than LONG_REL_MIN_REF)."""
+    f = np.isfinite(col)
+    v = col[f & ref]
+    return v if len(v) >= LONG_REL_MIN_REF else col[f]
+
+
+def _standardise(col, ref, eps):
+    """(col - median) / (IQR + eps) with median / IQR over the reference rows (NaN-aware; all NaN when nothing
+    is finite)."""
+    v = _ref_values(col, ref)
+    if not len(v):
+        return np.full(len(col), np.nan)
+    q25, q50, q75 = np.percentile(v, [25, 50, 75])
+    return (col - q50) / (q75 - q25 + eps)
+
+
+def _rel_eps(name):
+    if name == "lc_speed_trend":
+        return LONG_REL_EPS["lc_speed"]
+    if name == "lc_slow_trend":
+        return LONG_REL_EPS["lc_slow_share"]
+    return LONG_REL_EPS[name.rsplit("_", 1)[0]]
+
+
+def long_features(match, fps=None, mode="abs"):
+    """(F, 23) float32 long-context player-motion table.
+
+    mode "abs": LONG_FEATURES (absolute m/s, shares, metres). mode "rel": LONG_REL_FEATURES, the same windows and
+    quantities from 1 s-smoothed player speed with a half-relative slow threshold, every column standardised per
+    half over its ball-visible frames (see LONG_REL_FEATURES)."""
+    if mode not in ("abs", "rel"):
+        raise ValueError(mode)
+    rel = mode == "rel"
     fps = fps or match.fps; F = match.n_frames
     X = np.full((F, len(LONG_FEATURES)), np.nan, np.float32)
     spans = [(a, b) for _, a, b in half_runs(match.half)] or [(0, F)]
     col = {n: i for i, n in enumerate(LONG_FEATURES)}
     lo, hi = LONG_WINDOWS_S[0], LONG_WINDOWS_S[-1]
+    team = np.asarray(match.team)
     for a, b in spans:
-        q = _frame_motion(match.pos[a:b], match.speed[a:b], np.asarray(match.team), fps)
+        pos, speed = match.pos[a:b], match.speed[a:b]
+        slow = LONG_SLOW_MPS
+        vis = np.asarray(match.ball_present[a:b])
+        if rel:
+            on = np.isfinite(pos[..., 0]) & np.isfinite(pos[..., 1])
+            speed = smooth_player_speed(speed, on, fps)
+            v = speed[vis]; v = v[np.isfinite(v)]
+            if len(v) < LONG_REL_MIN_REF:
+                v = speed[np.isfinite(speed)]
+            if len(v):
+                slow = float(np.median(v)) - LONG_REL_SLOW_BELOW
+        q = _frame_motion(pos, speed, team, fps, slow_mps=slow)
+        Y = np.full((b - a, len(LONG_FEATURES)), np.nan, np.float64 if rel else np.float32)   # abs: as in T1
         for w in LONG_WINDOWS_S:
             hw = int(round(w * fps))
             for name in LONG_BASE:
-                X[a:b, col[f"{name}_{w}s"]] = _centred_mean(q[name], hw)
-        X[a:b, col["lc_speed_trend"]] = X[a:b, col[f"lc_speed_{lo}s"]] - X[a:b, col[f"lc_speed_{hi}s"]]
-        X[a:b, col["lc_slow_trend"]] = X[a:b, col[f"lc_slow_share_{lo}s"]] - X[a:b, col[f"lc_slow_share_{hi}s"]]
+                Y[:, col[f"{name}_{w}s"]] = _centred_mean(q[name], hw)
+        Y[:, col["lc_speed_trend"]] = Y[:, col[f"lc_speed_{lo}s"]] - Y[:, col[f"lc_speed_{hi}s"]]
+        Y[:, col["lc_slow_trend"]] = Y[:, col[f"lc_slow_share_{lo}s"]] - Y[:, col[f"lc_slow_share_{hi}s"]]
+        if rel:
+            for n, i in col.items():
+                Y[:, i] = _standardise(Y[:, i], vis, _rel_eps(n))
+        X[a:b] = Y
     return X
 
 
@@ -271,8 +355,16 @@ def dead_features_long(match, tags, fps=None):
     return np.hstack([dead_features(match, tags, fps), long_features(match, fps)])
 
 
+def dead_features_long_rel(match, tags, fps=None):
+    """(F, len(DEAD_FEATURES) + len(LONG_REL_FEATURES)) float32: the base table, then the relative long columns."""
+    return np.hstack([dead_features(match, tags, fps), long_features(match, fps, mode="rel")])
+
+
 def dead_table(match, tags, policy, fps=None):
-    """The feature table a dead model with `policy` reads: dead_features_long for LONG_POLICIES, else dead_features."""
+    """The feature table a dead model with `policy` reads: dead_features_long_rel for LONG_REL_POLICIES,
+    dead_features_long for long / long_no_ball, else dead_features."""
+    if policy in LONG_REL_POLICIES:
+        return dead_features_long_rel(match, tags, fps)
     return dead_features_long(match, tags, fps) if policy in LONG_POLICIES else dead_features(match, tags, fps)
 
 
@@ -286,7 +378,7 @@ class DeadModel:
                                                     min_samples_leaf=200, random_state=0, early_stopping=False)
 
     def features(self, match, tags):
-        """The feature table this model reads (base or base + long, by policy)."""
+        """The feature table this model reads (base, base + long or base + relative long, by policy)."""
         return dead_table(match, tags, self.policy)
 
     def fit(self, X, y, sample_weight=None):
