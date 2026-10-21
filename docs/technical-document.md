@@ -1,6 +1,6 @@
 # Technical document: frame-level possession labelling (More Than A Hack 2027)
 
-*Status: skeleton with known facts filled in. Cells marked `FILL` are produced by selection a2, the sealed read on match 9007 and the candidate drift check, and do not exist yet.*
+*Status: candidate a2 results filled in (section 6). The only remaining `FILL` is the final public-window read, reserved for the final candidate.*
 
 ## 1. Summary
 
@@ -174,9 +174,9 @@ For context, the earlier candidate a1 scored spellF1 0.290 on public read 2 (bas
 
 | table | content | status |
 |---|---|---|
-| selection a2 (grid2, 6 folds 9001-9006, 2 seeds) | best cell, four variant scores, margins over baselines, folds won, seed SD | FILL |
-| sealed match 9007 | raw and ctrl spellF1 of the registered cell | FILL |
-| candidate drift on the real match | spell count, non-blackout D share, tag agreement | FILL |
+| selection a2 (grid2, 6 folds 9001-9006, 2 seeds) | best cell, four variant scores, margins over baselines, folds won, seed SD | done (section 6) |
+| sealed match 9007 | raw and ctrl spellF1 of the registered cell | done (section 6) |
+| candidate drift on the real match | spell count, non-blackout D share, tag agreement | done (section 6) |
 | final public window read (3 of 3) | spellF1, macroF1 | FILL |
 
 ## 7. Limitations
