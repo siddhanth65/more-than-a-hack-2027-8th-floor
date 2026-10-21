@@ -115,7 +115,62 @@ The public read showed a1 below the baseline on the 5-minute window. The causes 
 
 ## 6. Results
 
-<!-- FILL: a2 results -->
+### 6.1 Candidate a2
+
+Selection a2 used grid2 (64 cells), leave-one-match-out (LOMO) over DFL matches 9001 to 9006, seeds 100 and 101, ranking by mean rank over the four truth variants. The chosen cell is 60: tau_HA 30, tau_D 100, w_dead 2, w_pathcrf 1.0, dead policy full, aba_s 1.0.
+
+**LOMO spellF1 on the simulated-blackout proxy, chosen cell vs the organisers' baseline_smooth50**
+
+| truth variant | a2 | baseline_smooth50 |
+|---|---|---|
+| raw_Dfull | 0.527 | 0.233 |
+| ctrl_Dfull | 0.471 | 0.208 |
+| raw_Dnarrow | 0.503 | 0.248 |
+| ctrl_Dnarrow | 0.444 | 0.220 |
+
+Folds won (ctrl_Dfull, margin of at least 0.05): 6 of 6. Seed SD at most 0.002. Count ratios: ctrl 1.13 / 1.13 (raw 0.89 / 0.89). Spec bar: pass.
+
+**Effect of the PathCRF stream on the simulation** (mean ctrl_Dfull over all cells sharing that setting)
+
+| w_pathcrf | 0 | 0.5 | 1.0 | 2.0 |
+|---|---|---|---|---|
+| ctrl_Dfull | 0.345 | 0.445 | 0.433 | 0.397 |
+
+| dead policy | full | no_ball_at_all |
+|---|---|---|
+| ctrl_Dfull | 0.415 | 0.396 |
+
+PathCRF agreement with the label-free nearest-player proxy: simulation mean 0.812 (range 0.62 to 0.89), real match 0.677.
+
+**Sealed read 2** (match 9007, our own parse of DFL J03WR9, never used in selection; forced past the plausibility gate, reason logged)
+
+| raw_Dfull | ctrl_Dfull | raw_Dnarrow | ctrl_Dnarrow |
+|---|---|---|---|
+| 0.528 | 0.464 | 0.510 | 0.438 |
+
+**Real-match candidate a2** (label-free drift check)
+
+| quantity | value |
+|---|---|
+| spells | 518 |
+| spells per possession-minute | 5.96 |
+| median spell | 5.3 s |
+| predicted D share, overall | 0.180 |
+| predicted D share, inside / outside blackouts | 0.425 / 0.050 |
+| team changes inside blackouts | 15 % |
+| implied-team tag agreement | 0.669 |
+
+**Public 5-minute window** (7,500 labelled frames; used here only as an aggregate, no scoring read taken)
+
+| D share | truth | candidate a2 |
+|---|---|---|
+| overall | 0.196 | 0.055 |
+| visible-ball frames | 0.147 | n/a |
+| outside blackouts | 0.155 | 0.023 |
+
+For context, the earlier candidate a1 scored spellF1 0.290 on public read 2 (baseline 0.326 on that window) and 0.445 raw / 0.375 ctrl on sealed 9006.
+
+**Known weakness.** a2 is the PathCRF-era baseline. Its known weakness is dead-ball under-detection on visible-ball frames: the candidate's D share outside blackouts is 0.023 against a truth of 0.155, and the real-match plausibility criterion (non-blackout D share in [0.10, 0.18]) failed for all top-5 cells (0.047 to 0.076). The next iteration targets this.
 
 | table | content | status |
 |---|---|---|
@@ -145,7 +200,7 @@ scripts\reproduce.ps1                     # full chain: simulator, PathCRF cache
 - `scripts/reproduce.ps1` checks the mtah venv (Python 3.12, `MTAH_VENV`; pins in `pyproject.toml`), `MTAH_DATA_DIR`, and PathCRF (`MTAH_PATHCRF_REPO`, `MTAH_PATHCRF_PY`), then prints the md5 of the candidate.
 - PathCRF setup, pinned versions and the thread pin: `third_party/pathcrf/SETUP.md`.
 - The full chain first runs `scripts/parse_dfl_match.py` (in the repository) on the raw DFL XML (`E:\football-synthesizer\data\dfl_open`, or `MTAH_DFL_RAW`) to produce `runs/dfl_extra` (match 9007); the raw XML is not in the repository; `-CandidateOnly` needs only the competition data and PathCRF.
-- Output file: `runs/candidates/a2.csv` (format checked with the official `validate_submission.py`). md5: `FILL`.
+- Output file: `runs/candidates/a2.csv` (format checked with the official `validate_submission.py`). md5: `FILL` (placeholder; the clean-clone regeneration check is in progress).
 
 ## 9. Rules compliance
 
