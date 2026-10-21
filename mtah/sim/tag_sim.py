@@ -1,5 +1,5 @@
 """Automatic-looking tags from the corrupted stream: phases by nearest team, set pieces at restarts."""
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 
 import numpy as np
 import pandas as pd
@@ -20,6 +20,9 @@ class TagSimParams:
     keep_inside: float = 0.75
     jitter_s: float = 1.0
     carry_max_s: float = 60.0
+    # per set-piece type keep probability (case-insensitive type names; types not listed are kept):
+    # the real tagger tags ~5 free kicks per match, the restart heuristic ~48 (Plan 2c)
+    keep_sp_by_type: dict = field(default_factory=lambda: {"Free kick": 0.10})
 
     def to_dict(self):
         return asdict(self)
@@ -63,15 +66,16 @@ def _phase_runs(codes, fps, hyst_s, min_s, carry_max_s=60.0):
 
 
 def _sp_type(xy, pitch):
+    """Restart type from the last visible ball position, spelled as the real tags spell it."""
     L, W = pitch
     x, y = float(xy[0]), float(xy[1])
     if abs(y) > W / 2 - 1.0:
         return "Throw-in"
     if abs(x) > L / 2 - 1.5 and abs(y) > 20:
-        return "Corner Kick"
+        return "Corner"
     if abs(x) > L / 2 - 16.5:
-        return "Goal Kick"
-    return "Free Kick"
+        return "Goal kick"
+    return "Free kick"
 
 
 def simulate_tags(match, labels, events, blackout_mask, params, rng):
@@ -87,6 +91,7 @@ def simulate_tags(match, labels, events, blackout_mask, params, rng):
     ev_frames = events["frame"].to_numpy() if len(events) else np.zeros(0, int)
     ev_team = events["team"].to_numpy() if len(events) else np.zeros(0, object)
     look = int(2.0 * fps)
+    keep_sp = {str(k).lower(): float(v) for k, v in (params.keep_sp_by_type or {}).items()}
     for s, e in runs_of(np.asarray(labels) == "D"):
         cand = np.flatnonzero((ev_frames >= e - look) & (ev_frames <= e + look))
         if not cand.size:
@@ -95,7 +100,9 @@ def simulate_tags(match, labels, events, blackout_mask, params, rng):
         k = s - 1
         while k >= 0 and np.isnan(match.ball[k, 0]):
             k -= 1
-        typ = _sp_type(match.ball[k], match.pitch) if k >= 0 else "Free Kick"
+        typ = _sp_type(match.ball[k], match.pitch) if k >= 0 else "Free kick"
+        if keep_sp.get(typ.lower(), 1.0) < 1.0 and rng.random() >= keep_sp[typ.lower()]:
+            continue
         if typ == "Throw-in":
             team = None
         rows.append((r - int(params.sp_before_s * fps), r + int(params.sp_after_s * fps), "SET PIECES", team, typ, 1))
