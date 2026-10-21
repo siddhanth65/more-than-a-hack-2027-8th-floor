@@ -43,7 +43,7 @@ class PipelineConfig:
 
 def compute_evidence(match, tags, cfg, dead_model, cache_key=None):
     """Evidence streams by name. `cache_key` names the PathCRF cache entry (required when cfg.use_pathcrf)."""
-    ev = {"ball": ball_ctrl_evidence(match, cfg.ball), "tag": tag_prior_evidence(tags, match.n_frames, cfg.tag)}
+    ev = {"ball": ball_ctrl_evidence(match, cfg.ball), "tag": tag_prior_evidence(tags, match.n_frames, cfg.tag, fps=match.fps)}
     if dead_model is not None:
         if dead_model.policy != cfg.dead_policy:
             raise ValueError(f"dead model policy {dead_model.policy!r} != cfg.dead_policy {cfg.dead_policy!r}")
