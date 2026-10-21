@@ -290,3 +290,46 @@ def test_compute_evidence_and_train_dead_pick_the_table_by_policy():
     dm = train_dead(sims, policy="long")
     assert dm.policy == "long" and len(dm.feature_names) == len(DEAD_FEATURES) + len(LONG_FEATURES)
     assert dm.predict_proba(dm.features(m, NO_TAGS)).shape == (400,)
+
+
+@pytest.mark.dfl
+def test_long_policies_heldout_9001_visible_dead():
+    """Train dead models on sims 9002-9006 (seed 100, every 5th frame) for policies full / long / long_no_ball and
+    score 9001's visible graded frames (ball present) against ctrl_Dfull D: recall / precision at P > 0.5 and
+    average precision. 9007 is never loaded. Gate: no AP regression of `long` vs `full` (> 0.01)."""
+    from pathlib import Path
+    from sklearn.metrics import average_precision_score
+    from mtah.sim.dataset import load_half_sim
+    sim = Path(__file__).resolve().parents[1] / "runs" / "sim"
+    if not (sim / "game_9001_H1_s100.json").is_file():
+        pytest.skip("runs/sim absent")
+    nb = len(DEAD_FEATURES)
+    Xs, ys = [], []
+    for mid in range(9002, 9007):
+        for h in (1, 2):
+            s = load_half_sim(sim, f"game_{mid}_H{h}", 100)
+            Xs.append(dead_features_long(s.match, s.tags)[::5])          # base columns == dead_features (tested above)
+            ys.append((s.truth["ctrl_Dfull"] == "D").astype(int)[::5])
+            del s
+    X, y = np.concatenate(Xs), np.concatenate(ys); del Xs, ys
+    models = {p: DeadModel(policy=p).fit(X if p in LONG_POLICIES else X[:, :nb], y)
+              for p in ("full", "long", "long_no_ball")}
+    del X, y
+    P = {p: [] for p in models}; Y = []
+    for h in (1, 2):
+        s = load_half_sim(sim, f"game_9001_H{h}", 100)
+        Xt = dead_features_long(s.match, s.tags)
+        vis = s.match.ball_present & (s.match.half > 0)
+        Y.append((s.truth["ctrl_Dfull"] == "D")[vis])
+        for p, m in models.items():
+            P[p].append(m.predict_proba(Xt if p in LONG_POLICIES else Xt[:, :nb])[vis])
+        del s, Xt
+    Y = np.concatenate(Y)
+    res = {}
+    for p in models:
+        pr = np.concatenate(P[p]); hit = pr > 0.5
+        res[p] = {"recall": float((hit & Y).sum() / max(Y.sum(), 1)), "precision": float((hit & Y).sum() / max(hit.sum(), 1)),
+                  "ap": float(average_precision_score(Y, pr))}
+        print(f"9001 visible frames n={len(Y)} dead share {Y.mean():.4f}  policy {p:13s} recall {res[p]['recall']:.4f}  "
+              f"precision {res[p]['precision']:.4f}  AP {res[p]['ap']:.4f}")
+    assert res["long"]["ap"] >= res["full"]["ap"] - 0.01, res
