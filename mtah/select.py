@@ -53,7 +53,12 @@ GRID5 = [{"tau_HA": 30.0, "tau_D": 100.0, "w_dead": w, "w_pathcrf": 1.0, "dead_p
 # policy is already measured in grid5 and left out.
 GRID6 = [{**GRID5[0], "dead_policy": pol, "w_dead": w}
          for pol, w in itertools.product(("long_rel", "long_rel_no_ball"), (3.0, 4.0, 6.0))]
-GRIDS = {"grid1": GRID, "grid2": GRID2, "grid3": GRID3, "grid4": GRID4, "grid5": GRID5, "grid6": GRID6}
+# grid 7 (Plan 2e T3): a calibrated log-odds offset on the dead stream (the long-context model is calibrated on the sims
+# but over-calls dead on the real match: prior shift), chosen by the real plausibility band like w_dead. a4 cell-41 base
+# x dead_policy {long_rel, full} x w_dead {3, 4} x dead_offset {0, -0.5, -1, -1.5, -2} = 20 cells.
+GRID7 = [{**GRID5[0], "dead_policy": pol, "w_dead": w, "dead_offset": o}
+         for pol, w, o in itertools.product(("long_rel", "full"), (3.0, 4.0), (0.0, -0.5, -1.0, -1.5, -2.0))]
+GRIDS = {"grid1": GRID, "grid2": GRID2, "grid3": GRID3, "grid4": GRID4, "grid5": GRID5, "grid6": GRID6, "grid7": GRID7}
 
 # label-free real-match plausibility: non-blackout D share of the prediction must lie in this band
 REAL_D_SHARE_BAND = (0.10, 0.18)
@@ -69,6 +74,7 @@ def apply_cell(cfg, cell):
     cfg.decoder.tau_HA = cell["tau_HA"]; cfg.decoder.tau_HD = cell["tau_D"]; cfg.decoder.tau_DH = cell["tau_D"]
     cfg.decoder.weights["dead"] = cell["w_dead"]; cfg.post.aba_s = cell["aba_s"]
     cfg.dead_policy = cell.get("dead_policy", "full")
+    cfg.dead_offset = float(cell.get("dead_offset", 0.0))
     if "w_pathcrf" in cell:
         cfg.decoder.weights["pathcrf"] = cell["w_pathcrf"]   # 0 disables the stream in cost_matrix; use_pathcrf is the caller's (base config)
     if "sp_dead_bonus" in cell:
@@ -93,10 +99,11 @@ def uses_switch(cell):
 
 
 def evidence_key(cell):
-    """Evidence depends on a cell only through (dead_policy, sp_dead_bonus, team_policy). The switch hazard (when
+    """Evidence depends on a cell only through (dead_policy, sp_dead_bonus, team_policy, dead_offset). The switch hazard (when
     the base config has use_switch) is the same for every key: the selection's switch model is trained without the
     teamctrl margin features (SWITCH_POLICY), so it does not depend on the dead or team policy."""
-    return (cell.get("dead_policy", "full"), float(cell.get("sp_dead_bonus", 0.0)), cell.get("team_policy", "full"))
+    return (cell.get("dead_policy", "full"), float(cell.get("sp_dead_bonus", 0.0)), cell.get("team_policy", "full"),
+            float(cell.get("dead_offset", 0.0)))
 
 
 def train_dead(sims, variant="ctrl_Dfull", policy="full"):

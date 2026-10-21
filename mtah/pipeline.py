@@ -23,6 +23,7 @@ class PipelineConfig:
                                                                          lengths={"ball": 1.0, "tag": 1.0, "dead": 1.0, "pathcrf": 1.0, "teamctrl": 1.0}))
     post: PostParams = field(default_factory=PostParams)
     dead_model_path: Optional[str] = None
+    dead_offset: float = 0.0      # log-odds shift of the dead probability before dead_evidence (prior-shift correction)
     dead_policy: str = "full"     # training-time feature policy of the dead model (recorded for reproducibility)
     use_pathcrf: bool = False     # external PathCRF team-posterior stream (needs a cache key per half/match)
     pathcrf: PathCRFParams = field(default_factory=PathCRFParams)
@@ -44,7 +45,7 @@ class PipelineConfig:
             tag["code_table"] = load_tag_codes()
         return cls(ball=BallCtrlParams(**d["ball"]), tag=TagPriorParams(**tag), touch=TouchParams(**d["touch"]),
                    decoder=DecoderParams(**d["decoder"]), post=PostParams(**d["post"]), dead_model_path=d.get("dead_model_path"),
-                   dead_policy=d.get("dead_policy", "full"), use_pathcrf=d.get("use_pathcrf", False),
+                   dead_policy=d.get("dead_policy", "full"), dead_offset=float(d.get("dead_offset", 0.0)), use_pathcrf=d.get("use_pathcrf", False),
                    pathcrf=PathCRFParams(**{k: v for k, v in d.get("pathcrf", {}).items() if k in ("ckpt", "eps", "conf_alpha")}),
                    use_teamctrl=d.get("use_teamctrl", False), team_policy=d.get("team_policy", "full"),
                    use_switch=d.get("use_switch", False), switch_policy=d.get("switch_policy", "full"))
@@ -61,7 +62,8 @@ def compute_evidence(match, tags, cfg, dead_model, cache_key=None, team_model=No
     if dead_model is not None:
         if dead_model.policy != cfg.dead_policy:
             raise ValueError(f"dead model policy {dead_model.policy!r} != cfg.dead_policy {cfg.dead_policy!r}")
-        ev["dead"] = dead_evidence(dead_model.predict_proba(dead_table(match, tags, dead_model.policy)))  # base or base+long
+        ev["dead"] = dead_evidence(dead_model.predict_proba(dead_table(match, tags, dead_model.policy)),
+                              logit_offset=cfg.dead_offset)  # base or base+long
     if cfg.use_pathcrf:
         if cache_key is None:
             raise ValueError("cfg.use_pathcrf needs a cache_key")

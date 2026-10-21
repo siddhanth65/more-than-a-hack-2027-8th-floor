@@ -400,8 +400,13 @@ class DeadModel:
         return m
 
 
-def dead_evidence(p_dead, eps=1e-3):
+def dead_evidence(p_dead, eps=1e-3, logit_offset=0.0):
+    """Log-scores of the dead stream. logit_offset != 0 first shifts the probability on the logit scale
+    (p' = sigmoid(logit(clip(p, eps, 1 - eps)) + offset)); 0 leaves the output bit-identical."""
     p = np.asarray(p_dead, np.float32)
+    if logit_offset != 0:
+        q = np.clip(p.astype(np.float64), eps, 1 - eps)
+        p = (1.0 / (1.0 + np.exp(-(np.log(q / (1 - q)) + float(logit_offset))))).astype(np.float32)
     ev = np.empty((len(p), 3), np.float32)
     ev[:, 2] = np.log(p + eps); ev[:, 0] = np.log(1 - p + eps); ev[:, 1] = ev[:, 0]
     return ev

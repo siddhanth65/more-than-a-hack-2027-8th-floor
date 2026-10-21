@@ -100,9 +100,9 @@ def train_switch_model(train, base):
 
 
 def policy_cfgs(base, cells, lengths):
-    """{(dead_policy, sp_dead_bonus, team_policy): cfg} with cfg = apply_cell(base, first cell of that key). Evidence
-    depends on the cell only through dead_policy (dead stream), sp_dead_bonus (tag stream) and team_policy (teamctrl
-    stream); weights/taus act in the decoder, so one evidence set per key serves every cell. The PathCRF posterior is
+    """{(dead_policy, sp_dead_bonus, team_policy, dead_offset): cfg} with cfg = apply_cell(base, first cell of that key). Evidence
+    depends on the cell only through dead_policy (dead stream), dead_offset (its log-odds shift),
+    sp_dead_bonus (tag stream) and team_policy (teamctrl stream); weights/taus act in the decoder, so one evidence set per key serves every cell. The PathCRF posterior is
     disk-cached per match, so extra keys are cheap."""
     out = {}
     for c in cells:
@@ -312,7 +312,7 @@ def load_switch_model(sel_dir, cfg):
 
 
 GRID_PARAM_COLS = ("tau_HA", "tau_D", "w_dead", "aba_s", "w_pathcrf", "dead_policy", "sp_dead_bonus", "w_teamctrl",
-                   "w_ball", "team_policy", "merge_theta", "w_switch", "snap_mode")
+                   "w_ball", "team_policy", "merge_theta", "w_switch", "snap_mode", "dead_offset")
 
 
 def grid_hash(grid):
