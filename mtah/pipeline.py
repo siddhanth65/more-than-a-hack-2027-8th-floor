@@ -7,6 +7,7 @@ from mtah.evidence.ball_ctrl import BallCtrlParams, ball_ctrl_evidence
 from mtah.evidence.dead import dead_evidence, dead_features
 from mtah.evidence.pathcrf import PathCRFParams, pathcrf_evidence, pathcrf_posterior
 from mtah.evidence.tag_prior import TagPriorParams, load_tag_codes, tag_prior_evidence
+from mtah.evidence.team_ctrl import team_ctrl_evidence, team_features
 from mtah.evidence.touches import TouchParams, detect_touches, strong_touch_frames
 from mtah.spells.postprocess import PostParams, postprocess
 
@@ -16,13 +17,15 @@ class PipelineConfig:
     ball: BallCtrlParams = field(default_factory=BallCtrlParams)
     tag: TagPriorParams = field(default_factory=lambda: TagPriorParams(code_table=load_tag_codes()))
     touch: TouchParams = field(default_factory=TouchParams)
-    decoder: DecoderParams = field(default_factory=lambda: DecoderParams(weights={"ball": 1.0, "tag": 1.0, "dead": 1.0, "pathcrf": 1.0},
-                                                                         lengths={"ball": 1.0, "tag": 1.0, "dead": 1.0, "pathcrf": 1.0}))
+    decoder: DecoderParams = field(default_factory=lambda: DecoderParams(weights={"ball": 1.0, "tag": 1.0, "dead": 1.0, "pathcrf": 1.0, "teamctrl": 1.0},
+                                                                         lengths={"ball": 1.0, "tag": 1.0, "dead": 1.0, "pathcrf": 1.0, "teamctrl": 1.0}))
     post: PostParams = field(default_factory=PostParams)
     dead_model_path: Optional[str] = None
     dead_policy: str = "full"     # training-time feature policy of the dead model (recorded for reproducibility)
     use_pathcrf: bool = False     # external PathCRF team-posterior stream (needs a cache key per half/match)
     pathcrf: PathCRFParams = field(default_factory=PathCRFParams)
+    use_teamctrl: bool = False    # learned team-in-control stream (needs a TeamCtrlModel passed to compute_evidence)
+    team_policy: str = "full"     # training-time feature policy of the team-control model
 
     def to_dict(self):
         d = asdict(self)
@@ -38,11 +41,13 @@ class PipelineConfig:
         return cls(ball=BallCtrlParams(**d["ball"]), tag=TagPriorParams(**tag), touch=TouchParams(**d["touch"]),
                    decoder=DecoderParams(**d["decoder"]), post=PostParams(**d["post"]), dead_model_path=d.get("dead_model_path"),
                    dead_policy=d.get("dead_policy", "full"), use_pathcrf=d.get("use_pathcrf", False),
-                   pathcrf=PathCRFParams(**{k: v for k, v in d.get("pathcrf", {}).items() if k in ("ckpt", "eps", "conf_alpha")}))
+                   pathcrf=PathCRFParams(**{k: v for k, v in d.get("pathcrf", {}).items() if k in ("ckpt", "eps", "conf_alpha")}),
+                   use_teamctrl=d.get("use_teamctrl", False), team_policy=d.get("team_policy", "full"))
 
 
-def compute_evidence(match, tags, cfg, dead_model, cache_key=None):
-    """Evidence streams by name. `cache_key` names the PathCRF cache entry (required when cfg.use_pathcrf)."""
+def compute_evidence(match, tags, cfg, dead_model, cache_key=None, team_model=None):
+    """Evidence streams by name. `cache_key` names the PathCRF cache entry (required when cfg.use_pathcrf).
+    "teamctrl" is added iff cfg.use_teamctrl and a `team_model` is given (its policy must equal cfg.team_policy)."""
     ev = {"ball": ball_ctrl_evidence(match, cfg.ball), "tag": tag_prior_evidence(tags, match.n_frames, cfg.tag, fps=match.fps)}
     if dead_model is not None:
         if dead_model.policy != cfg.dead_policy:
@@ -53,6 +58,10 @@ def compute_evidence(match, tags, cfg, dead_model, cache_key=None):
             raise ValueError("cfg.use_pathcrf needs a cache_key")
         r = pathcrf_posterior(match, cache_key, cfg.pathcrf)
         ev["pathcrf"] = pathcrf_evidence(r["p_home"], r["imputed_frac"], cfg.pathcrf.eps, cfg.pathcrf.conf_alpha)
+    if cfg.use_teamctrl and team_model is not None:
+        if team_model.policy != cfg.team_policy:
+            raise ValueError(f"team model policy {team_model.policy!r} != cfg.team_policy {cfg.team_policy!r}")
+        ev["teamctrl"] = team_ctrl_evidence(team_model.predict_proba(team_features(match, cfg.touch)))
     return ev
 
 
@@ -62,8 +71,8 @@ def compute_strong(match, cfg):
             strong_touch_frames(t, 1, cfg.touch, match.n_frames), t)
 
 
-def predict(match, tags, cfg, dead_model, evidence=None, strong=None, cache_key=None):
-    ev = evidence if evidence is not None else compute_evidence(match, tags, cfg, dead_model, cache_key)
+def predict(match, tags, cfg, dead_model, evidence=None, strong=None, cache_key=None, team_model=None):
+    ev = evidence if evidence is not None else compute_evidence(match, tags, cfg, dead_model, cache_key, team_model=team_model)
     lab = decode(ev, match.half, cfg.decoder)
     st = strong if strong is not None else compute_strong(match, cfg)
     sH, sA = st[0], st[1]

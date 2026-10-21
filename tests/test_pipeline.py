@@ -55,3 +55,48 @@ def test_compute_evidence_rejects_policy_mismatch():
     with pytest.raises(ValueError):
         compute_evidence(carry_match(), pd.DataFrame(columns=["start", "end", "code", "team", "type", "half"]),
                          cfg, DeadModel(policy="full"))
+
+
+TAGS0 = pd.DataFrame(columns=["start", "end", "code", "team", "type", "half"])
+
+
+def _toy_team_model(policy="full"):
+    import numpy as np
+    from mtah.evidence.team_ctrl import TEAM_FEATURES, TeamCtrlModel
+    rng = np.random.default_rng(0)
+    X = rng.normal(size=(2000, len(TEAM_FEATURES))).astype(np.float32)
+    i = TEAM_FEATURES.index("nearest_gap_m")
+    return TeamCtrlModel(policy=policy).fit(X, (X[:, i] > 0).astype(int))
+
+
+def test_teamctrl_config_roundtrip_and_old_configs():
+    cfg = PipelineConfig()
+    assert cfg.use_teamctrl is False and cfg.team_policy == "full" and cfg.decoder.weights["teamctrl"] == 1.0
+    cfg.use_teamctrl = True; cfg.team_policy = "no_touch"; cfg.decoder.weights["teamctrl"] = 2.0
+    r = PipelineConfig.from_dict(cfg.to_dict())
+    assert r.use_teamctrl is True and r.team_policy == "no_touch" and r.decoder.weights["teamctrl"] == 2.0
+    d = PipelineConfig().to_dict(); d.pop("use_teamctrl"); d.pop("team_policy"); d["decoder"]["weights"].pop("teamctrl")
+    old = PipelineConfig.from_dict(d)
+    assert old.use_teamctrl is False and old.team_policy == "full"
+
+
+def test_compute_evidence_teamctrl_gating_and_policy_mismatch():
+    import numpy as np
+    import pytest
+    m = carry_match(F=300); m.ball[250:] = np.nan
+    team = _toy_team_model()
+    cfg = PipelineConfig()
+    assert "teamctrl" not in compute_evidence(m, TAGS0, cfg, None, team_model=team)      # use_teamctrl False
+    cfg.use_teamctrl = True
+    assert "teamctrl" not in compute_evidence(m, TAGS0, cfg, None)                       # no model
+    ev = compute_evidence(m, TAGS0, cfg, None, team_model=team)["teamctrl"]
+    assert ev.shape == (300, 3) and ev.dtype == np.float32
+    assert np.isnan(ev[250:]).all() and np.isnan(ev[:, 2]).all() and np.isfinite(ev[5:240, :2]).all()
+    assert (ev[50, 0] > ev[50, 1]) and (ev[150, 1] > ev[150, 0])     # home carries, then away
+    lab = predict(m, TAGS0, cfg, None, team_model=team)
+    assert len(lab) == 300
+    cfg.team_policy = "no_touch"
+    with pytest.raises(ValueError):
+        compute_evidence(m, TAGS0, cfg, None, team_model=team)
+    cfg.use_teamctrl = False
+    compute_evidence(m, TAGS0, cfg, None, team_model=team)          # stream off: no policy check

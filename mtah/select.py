@@ -8,6 +8,7 @@ import pandas as pd
 from mtah.decode.scale import correlation_length, evidence_margin, residual_margin
 from mtah.eval.scorer import score
 from mtah.evidence.dead import DeadModel, dead_features
+from mtah.evidence.team_ctrl import TeamCtrlModel, team_features
 from mtah.pipeline import compute_evidence, predict
 from mtah.sim.dataset import VARIANTS, match_id
 
@@ -44,6 +45,17 @@ def train_dead(sims, variant="ctrl_Dfull", policy="full"):
     X = np.concatenate([dead_features(s.match, s.tags) for s in sims])
     y = np.concatenate([(s.truth[variant] == "D").astype(int) for s in sims])
     return DeadModel(policy=policy).fit(X, y)
+
+
+def train_team_ctrl(sims, variant="ctrl_Dfull", policy="full", stride=5, touch_params=None):
+    """TeamCtrlModel on frames whose truth is H or A AND whose ball is visible (every `stride`-th such frame per
+    half; consecutive frames are near duplicates). y = 1 for H. The model adds the team-swap mirror itself."""
+    Xs, ys = [], []
+    for s in sims:
+        t = s.truth[variant]
+        idx = np.flatnonzero(np.isin(t, ("H", "A")) & s.match.ball_present)[::stride]
+        Xs.append(team_features(s.match, touch_params)[idx]); ys.append((t[idx] == "H").astype(int))
+    return TeamCtrlModel(policy=policy).fit(np.concatenate(Xs), np.concatenate(ys))
 
 
 LENGTHS_MODE = "unit"   # "unit": L_k = 1 for every stream (the tau grid absorbs the scale);
