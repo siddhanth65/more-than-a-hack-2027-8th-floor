@@ -12,6 +12,7 @@ class PostParams:
     d_fill_s: float = 0.0
     aba_s: float = 0.5
     snap_w: int = 50       # frames; 0 disables H<->A boundary snapping
+    merge_theta: float = 1.0   # per-spell merge model threshold (mtah.spells.merge); 1.0 = off (labels unchanged)
 
     def to_dict(self):
         return asdict(self)

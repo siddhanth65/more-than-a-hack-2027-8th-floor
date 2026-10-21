@@ -14,6 +14,7 @@ from mtah.evidence.team_ctrl import TeamCtrlModel
 from mtah.io.metrica_loader import STEMS, load_tactical
 from mtah.io.tags import load_tags
 from mtah.pipeline import PipelineConfig, compute_evidence, predict
+from mtah.spells.merge import MergeModel
 from mtah.submission import validate, write_submission
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -34,12 +35,18 @@ def main():
     team = TeamCtrlModel.load(tp) if tp.exists() else None
     if team is None and cfg.use_teamctrl and cfg.decoder.weights.get("teamctrl", 1.0) > 0:
         raise SystemExit(f"{sel}: config uses the teamctrl stream but team_model.joblib is missing")
+    mp = sel / "merge_model.joblib"
+    merge = None
+    if cfg.post.merge_theta < 1.0:
+        if not mp.exists():
+            raise SystemExit(f"{sel}: config has merge_theta {cfg.post.merge_theta} < 1 but merge_model.joblib is missing")
+        merge = MergeModel.load(mp)
     d = Path(args.data) / "tactical"
     md5s = {n: hashlib.md5((d / f"{STEMS['tactical']}{suf}").read_bytes()).hexdigest()
             for n, suf in (("atd", "_atd.txt"), ("meta", "_atd.xml"), ("tags", "_smart_tagging.xml"), ("homography", "_homography.csv"))}
     m = load_tactical(args.data); tags = load_tags(args.data)
     ev = compute_evidence(m, tags, cfg, dead, cache_key="real_tactical", team_model=team)
-    labels = predict(m, tags, cfg, dead, evidence=ev)
+    labels = predict(m, tags, cfg, dead, evidence=ev, merge_model=merge)
     out = ROOT / "runs" / "candidates"; out.mkdir(parents=True, exist_ok=True)
     p = Path(write_submission(labels, out / f"{args.name}.csv")); reason = validate(p)
     if reason is not None:

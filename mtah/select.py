@@ -1,6 +1,7 @@
 """Leave-one-match-out selection on the simulated dataset."""
 import copy
 import itertools
+import json
 
 import numpy as np
 import pandas as pd
@@ -23,17 +24,23 @@ GRID2 = [{"tau_HA": a, "tau_D": d, "w_dead": w, "w_pathcrf": c, "dead_policy": p
 GRID3 = [{"tau_HA": 30.0, "tau_D": d, "w_dead": w, "w_pathcrf": c, "dead_policy": pol, "sp_dead_bonus": b, "aba_s": 1.0}
          for d, w, c, pol, b in itertools.product((30.0, 100.0), (2.0, 3.0, 4.0, 6.0), (0.5, 1.0),
                                                   ("full", "no_ball_at_all"), (0.0, 3.0))]
-# grid 4 (Plan 2d T1): learned team-control stream weight/policy and ball-stream weight around a3b's cell 52
-# (tau_D 100, w_pathcrf 1, full dead policy, no set-piece bonus); stickier tau_HA 60 and aba_s 2.0 join the search.
+# grid 4 (Plan 2d T1 + T3): learned team-control stream weight/policy around a3b's cell 52 (tau_D 100, w_pathcrf 1,
+# full dead policy, no set-piece bonus); stickier tau_HA 60 and aba_s 2.0, and the per-spell merge model threshold
+# merge_theta (1.0 = off, 0.7 = merge spells with P(merge) > 0.7; mtah.spells.merge) join the search.
+# Final axes (96 cells): tau_HA {30, 60} x w_teamctrl {0, 1, 2} x w_ball {1.0} x w_dead {3, 4} x team_policy
+# {full, no_touch} x aba_s {1, 2} x merge_theta {1.0, 0.7}. w_ball 0.5 was dropped (T3) to keep the grid at 96 cells.
 # w_teamctrl 0 cells repeat across team_policy (identical labels): kept so the grid is a full product.
 GRID4 = [{"tau_HA": a, "tau_D": 100.0, "w_dead": w, "w_pathcrf": 1.0, "dead_policy": "full", "sp_dead_bonus": 0.0,
-          "w_teamctrl": t, "w_ball": b, "team_policy": tp, "aba_s": m}
-         for a, t, b, w, tp, m in itertools.product((30.0, 60.0), (0.0, 1.0, 2.0), (1.0, 0.5), (3.0, 4.0),
-                                                    ("full", "no_touch"), (1.0, 2.0))]
+          "w_teamctrl": t, "w_ball": b, "team_policy": tp, "aba_s": m, "merge_theta": q}
+         for a, t, b, w, tp, m, q in itertools.product((30.0, 60.0), (0.0, 1.0, 2.0), (1.0,), (3.0, 4.0),
+                                                       ("full", "no_touch"), (1.0, 2.0), (1.0, 0.7))]
 GRIDS = {"grid1": GRID, "grid2": GRID2, "grid3": GRID3, "grid4": GRID4}
 
 # label-free real-match plausibility: non-blackout D share of the prediction must lie in this band
 REAL_D_SHARE_BAND = (0.10, 0.18)
+# ... AND the predicted spell rate (drift_report spells_per_HA_min: H/A spells per minute of predicted H/A time) in
+# this band: 3.4/min (public-window truth, 17 spells in 5 min) x [0.8, 1.25], the band the sim count-ratio bar uses
+REAL_SPELL_RATE_BAND = (2.7, 4.3)
 
 
 def apply_cell(cfg, cell):
@@ -50,7 +57,14 @@ def apply_cell(cfg, cell):
     if "w_ball" in cell:
         cfg.decoder.weights["ball"] = cell["w_ball"]
     cfg.team_policy = cell.get("team_policy", cfg.team_policy)
+    if "merge_theta" in cell:
+        cfg.post.merge_theta = float(cell["merge_theta"])
     return cfg
+
+
+def evidence_key(cell):
+    """Evidence depends on a cell only through (dead_policy, sp_dead_bonus, team_policy)."""
+    return (cell.get("dead_policy", "full"), float(cell.get("sp_dead_bonus", 0.0)), cell.get("team_policy", "full"))
 
 
 def train_dead(sims, variant="ctrl_Dfull", policy="full"):
@@ -118,13 +132,15 @@ def estimate_lengths(train_sims, cfg, train_fn, mode=None):
     return {k: float(np.median(v)) for k, v in acc.items()}
 
 
-def score_cell(sims, evidences, cfg, variants, strongs=None):
-    """Predict once per (sim, evidence); score the same labels against every variant.
+def score_cell(sims, evidences, cfg, variants, strongs=None, merge_model=None):
+    """Predict once per (sim, evidence); score the same labels against every variant. `merge_model` is applied when
+    cfg.post.merge_theta < 1 (required then; see pipeline.predict).
 
     Returns ({variant: {spell_f1, macro_f1, ratio}}, long-format rows DataFrame)."""
     rows = []
     for i, (s, ev) in enumerate(zip(sims, evidences)):
-        lab = predict(s.match, s.tags, cfg, None, evidence=ev, strong=None if strongs is None else strongs[i])
+        lab = predict(s.match, s.tags, cfg, None, evidence=ev, strong=None if strongs is None else strongs[i],
+                      merge_model=merge_model if cfg.post.merge_theta < 1.0 else None)
         for v in variants:
             r = score(s.truth[v], lab)
             rows.append({"key": s.key, "seed": s.seed, "variant": v, "spell_f1": r["spell_f1"],
@@ -145,10 +161,18 @@ def mean_rank(table, variants):
     return t.sort_values(["mean_rank", "ctrl_Dfull"], ascending=[True, False]).reset_index(drop=True)
 
 
-def is_real_plausible(non_blackout_D_share, band=REAL_D_SHARE_BAND):
-    """True when the real-match non-blackout D share lies in the band (NaN is never plausible)."""
-    v = float(non_blackout_D_share)
-    return bool(np.isfinite(v) and band[0] <= v <= band[1])
+def real_band_checks(non_blackout_D_share, spells_per_HA_min, band=REAL_D_SHARE_BAND, rate_band=REAL_SPELL_RATE_BAND):
+    """{"d_share_ok", "spell_rate_ok", "real_plausible"} for the two label-free real-match bands (NaN never passes)."""
+    v, r = float(non_blackout_D_share), float(spells_per_HA_min)
+    d_ok = bool(np.isfinite(v) and band[0] <= v <= band[1])
+    r_ok = bool(np.isfinite(r) and rate_band[0] <= r <= rate_band[1])
+    return {"d_share_ok": d_ok, "spell_rate_ok": r_ok, "real_plausible": d_ok and r_ok}
+
+
+def is_real_plausible(non_blackout_D_share, spells_per_HA_min, band=REAL_D_SHARE_BAND, rate_band=REAL_SPELL_RATE_BAND):
+    """True when the real-match non-blackout D share lies in `band` AND the predicted spell rate (spells per minute of
+    predicted H/A time, drift_report spells_per_HA_min) lies in `rate_band` (NaN is never plausible)."""
+    return real_band_checks(non_blackout_D_share, spells_per_HA_min, band, rate_band)["real_plausible"]
 
 
 def choose_plausible(ranked, plaus):
@@ -162,3 +186,92 @@ def choose_plausible(ranked, plaus):
             return c
     print(f"WARNING: no real-plausible cell among the checked ones {sorted(plaus)}; falling back to rank 1 (cell {order[0]})")
     return order[0]
+
+
+# ---- per-spell merge model (Plan 2d T3): honest training set from an inner split of the fold's train matches ----
+MERGE_TRUTH = "ctrl_Dfull"      # truth variant the merge label is scored against
+MERGE_REF_CELLS = 4             # pre-merge labels for the training set come from up to this many merge cells
+MERGE_MAX_ROWS_PER_HALF = None  # cap on label evaluations per half and reference cell (None = every mergeable spell)
+
+
+def merge_cells(grid):
+    return [c for c in grid if float(c.get("merge_theta", 1.0)) < 1.0]
+
+
+def merge_ref_cells(grid, k=MERGE_REF_CELLS):
+    """Up to k distinct merge cells (merge_theta reset to 1.0: training labels are scored on pre-merge labels), evenly
+    spaced over the grid order so the decoder settings (tau_HA, teamctrl weight/policy, w_dead, aba_s) vary."""
+    seen, uniq = set(), []
+    for c in merge_cells(grid):
+        c0 = {**c, "merge_theta": 1.0}
+        key = tuple(sorted(c0.items()))
+        if key not in seen:
+            seen.add(key); uniq.append(c0)
+    if not uniq:
+        return []
+    idx = np.unique(np.linspace(0, len(uniq) - 1, min(k, len(uniq))).round().astype(int))
+    return [uniq[i] for i in idx]
+
+
+def merge_training_table(train_sims, base, ref_cells, lengths, train_dead_fn=None, train_team_fn=None,
+                         max_rows=MERGE_MAX_ROWS_PER_HALF):
+    """Spell tables + merge labels on honest (out-of-sample) predictions.
+
+    Inner split as in estimate_lengths: the stream models (dead per dead_policy; teamctrl per team_policy when
+    base.use_teamctrl) are trained on all train matches except the last one (by match_id), and the reference cells
+    are decoded (pre-merge) on that held-out match's halves (all seeds). Only the fold's TRAIN matches are touched.
+    Returns (DataFrame of mergeable spells with label column "y", info dict incl. label/total seconds)."""
+    import time
+    from mtah.pipeline import compute_strong
+    from mtah.spells.merge import match_spell_table, merge_labels
+    train_dead_fn = train_dead_fn or train_dead
+    train_team_fn = train_team_fn or train_team_ctrl
+    t0 = time.time()
+    mids = sorted({match_id(s.key) for s in train_sims})
+    if len(mids) < 2:
+        print("WARNING: merge_training_table: <2 train matches, falling back to in-sample stream models")
+        inner, held = list(train_sims), list(train_sims)
+    else:
+        inner = [s for s in train_sims if match_id(s.key) != mids[-1]]
+        held = [s for s in train_sims if match_id(s.key) == mids[-1]]
+    keys = sorted({evidence_key(c) for c in ref_cells})
+    dead = {p: train_dead_fn(inner, policy=p) for p in sorted({k[0] for k in keys})}
+    team = {p: train_team_fn(inner, policy=p) for p in sorted({k[2] for k in keys})} if base.use_teamctrl else {}
+    cfgs = {}
+    for c in ref_cells:
+        k = evidence_key(c)
+        if k not in cfgs:
+            cfgs[k] = apply_cell(base, c); cfgs[k].decoder.lengths = lengths
+    tabs, t_label = [], 0.0
+    for s in held:
+        strong = compute_strong(s.match, next(iter(cfgs.values())))
+        evs = {k: compute_evidence(s.match, s.tags, cfg, dead[k[0]], cache_key=f"{s.key}_s{s.seed}",
+                                   team_model=team.get(k[2])) for k, cfg in cfgs.items()}
+        for ci, c in enumerate(ref_cells):
+            cfg = apply_cell(base, {**c, "merge_theta": 1.0}); cfg.decoder.lengths = lengths
+            ev = evs[evidence_key(c)]
+            lab = predict(s.match, s.tags, cfg, None, evidence=ev, strong=strong)
+            tab = match_spell_table(lab, s.match, ev, strong)
+            t1 = time.time()
+            tab["y"] = merge_labels(s.truth[MERGE_TRUTH], lab, tab, max_rows=max_rows)
+            t_label += time.time() - t1
+            tab["key"] = s.key; tab["seed"] = s.seed; tab["ref_cell"] = ci
+            tabs.append(tab[np.isfinite(tab["y"].to_numpy(float))])
+    df = pd.concat(tabs, ignore_index=True) if tabs else pd.DataFrame()
+    info = {"held_match": int(mids[-1]) if mids else None, "n_halves": len(held), "n_ref_cells": len(ref_cells),
+            "n_rows": int(len(df)), "pos_rate": float(df["y"].mean()) if len(df) else float("nan"),
+            "label_seconds": round(t_label, 2), "total_seconds": round(time.time() - t0, 2)}
+    return df, info
+
+
+def train_merge_model(train_sims, base, grid, lengths, train_dead_fn=None, train_team_fn=None):
+    """MergeModel for one fold (None when no grid cell has merge_theta < 1); model.info carries the training stats."""
+    from mtah.spells.merge import MergeModel
+    refs = merge_ref_cells(grid)
+    if not refs:
+        return None
+    df, info = merge_training_table(train_sims, base, refs, lengths, train_dead_fn, train_team_fn)
+    m = MergeModel().fit(df, df["y"].to_numpy(float) if len(df) else np.zeros(0))
+    m.info.update(info)
+    print(f"merge model: {json.dumps(m.info)}", flush=True)
+    return m

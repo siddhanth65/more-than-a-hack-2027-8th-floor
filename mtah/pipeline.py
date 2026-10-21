@@ -9,6 +9,7 @@ from mtah.evidence.pathcrf import PathCRFParams, pathcrf_evidence, pathcrf_poste
 from mtah.evidence.tag_prior import TagPriorParams, load_tag_codes, tag_prior_evidence
 from mtah.evidence.team_ctrl import team_ctrl_evidence, team_features
 from mtah.evidence.touches import TouchParams, detect_touches, strong_touch_frames
+from mtah.spells.merge import apply_merge_model
 from mtah.spells.postprocess import PostParams, postprocess
 
 
@@ -71,10 +72,18 @@ def compute_strong(match, cfg):
             strong_touch_frames(t, 1, cfg.touch, match.n_frames), t)
 
 
-def predict(match, tags, cfg, dead_model, evidence=None, strong=None, cache_key=None, team_model=None):
+def predict(match, tags, cfg, dead_model, evidence=None, strong=None, cache_key=None, team_model=None, merge_model=None):
+    """Labels. With cfg.post.merge_theta < 1 the per-spell merge model runs after post-processing (a `merge_model`
+    is then required); merge_theta = 1.0 (default) leaves the post-processed labels untouched."""
     ev = evidence if evidence is not None else compute_evidence(match, tags, cfg, dead_model, cache_key, team_model=team_model)
     lab = decode(ev, match.half, cfg.decoder)
     st = strong if strong is not None else compute_strong(match, cfg)
     sH, sA = st[0], st[1]
     touches = st[2] if len(st) > 2 else detect_touches(match, cfg.touch)   # tolerate the old 2-tuple
-    return postprocess(lab, match.half, match.fps, cfg.post, strong_H=sH, strong_A=sA, touches=touches)
+    out = postprocess(lab, match.half, match.fps, cfg.post, strong_H=sH, strong_A=sA, touches=touches)
+    theta = float(getattr(cfg.post, "merge_theta", 1.0))
+    if theta < 1.0:
+        if merge_model is None:
+            raise ValueError(f"cfg.post.merge_theta = {theta} < 1 needs a merge_model")
+        out = apply_merge_model(out, match, ev, (sH, sA, touches), merge_model, theta)
+    return out

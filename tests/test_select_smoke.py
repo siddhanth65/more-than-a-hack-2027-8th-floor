@@ -154,14 +154,17 @@ def test_run_selection_two_policies_pathcrf_and_real(tmp_path, monkeypatch):
     assert set(summ["cell"]) == {0, 1, 2, 3}
     real_tab = pd.read_csv(out / "summary_real.csv")
     assert {"cell", "mean_rank", "non_blackout_D_share", "tag_agreement_implied", "pred_D_share",
-            "spells_per_HA_min", "real_plausible"} <= set(real_tab.columns)
+            "spells_per_HA_min", "d_share_ok", "spell_rate_ok", "real_plausible"} <= set(real_tab.columns)
     assert set(real_tab["cell"]) == {0, 1, 2, 3}
     b = json.loads((out / "best.json").read_text()); reg = json.loads((out / "registration.json").read_text())
     assert set(b["real_plausibility"]) == {"0", "1", "2", "3"} and reg["real_plausibility"] == b["real_plausibility"]
     want = sel.choose_plausible(summ, {int(k): v for k, v in b["real_plausibility"].items()})
     assert b["cell"] == grid[want] == best
     for v in b["real_plausibility"].values():
-        assert v["real_plausible"] == sel.is_real_plausible(v["non_blackout_D_share"])
+        assert v["real_plausible"] == sel.is_real_plausible(v["non_blackout_D_share"], v["spells_per_HA_min"])
+        assert v["real_plausible"] == (v["d_share_ok"] and v["spell_rate_ok"])
+    assert b["real_bands"] == {"non_blackout_D_share": list(sel.REAL_D_SHARE_BAND),
+                               "spells_per_HA_min": list(sel.REAL_SPELL_RATE_BAND)}
     uses_team = best.get("w_teamctrl", 0.0) > 0
     assert (out / "team_model.joblib").exists() == uses_team and reg["use_teamctrl"] == uses_team
     assert reg["team_policy"] == (best["team_policy"] if uses_team else None)
@@ -337,3 +340,79 @@ def test_resume_rejects_changed_team_columns(tmp_path):
         bad = df.copy(); bad.loc[1, col] = val
         with pytest.raises(SystemExit, match="different grid"):
             mod.check_resume(dict(fp), bad, grid, fp, tmp_path)
+
+
+def test_run_selection_merge_cells_route_model_and_artifacts(tmp_path, monkeypatch):
+    """merge_theta < 1 cells: one merge model per fold, trained on an inner split of the fold's TRAIN matches only,
+    passed to score_cell for merge cells only; the registered merge_model.joblib is written, reloaded by the sealed
+    path (never retrained) and refused when missing; merge_theta joins the resume columns."""
+    import pytest
+    from mtah.io import readlog
+    from mtah.sim.dataset import SEALED_MATCH, match_id
+    from mtah.spells.merge import MergeModel
+    monkeypatch.setattr(readlog, "READS_DIR", tmp_path / "reads")
+    rng = np.random.default_rng(4)
+    sim_dir = tmp_path / "sim"; seeds = [100]
+    for mid in (9001, 9002, 9003, SEALED_MATCH):
+        for half in (1, 2):
+            save_half(_fake_half(mid, half, seeds[0], rng), sim_dir)
+    grid = [{"tau_HA": 10.0, "tau_D": 10.0, "w_dead": 1.0, "aba_s": 0.5, "merge_theta": 0.7},
+            {"tau_HA": 10.0, "tau_D": 10.0, "w_dead": 1.0, "aba_s": 0.5, "merge_theta": 1.0}]
+    mod = _load_script()
+    trained_on = []
+    orig_tmt = sel.train_merge_model
+    def spy_tmt(train, base, g, lengths, **kw):
+        trained_on.append(sorted({match_id(s.key) for s in train}))
+        return orig_tmt(train, base, g, lengths, **kw)
+    monkeypatch.setattr(sel, "train_merge_model", spy_tmt)
+    inner_held = []
+    orig_mtt = sel.merge_training_table
+    def spy_mtt(train, *a, **kw):
+        df, info = orig_mtt(train, *a, **kw); inner_held.append(info["held_match"]); return df, info
+    monkeypatch.setattr(sel, "merge_training_table", spy_mtt)
+    scored = []
+    orig_sc = mod.score_cell
+    def spy_sc(test, ev, cfg, *a, **kw):
+        scored.append((cfg.post.merge_theta, kw.get("merge_model"))); return orig_sc(test, ev, cfg, *a, **kw)
+    monkeypatch.setattr(mod, "score_cell", spy_sc)
+    # force the merge cell to be chosen: rank by a summary in which cell 0 wins
+    out = tmp_path / "sel"
+    monkeypatch.setattr(mod, "mean_rank", lambda t, v: t.assign(mean_rank=t["cell"].astype(float) + 1.0)
+                        .sort_values("mean_rank").reset_index(drop=True))
+    r = mod.run_selection(sim_dir, seeds, out, grid=grid)
+    assert r["best_cell"] == grid[0]
+    folds = {9001: [9002, 9003], 9002: [9001, 9003], 9003: [9001, 9002]}
+    assert trained_on[:3] == [folds[h] for h in (9001, 9002, 9003)]          # fold models: train matches only
+    assert all(SEALED_MATCH not in t for t in trained_on)
+    assert inner_held[:3] == [9003, 9003, 9002]                               # inner held-out = last train match
+    for h in (9001, 9002, 9003):
+        info = json.loads((out / f"fold_{h}_merge.json").read_text())
+        assert info["n_halves"] == 2 and info["n_ref_cells"] == 1 and "label_seconds" in info
+    fold_scores = scored[:6]
+    assert all((m is not None) == (th < 1.0) for th, m in fold_scores) and {th for th, _ in fold_scores} == {0.7, 1.0}
+    assert all(isinstance(m, MergeModel) for th, m in fold_scores if th < 1.0)
+    assert (out / "merge_model.joblib").exists()
+    reg = json.loads((out / "registration.json").read_text())
+    assert reg["use_merge"] is True and reg["merge_model"]["held_match"] == 9003   # registration: inner split of all non-sealed
+    cfg, dead, lengths = mod.load_candidate_artifacts(out)
+    assert cfg.post.merge_theta == 0.7 and isinstance(mod.load_merge_model(out, cfg), MergeModel)
+    df = pd.read_csv(out / "fold_9001.csv")
+    assert "merge_theta" in df.columns and "merge_theta" in mod.GRID_PARAM_COLS
+    bad = df.copy(); bad.loc[0, "merge_theta"] = 1.0
+    fp = mod.run_fingerprint(seeds, grid, "custom")
+    with pytest.raises(SystemExit, match="different grid"):
+        mod.check_resume(dict(fp), bad, grid, fp, tmp_path)
+    # sealed path: loads the registered merge model, never retrains it
+    b = json.loads((out / "best.json").read_text()); b["spec_bar"]["bar_pass"] = True; b["chosen_real_plausible"] = None
+    (out / "best.json").write_text(json.dumps(b))
+    retrained = []
+    monkeypatch.setattr(sel, "train_merge_model", lambda *a, **k: retrained.append(1))
+    scored.clear()
+    monkeypatch.setattr(sys, "argv", ["select_lomo", "--sim", str(sim_dir), "--seeds", "100", "--sealed", "--best-from", str(out)])
+    mod.main()
+    assert retrained == [] and scored and all(isinstance(m, MergeModel) for _, m in scored)
+    (out / "merge_model.joblib").unlink()
+    with pytest.raises(SystemExit, match="merge_model"):
+        mod.load_merge_model(out, cfg)
+    from mtah.pipeline import PipelineConfig
+    assert mod.load_merge_model(out, PipelineConfig()) is None
