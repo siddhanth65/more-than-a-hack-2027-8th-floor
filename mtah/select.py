@@ -65,8 +65,11 @@ GRID8 = [{**GRID5[0], "dead_policy": "long_rel", "w_dead": 4.0, "dead_offset": o
 # (mtah.evidence.tag_prior: TagPriorParams.sp_dead_before_by_type / sp_dead_ramp) bonus {0, 2, 4, 6}. 4 cells; bonus 0 is
 # a5c itself. The bonus is part of evidence_key, so each cell gets its own evidence.
 GRID9 = [{**GRID8[0], "sp_dead_bonus": b} for b in (0.0, 2.0, 4.0, 6.0)]
+# grid10: stronger tag-anchored pre-restart prior paired with a lower global dead offset (Plan 2f)
+GRID10 = [{**GRID8[0], "sp_dead_bonus": b, "dead_offset": o}
+          for b, o in itertools.product((4.0, 6.0, 8.0), (-2.0, -2.5, -3.0))]
 GRIDS = {"grid1": GRID, "grid2": GRID2, "grid3": GRID3, "grid4": GRID4, "grid5": GRID5, "grid6": GRID6, "grid7": GRID7,
-         "grid8": GRID8, "grid9": GRID9}
+         "grid8": GRID8, "grid9": GRID9, "grid10": GRID10}
 
 # label-free real-match plausibility: non-blackout D share of the prediction must lie in this band
 REAL_D_SHARE_BAND = (0.10, 0.18)
