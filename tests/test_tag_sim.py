@@ -16,7 +16,7 @@ def test_phases_and_setpiece():
     labels[25 * 40:25 * 70] = "A"
     labels[25 * 70:25 * 80] = "D"
     m.ball[25 * 69:25 * 70, 1] = 34.0     # last ball frames before the D run (incl. 1749): on the touchline -> throw-in
-    events = pd.DataFrame([(25 * 80, "H", 8, False)], columns=["frame", "team", "cls", "poss_only"])
+    events = pd.DataFrame([(25 * 80, "H", 4, False)], columns=["frame", "team", "cls", "poss_only"])
     mask = np.zeros(m.n_frames, bool); mask[25 * 70:25 * 80] = True
     p = TagSimParams(keep_outside=1.0, keep_inside=1.0, jitter_s=0.0)
     df = simulate_tags(m, labels, events, mask, p, np.random.default_rng(0))
@@ -64,7 +64,7 @@ def _restart_match():
         labels[s:e] = "D"
         m.ball[s - 25:s] = xy
         m.ball[e:e + 25] = restarts[i]
-        ev.append((e, "H", 8, False))
+        ev.append((e, "H", 4 if i == 0 else 8, False))
     events = pd.DataFrame(ev, columns=["frame", "team", "cls", "poss_only"])
     return m, labels, events
 
@@ -96,10 +96,10 @@ def test_keep_sp_by_type_deterministic_and_partial():
     assert 70 < kept < 130
 
 
-def test_default_keeps_sixty_percent_free_kicks_and_config_in_sync():
+def test_default_keeps_and_config_in_sync():
     import json
     from pathlib import Path
-    assert TagSimParams().keep_sp_by_type == {"Free kick": 0.60}
+    assert TagSimParams().keep_sp_by_type == {"Free kick": 0.15, "Throw-in": 0.55}
     cfg = json.loads((Path(__file__).resolve().parents[1] / "configs" / "tag_sim.json").read_text())
     assert TagSimParams.from_dict(cfg) == TagSimParams()
     assert TagSimParams.from_dict(json.loads(json.dumps(TagSimParams().to_dict()))) == TagSimParams()
@@ -108,10 +108,44 @@ def test_default_keeps_sixty_percent_free_kicks_and_config_in_sync():
 def test_sp_type_rules():
     from mtah.sim.tag_sim import _sp_type
     P = (105.0, 68.0)
-    assert _sp_type((20, 10), (0.2, -0.5), P) == "Kick-off"
-    assert _sp_type((52.8, 10.0), (51.5, 33.0), P) == "Corner"     # crossed goal line wide, restart at the flag
-    assert _sp_type((51.0, -33.0), (20.0, 5.0), P) == "Corner"     # ball in the flag region
-    assert _sp_type((52.8, 1.0), (49.0, 2.0), P) == "Goal kick"
-    assert _sp_type((52.8, 1.0), (-30.0, 2.0), P) == "Free kick"   # goal-mouth exit, restart far away
-    assert _sp_type((10.0, 33.8), (10.0, 33.8), P) == "Throw-in"
-    assert _sp_type((10.0, 5.0), (10.0, 5.0), P) == "Free kick"
+    assert _sp_type(8, (0.2, -0.5), P) == "Kick-off"
+    assert _sp_type(8, (51.5, 33.0), P) == "Corner"
+    assert _sp_type(8, (-51.0, -32.0), P) == "Corner"
+    assert _sp_type(8, (49.0, 2.0), P) == "Goal kick"
+    assert _sp_type(8, (-30.0, 2.0), P) == "Free kick"
+    assert _sp_type(8, (10.0, 33.8), P) == "Free kick"      # touchline geometry alone is not a throw-in
+    assert _sp_type(4, (10.0, 5.0), P) == "Throw-in"        # THROW_IN class wins over geometry
+    assert _sp_type(4, (51.5, 33.0), P) == "Throw-in"
+    assert _sp_type(8, (np.nan, np.nan), P) == "Free kick"
+
+
+def test_restart_typing_uses_raw_ball_not_blacked_out_ball():
+    m, labels, events = _restart_match()
+    raw = m.ball.copy()
+    m.ball[:] = np.nan                                      # fully blacked-out sim ball
+    p = TagSimParams(keep_outside=0.0, keep_inside=0.0, jitter_s=0.0, keep_sp_by_type={})
+    mask = np.zeros(m.n_frames, bool)
+    df = simulate_tags(m, labels, events, mask, p, np.random.default_rng(0), raw_ball=raw)
+    assert list(df[df["code"] == "SET PIECES"]["type"]) == ["Throw-in", "Corner", "Goal kick", "Free kick"]
+
+
+def test_restart_raw_ball_nan_at_restart_falls_back_to_last_visible():
+    m, labels, events = _restart_match()
+    raw = m.ball.copy()
+    e = int(events["frame"].iloc[1])
+    raw[e, :] = np.nan                                      # corner restart frame missing; frame e-1 is NaN-free (10 s dead, spot)
+    raw[e - 1, :] = (51.0, 33.0)
+    p = TagSimParams(keep_outside=0.0, keep_inside=0.0, jitter_s=0.0, keep_sp_by_type={})
+    df = simulate_tags(m, labels, events, np.zeros(m.n_frames, bool), p, np.random.default_rng(0), raw_ball=raw)
+    assert list(df[df["code"] == "SET PIECES"]["type"])[1] == "Corner"
+
+
+def test_dead_run_at_frame_zero_without_event_is_kickoff_and_deterministic():
+    m = two_player_match(F=25 * 60); m.ball[:] = 0.0; m.ball[:, 0] = -8.0
+    labels = np.full(m.n_frames, "H", dtype="<U1"); labels[:25 * 5] = "D"
+    events = pd.DataFrame(columns=["frame", "team", "cls", "poss_only"])
+    p = TagSimParams(keep_outside=0.0, keep_inside=0.0, jitter_s=0.0, keep_sp_by_type={})
+    a = simulate_tags(m, labels, events, np.zeros(m.n_frames, bool), p, np.random.default_rng(1))
+    b = simulate_tags(m, labels, events, np.zeros(m.n_frames, bool), p, np.random.default_rng(1))
+    pd.testing.assert_frame_equal(a, b)
+    assert list(a["type"]) == ["Kick-off"]

@@ -57,7 +57,7 @@ def build_half(key, npz, census, seed, bparams, cparams, tparams):
     sim = dc_replace(sim, ball=dead_ball_realism(sim.ball, labels, m.pitch, m.fps, cparams, dead_rng))
     sim = dc_replace(sim, ball_speed=speeds_from_positions(sim.ball, m.fps))
     sim = corrupt(sim, mask, cparams, rng)
-    tags = simulate_tags(sim, labels, events, mask, tparams, rng)
+    tags = simulate_tags(sim, labels, events, mask, tparams, rng, raw_ball=m.ball)
     return SimHalf(key=key, seed=seed, match=sim, tags=tags, blackout=mask, truth=truth, events=events)
 
 

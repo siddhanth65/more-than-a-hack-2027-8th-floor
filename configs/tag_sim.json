@@ -8,6 +8,7 @@
  "jitter_s": 1.0,
  "carry_max_s": 60.0,
  "keep_sp_by_type": {
-  "Free kick": 0.6
+  "Free kick": 0.15,
+  "Throw-in": 0.55
  }
 }

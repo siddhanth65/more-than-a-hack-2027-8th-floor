@@ -143,7 +143,7 @@ def test_dead_defaults_and_config_in_sync():
     import json
     from pathlib import Path
     p = CorruptParams()
-    assert (p.dead_v_hi, p.dead_fast_p, p.dead_out_keep, p.dead_keep_jitter) == (12.0, 0.15, 0.03, True)
+    assert (p.dead_v_hi, p.dead_fast_p, p.dead_out_keep, p.dead_keep_jitter) == (12.0, 0.15, 0.2, True)
     cfg = json.loads((Path(__file__).resolve().parents[1] / "configs" / "corrupt.json").read_text())
     assert CorruptParams.from_dict(cfg) == p
 

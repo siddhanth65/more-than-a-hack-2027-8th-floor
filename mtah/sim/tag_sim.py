@@ -21,8 +21,9 @@ class TagSimParams:
     jitter_s: float = 1.0
     carry_max_s: float = 60.0
     # per set-piece type keep probability (case-insensitive type names; types not listed are kept):
-    # the real tagger tags ~5 free kicks per match, the restart heuristic ~48 (Plan 2c)
-    keep_sp_by_type: dict = field(default_factory=lambda: {"Free kick": 0.60})
+    # per-type calibration knobs, starting values: re-calibrated after the next rebuild now that restarts are typed
+    # from THROW_IN events and the clean DFL ball (real: ~5 free kicks and ~0.245 throw-ins/min)
+    keep_sp_by_type: dict = field(default_factory=lambda: {"Free kick": 0.15, "Throw-in": 0.55})
 
     def to_dict(self):
         return asdict(self)
@@ -65,26 +66,38 @@ def _phase_runs(codes, fps, hyst_s, min_s, carry_max_s=60.0):
     return out
 
 
-def _sp_type(last_ball, restart_ball, pitch):
-    """Restart type from the last visible ball before the dead run and the first one after it."""
+THROW_IN_CLS = 4   # scripts/parse_dfl_match.py THROW_IN; same scheme for every half via load_events
+
+
+def _sp_type(cls, restart_ball, pitch):
+    """Restart type from the restart event class and the clean ball position at the restart.
+    A THROW_IN event is a throw-in whatever the geometry; otherwise corner flag / goal area / centre spot / free kick."""
+    if cls is not None and int(cls) == THROW_IN_CLS:
+        return "Throw-in"
     L, W = pitch
-    x, y = float(last_ball[0]), float(last_ball[1])
     rx, ry = float(restart_ball[0]), float(restart_ball[1])
-    crossed = abs(x) > L / 2 - 0.5
-    outside_mouth = abs(y) > 3.66
-    near_corner = abs(rx) > L / 2 - 3 and abs(ry) > W / 2 - 3
-    if (abs(x) > L / 2 - 3 and abs(y) > W / 2 - 3) or (crossed and outside_mouth and near_corner):
+    if np.isnan(rx) or np.isnan(ry):
+        return "Free kick"
+    if abs(rx) > L / 2 - 3 and abs(ry) > W / 2 - 3:
         return "Corner"
-    if crossed and abs(rx) > L / 2 - 7 and abs(ry) < 12:
+    if abs(rx) > L / 2 - 7 and abs(ry) < 12:
         return "Goal kick"
     if np.hypot(rx, ry) < 2.0:
         return "Kick-off"
-    if abs(y) > W / 2 - 0.5:
-        return "Throw-in"
     return "Free kick"
 
 
-def simulate_tags(match, labels, events, blackout_mask, params, rng):
+def _ball_at(ball, r):
+    """Ball at frame r, else the last non-NaN ball before it, else NaN."""
+    k = min(int(r), len(ball) - 1)
+    while k >= 0 and np.isnan(ball[k, 0]):
+        k -= 1
+    return ball[k] if k >= 0 else np.array([np.nan, np.nan])
+
+
+def simulate_tags(match, labels, events, blackout_mask, params, rng, raw_ball=None):
+    """raw_ball: clean DFL ball (F,2) used to type restarts; falls back to match.ball."""
+    rball = match.ball if raw_ball is None else np.asarray(raw_ball)
     fps = match.fps; F = match.n_frames
     rows = []
     codes = nearest_team(match)
@@ -96,24 +109,18 @@ def simulate_tags(match, labels, events, blackout_mask, params, rng):
         rows.append((s, e, "PROGRESSION", "H" if team == 0 else "A", None, 1))
     ev_frames = events["frame"].to_numpy() if len(events) else np.zeros(0, int)
     ev_team = events["team"].to_numpy() if len(events) else np.zeros(0, object)
+    ev_cls = events["cls"].to_numpy() if len(events) else np.zeros(0, int)
     look = int(2.0 * fps)
     keep_sp = {str(k).lower(): float(v) for k, v in (params.keep_sp_by_type or {}).items()}
     for s, e in runs_of(np.asarray(labels) == "D"):
         cand = np.flatnonzero((ev_frames >= e - look) & (ev_frames <= e + look))
-        if not cand.size:
-            continue
-        r = int(ev_frames[cand[0]]); team = str(ev_team[cand[0]])
-        k = s - 1
-        while k >= 0 and np.isnan(match.ball[k, 0]):
-            k -= 1
-        if k >= 0:
-            j = e
-            while j < F and np.isnan(match.ball[j, 0]):
-                j += 1
-            rb = match.ball[j] if j < F else match.ball[k]
-            typ = _sp_type(match.ball[k], rb, match.pitch)
+        if cand.size:
+            r = int(ev_frames[cand[0]]); team = str(ev_team[cand[0]]); cls = int(ev_cls[cand[0]])
+            typ = _sp_type(cls, _ball_at(rball, r), match.pitch)
+        elif s == 0:
+            r = int(e); team = None; typ = "Kick-off"
         else:
-            typ = "Free kick"
+            continue
         if keep_sp.get(typ.lower(), 1.0) < 1.0 and rng.random() >= keep_sp[typ.lower()]:
             continue
         if typ == "Throw-in":
