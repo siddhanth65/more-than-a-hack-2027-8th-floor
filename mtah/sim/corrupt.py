@@ -44,8 +44,8 @@ class CorruptParams:
     dead_fast_p: float = 0.15       # share of runs carried (kicked) back fast, at U(dead_fast_lo, dead_fast_hi)
     dead_fast_lo: float = 8.0
     dead_fast_hi: float = 15.0
-    dead_hover_lo: float = 0.5
-    dead_hover_hi: float = 2.0
+    dead_hover_lo: float = 2.0
+    dead_hover_hi: float = 6.0
     dead_out_keep: float = 0.03     # share of runs left where DFL has the ball (incl. out of pitch)
     dead_jitter_m: float = 0.15
     dead_keep_jitter: bool = True   # kept runs get the jitter too, so no static dead ball remains

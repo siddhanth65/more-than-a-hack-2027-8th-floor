@@ -22,7 +22,7 @@ class TagSimParams:
     carry_max_s: float = 60.0
     # per set-piece type keep probability (case-insensitive type names; types not listed are kept):
     # the real tagger tags ~5 free kicks per match, the restart heuristic ~48 (Plan 2c)
-    keep_sp_by_type: dict = field(default_factory=lambda: {"Free kick": 0.10})
+    keep_sp_by_type: dict = field(default_factory=lambda: {"Free kick": 0.60})
 
     def to_dict(self):
         return asdict(self)
@@ -65,16 +65,22 @@ def _phase_runs(codes, fps, hyst_s, min_s, carry_max_s=60.0):
     return out
 
 
-def _sp_type(xy, pitch):
-    """Restart type from the last visible ball position, spelled as the real tags spell it."""
+def _sp_type(last_ball, restart_ball, pitch):
+    """Restart type from the last visible ball before the dead run and the first one after it."""
     L, W = pitch
-    x, y = float(xy[0]), float(xy[1])
-    if abs(y) > W / 2 - 1.0:
-        return "Throw-in"
-    if abs(x) > L / 2 - 1.5 and abs(y) > 20:
+    x, y = float(last_ball[0]), float(last_ball[1])
+    rx, ry = float(restart_ball[0]), float(restart_ball[1])
+    crossed = abs(x) > L / 2 - 0.5
+    outside_mouth = abs(y) > 3.66
+    near_corner = abs(rx) > L / 2 - 3 and abs(ry) > W / 2 - 3
+    if (abs(x) > L / 2 - 3 and abs(y) > W / 2 - 3) or (crossed and outside_mouth and near_corner):
         return "Corner"
-    if abs(x) > L / 2 - 16.5:
+    if crossed and abs(rx) > L / 2 - 7 and abs(ry) < 12:
         return "Goal kick"
+    if np.hypot(rx, ry) < 2.0:
+        return "Kick-off"
+    if abs(y) > W / 2 - 0.5:
+        return "Throw-in"
     return "Free kick"
 
 
@@ -100,7 +106,14 @@ def simulate_tags(match, labels, events, blackout_mask, params, rng):
         k = s - 1
         while k >= 0 and np.isnan(match.ball[k, 0]):
             k -= 1
-        typ = _sp_type(match.ball[k], match.pitch) if k >= 0 else "Free kick"
+        if k >= 0:
+            j = e
+            while j < F and np.isnan(match.ball[j, 0]):
+                j += 1
+            rb = match.ball[j] if j < F else match.ball[k]
+            typ = _sp_type(match.ball[k], rb, match.pitch)
+        else:
+            typ = "Free kick"
         if keep_sp.get(typ.lower(), 1.0) < 1.0 and rng.random() >= keep_sp[typ.lower()]:
             continue
         if typ == "Throw-in":

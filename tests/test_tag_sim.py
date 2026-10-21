@@ -56,12 +56,14 @@ def _restart_match():
     m = two_player_match(F=25 * 200)
     m.ball[:] = 0.0; m.ball[:, 0] = -8.0
     labels = np.full(m.n_frames, "H", dtype="<U1")
-    spots = [(0.0, 34.0), (52.5, 30.0), (50.0, 0.0), (0.0, 0.0)]
+    spots = [(0.0, 34.0), (52.5, 31.5), (52.8, 0.0), (0.0, 10.0)]
+    restarts = [(0.0, 33.8), (51.0, 33.0), (49.0, 0.0), (-8.0, 0.0)]
     ev = []
     for i, xy in enumerate(spots):
         s = 25 * (20 + 40 * i); e = s + 25 * 10
         labels[s:e] = "D"
         m.ball[s - 25:s] = xy
+        m.ball[e:e + 25] = restarts[i]
         ev.append((e, "H", 8, False))
     events = pd.DataFrame(ev, columns=["frame", "team", "cls", "poss_only"])
     return m, labels, events
@@ -94,10 +96,22 @@ def test_keep_sp_by_type_deterministic_and_partial():
     assert 70 < kept < 130
 
 
-def test_default_keeps_one_in_ten_free_kicks_and_config_in_sync():
+def test_default_keeps_sixty_percent_free_kicks_and_config_in_sync():
     import json
     from pathlib import Path
-    assert TagSimParams().keep_sp_by_type == {"Free kick": 0.10}
+    assert TagSimParams().keep_sp_by_type == {"Free kick": 0.60}
     cfg = json.loads((Path(__file__).resolve().parents[1] / "configs" / "tag_sim.json").read_text())
     assert TagSimParams.from_dict(cfg) == TagSimParams()
     assert TagSimParams.from_dict(json.loads(json.dumps(TagSimParams().to_dict()))) == TagSimParams()
+
+
+def test_sp_type_rules():
+    from mtah.sim.tag_sim import _sp_type
+    P = (105.0, 68.0)
+    assert _sp_type((20, 10), (0.2, -0.5), P) == "Kick-off"
+    assert _sp_type((52.8, 10.0), (51.5, 33.0), P) == "Corner"     # crossed goal line wide, restart at the flag
+    assert _sp_type((51.0, -33.0), (20.0, 5.0), P) == "Corner"     # ball in the flag region
+    assert _sp_type((52.8, 1.0), (49.0, 2.0), P) == "Goal kick"
+    assert _sp_type((52.8, 1.0), (-30.0, 2.0), P) == "Free kick"   # goal-mouth exit, restart far away
+    assert _sp_type((10.0, 33.8), (10.0, 33.8), P) == "Throw-in"
+    assert _sp_type((10.0, 5.0), (10.0, 5.0), P) == "Free kick"
