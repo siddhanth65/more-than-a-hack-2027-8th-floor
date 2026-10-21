@@ -108,7 +108,87 @@ def test_dead_ball_realism_keeps_nan_and_out_runs():
     labels = np.full(F, "D", dtype="<U1")
     ball = np.full((F, 2), np.nan, np.float32); ball[:100, 0] = 54.0
     out = dead_ball_realism(ball, labels, (105.0, 68.0), 25, CorruptParams(dead_out_keep=1.0), np.random.default_rng(1))
-    assert np.array_equal(np.nan_to_num(out), np.nan_to_num(ball))
+    assert np.array_equal(np.isnan(out), np.isnan(ball))
+    assert np.abs(out[:100, 0] - ball[:100, 0]).max() < 1.0 and np.median(out[:100, 0]) > 52.5   # kept: still out of pitch
+
+
+def test_kept_dead_run_is_jittered_not_static():
+    from mtah.io.match import speeds_from_positions
+    F = 25 * 20
+    labels = np.full(F, "D", dtype="<U1")
+    ball = np.zeros((F, 2), np.float32); ball[:, 0] = 54.0             # static DFL ball, out of pitch
+    out = dead_ball_realism(ball, labels, (105.0, 68.0), 25, CorruptParams(dead_out_keep=1.0), np.random.default_rng(2))
+    sp = speeds_from_positions(out, 25)[1:-1]
+    win = np.lib.stride_tricks.sliding_window_view(sp < 0.5, 25)
+    assert not win.all(axis=1).any()                                   # no 1 s static stretch remains
+
+
+def _carry_step(params, seed):
+    F = 25 * 30
+    labels = np.full(F, "H", dtype="<U1"); labels[25:25 * 20] = "D"
+    ball = np.zeros((F, 2), np.float32); ball[:25 * 20, 0] = -45.0; ball[25 * 20:, 0] = 45.0
+    out = dead_ball_realism(ball, labels, (105.0, 68.0), 25, params, np.random.default_rng(seed))
+    return float(np.median(np.hypot(*np.diff(out[25:25 + 50], axis=0).T)) * 25)   # m/s over the first 2 s
+
+
+def test_fast_carry_when_dead_fast_p_is_one():
+    fast = [_carry_step(CorruptParams(dead_out_keep=0.0, dead_fast_p=1.0, dead_jitter_m=0.0), s) for s in range(20)]
+    assert all(8.0 - 1e-3 <= v <= 15.0 + 1e-3 for v in fast) and max(fast) - min(fast) > 2.0
+    slow = [_carry_step(CorruptParams(dead_out_keep=0.0, dead_fast_p=0.0, dead_jitter_m=0.0, dead_v_hi=6.0), s)
+            for s in range(20)]
+    assert all(1.0 - 1e-3 <= v <= 6.0 + 1e-3 for v in slow)
+
+
+def test_dead_defaults_and_config_in_sync():
+    import json
+    from pathlib import Path
+    p = CorruptParams()
+    assert (p.dead_v_hi, p.dead_fast_p, p.dead_out_keep, p.dead_keep_jitter) == (12.0, 0.15, 0.03, True)
+    cfg = json.loads((Path(__file__).resolve().parents[1] / "configs" / "corrupt.json").read_text())
+    assert CorruptParams.from_dict(cfg) == p
+
+
+def _plan2b_dead_ball(ball, labels, pitch, fps, rng):
+    """Frozen copy of the Plan 2b dead_ball_realism (default parameters) as the replay reference."""
+    out = ball.copy(); L, W = pitch; half = np.array([L / 2 - 0.5, W / 2 - 0.5])
+    for s, e in runs_of(np.asarray(labels) == "D"):
+        vis = np.flatnonzero(~np.isnan(ball[s:e, 0])) + s
+        if not vis.size or rng.random() < 0.1:
+            continue
+        start = np.clip(ball[vis[0]], -half, half)
+        after = np.flatnonzero(~np.isnan(ball[e:, 0]))
+        target = np.clip(ball[e + after[0]], -half, half) if after.size else np.zeros(2)
+        v = rng.uniform(1.0, 6.0) / fps
+        pos = start.astype(np.float64).copy(); arrived = False
+        for f in range(s, e):
+            if np.isnan(ball[f, 0]):
+                continue
+            if not arrived:
+                d = target - pos; dist = np.hypot(*d)
+                if dist <= v:
+                    pos = target.copy(); arrived = True
+                else:
+                    pos = pos + d / dist * v
+            else:
+                ang = rng.uniform(0, 2 * np.pi); step = rng.uniform(0.5, 2.0) / fps
+                pos = pos + step * np.array([np.cos(ang), np.sin(ang)])
+                pos = np.where(np.abs(pos) > half, np.sign(pos) * half - (pos - np.sign(pos) * half), pos)
+            out[f] = np.clip(pos + rng.normal(0, 0.15, 2), -half, half)
+    return out.astype(np.float32)
+
+
+def test_plan2b_params_replay_the_plan2b_stream():
+    from mtah.sim.corrupt import PLAN2B_DEAD
+    g = np.random.default_rng(7)
+    F = 25 * 400
+    labels = np.where(g.random(F // 250).repeat(250) < 0.4, "D", "H").astype("<U1")
+    ball = (g.uniform(-56, 56, (F // 250, 2)) * [1, 0.65]).repeat(250, axis=0).astype(np.float32)
+    ball[g.random(F) < 0.05] = np.nan; ball[3000:3400] = np.nan
+    r_old, r_new = np.random.default_rng(11), np.random.default_rng(11)
+    a = _plan2b_dead_ball(ball, labels, (105.0, 68.0), 25, r_old)
+    b = dead_ball_realism(ball, labels, (105.0, 68.0), 25, PLAN2B_DEAD, r_new)
+    assert np.array_equal(a, b, equal_nan=True)
+    assert r_old.bit_generator.state == r_new.bit_generator.state
 
 
 from mtah.sim.blackout_sim import runs_of
@@ -210,3 +290,9 @@ def test_mass_outage_never_picks_absent_slots():
     out = _mo(1.0, _mask(), present=present)
     assert not out[:, :6].any()
     assert out[_mask()].sum(axis=1)[0] == round(0.45 * 16)
+
+
+def test_spawned_dead_rng_leaves_the_half_stream_alone():
+    a, b = np.random.default_rng([100, 3]), np.random.default_rng([100, 3])
+    child = a.spawn(1)[0]; child.random(1000)
+    assert a.random() == b.random()

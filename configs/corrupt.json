@@ -16,12 +16,16 @@
  "outage_max_s": 240.0,
  "dead_motion": true,
  "dead_v_lo": 1.0,
- "dead_v_hi": 6.0,
+ "dead_v_hi": 12.0,
  "dead_hover_lo": 0.5,
  "dead_hover_hi": 2.0,
- "dead_out_keep": 0.1,
+ "dead_out_keep": 0.03,
  "dead_jitter_m": 0.15,
  "mass_outage_p": 0.2,
  "mass_outage_frac": 0.45,
- "mass_outage_min_s": 5.0
+ "mass_outage_min_s": 5.0,
+ "dead_fast_p": 0.15,
+ "dead_fast_lo": 8.0,
+ "dead_fast_hi": 15.0,
+ "dead_keep_jitter": true
 }

@@ -12,7 +12,7 @@ from mtah.io.dfl_proxy import load_events, load_half
 from mtah.io.match import Match, speeds_from_positions
 from mtah.sim import half_rng
 from mtah.sim.blackout_sim import apply_blackouts, blackout_mask
-from mtah.sim.corrupt import corrupt, dead_ball_realism
+from mtah.sim.corrupt import PLAN2B_DEAD, corrupt, dead_ball_realism
 from mtah.sim.tag_sim import simulate_tags
 
 SEALED_MATCH = 9007
@@ -52,7 +52,9 @@ def build_half(key, npz, census, seed, bparams, cparams, tparams):
     rng = half_rng(seed, half_index(key))
     mask = blackout_mask(labels, m.ball, m.pitch, m.fps, bparams, rng)
     sim = apply_blackouts(m, mask)
-    sim = dc_replace(sim, ball=dead_ball_realism(sim.ball, labels, m.pitch, m.fps, cparams, rng))
+    dead_rng = rng.spawn(1)[0]            # spawning does not advance the half's stream
+    dead_ball_realism(sim.ball, labels, m.pitch, m.fps, PLAN2B_DEAD, rng)   # replay: positions stay as in Plan 2b
+    sim = dc_replace(sim, ball=dead_ball_realism(sim.ball, labels, m.pitch, m.fps, cparams, dead_rng))
     sim = dc_replace(sim, ball_speed=speeds_from_positions(sim.ball, m.fps))
     sim = corrupt(sim, mask, cparams, rng)
     tags = simulate_tags(sim, labels, events, mask, tparams, rng)

@@ -38,12 +38,17 @@ class CorruptParams:
     mass_outage_min_s: float = 5.0
     # dead-ball realism (see dead_ball_realism)
     dead_motion: bool = True
+    # real dead ball before restarts: median 4 m/s, p90 14.6, never static for 1 s (Plan 2c)
     dead_v_lo: float = 1.0
-    dead_v_hi: float = 6.0
+    dead_v_hi: float = 12.0
+    dead_fast_p: float = 0.15       # share of runs carried (kicked) back fast, at U(dead_fast_lo, dead_fast_hi)
+    dead_fast_lo: float = 8.0
+    dead_fast_hi: float = 15.0
     dead_hover_lo: float = 0.5
     dead_hover_hi: float = 2.0
-    dead_out_keep: float = 0.1
+    dead_out_keep: float = 0.03     # share of runs left where DFL has the ball (incl. out of pitch)
     dead_jitter_m: float = 0.15
+    dead_keep_jitter: bool = True   # kept runs get the jitter too, so no static dead ball remains
 
     def to_dict(self):
         return asdict(self)
@@ -55,20 +60,30 @@ class CorruptParams:
 
 def dead_ball_realism(ball, labels, pitch, fps, params, rng):
     """Make the visible ball on dead frames behave like an automatic tracker's: carried/kicked back
-    towards the restart spot at 1-6 m/s, then hovering, always inside the pitch (real match: ball
-    static on 2 % and out of pitch on 3 % of visible frames; DFL raw: 35 % and 17 %)."""
+    towards the restart spot at U(dead_v_lo, dead_v_hi) m/s (with probability dead_fast_p at
+    U(dead_fast_lo, dead_fast_hi)), then hovering, always inside the pitch. A share dead_out_keep of the
+    runs keeps the DFL ball position (possibly out of pitch), jittered when dead_keep_jitter (real match:
+    ball static on 2 % and out of pitch on 3 % of visible frames, never static for 1 s before a restart;
+    DFL raw: 35 % and 17 %)."""
     out = ball.copy(); L, W = pitch; half = np.array([L / 2 - 0.5, W / 2 - 0.5])
     if not params.dead_motion:
         return out
     labels = np.asarray(labels)
     for s, e in runs_of(labels == "D"):
         vis = np.flatnonzero(~np.isnan(ball[s:e, 0])) + s
-        if not vis.size or rng.random() < params.dead_out_keep:
+        if not vis.size:
+            continue
+        if rng.random() < params.dead_out_keep:
+            if params.dead_keep_jitter:
+                out[vis] = ball[vis] + rng.normal(0, params.dead_jitter_m, (len(vis), 2))
             continue
         start = np.clip(ball[vis[0]], -half, half)
         after = np.flatnonzero(~np.isnan(ball[e:, 0]))
         target = np.clip(ball[e + after[0]], -half, half) if after.size else np.zeros(2)
-        v = rng.uniform(params.dead_v_lo, params.dead_v_hi) / fps
+        if params.dead_fast_p > 0 and rng.random() < params.dead_fast_p:
+            v = rng.uniform(params.dead_fast_lo, params.dead_fast_hi) / fps
+        else:
+            v = rng.uniform(params.dead_v_lo, params.dead_v_hi) / fps
         pos = start.astype(np.float64).copy(); arrived = False
         for f in range(s, e):
             if np.isnan(ball[f, 0]):
@@ -85,6 +100,13 @@ def dead_ball_realism(ball, labels, pitch, fps, params, rng):
                 pos = np.where(np.abs(pos) > half, np.sign(pos) * half - (pos - np.sign(pos) * half), pos)
             out[f] = np.clip(pos + rng.normal(0, params.dead_jitter_m, 2), -half, half)
     return out.astype(np.float32)
+
+
+# Plan 2b dead-ball parameters. build_half replays dead_ball_realism with these on the half's stream (and draws the
+# current dead ball from a spawned child), so the stream that corrupts the player positions -- hence the
+# input-hashed PathCRF cache -- does not change when the dead-ball model does.
+PLAN2B_DEAD = CorruptParams(dead_motion=True, dead_v_lo=1.0, dead_v_hi=6.0, dead_fast_p=0.0, dead_hover_lo=0.5,
+                            dead_hover_hi=2.0, dead_out_keep=0.1, dead_jitter_m=0.15, dead_keep_jitter=False)
 
 
 def player_outages(F, S, fps, blackout_mask, params, rng):
