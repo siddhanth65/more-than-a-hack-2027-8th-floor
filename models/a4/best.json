@@ -1,0 +1,170 @@
+{
+ "cell": {
+  "tau_HA": 30.0,
+  "tau_D": 100.0,
+  "w_dead": 4.0,
+  "w_pathcrf": 1.0,
+  "dead_policy": "full",
+  "sp_dead_bonus": 0.0,
+  "w_teamctrl": 2.0,
+  "w_ball": 1.0,
+  "team_policy": "full",
+  "aba_s": 1.0,
+  "w_switch": 0.0,
+  "snap_mode": "touch",
+  "merge_theta": 0.7
+ },
+ "cell_index": 41,
+ "chosen_rank": 2,
+ "scores": {
+  "raw_Dfull": 0.5006791655859884,
+  "ctrl_Dfull": 0.46257453197984716,
+  "raw_Dnarrow": 0.48226766263282994,
+  "ctrl_Dnarrow": 0.4436963803808949
+ },
+ "ratios": {
+  "raw_Dfull": 0.7245042363319169,
+  "ctrl_Dfull": 0.9214926349124167,
+  "raw_Dnarrow": 0.7233801598930429,
+  "ctrl_Dnarrow": 0.9199545294695125
+ },
+ "seed_sd": {
+  "raw_Dfull": 0.002295089283597479,
+  "ctrl_Dfull": 0.0009075308192290946,
+  "raw_Dnarrow": 0.002941570565952366,
+  "ctrl_Dnarrow": 0.0013192120534522168
+ },
+ "baseline_used": {
+  "raw_Dfull": "smooth50",
+  "ctrl_Dfull": "smooth50",
+  "raw_Dnarrow": "smooth50",
+  "ctrl_Dnarrow": "smooth50"
+ },
+ "spec_bar": {
+  "margins_vs_best_baseline": {
+   "raw_Dfull": 0.2677406728582743,
+   "ctrl_Dfull": 0.25322752942783167,
+   "raw_Dnarrow": 0.23613884469345203,
+   "ctrl_Dnarrow": 0.2237016667494638
+  },
+  "required_margin": {
+   "raw_Dfull": 0.05,
+   "ctrl_Dfull": 0.05,
+   "raw_Dnarrow": 0.05,
+   "ctrl_Dnarrow": 0.05
+  },
+  "seed_sd": {
+   "raw_Dfull": 0.002295089283597479,
+   "ctrl_Dfull": 0.0009075308192290946,
+   "raw_Dnarrow": 0.002941570565952366,
+   "ctrl_Dnarrow": 0.0013192120534522168
+  },
+  "baseline_used": {
+   "raw_Dfull": "smooth50",
+   "ctrl_Dfull": "smooth50",
+   "raw_Dnarrow": "smooth50",
+   "ctrl_Dnarrow": "smooth50"
+  },
+  "folds_won_ctrl_Dfull": 6,
+  "n_folds": 6,
+  "folds_won_needed": 5,
+  "count_ratios": {
+   "raw_Dfull": 0.7245042363319169,
+   "ctrl_Dfull": 0.9214926349124167,
+   "raw_Dnarrow": 0.7233801598930429,
+   "ctrl_Dnarrow": 0.9199545294695125
+  },
+  "ratio_band": [
+   0.8,
+   1.25
+  ],
+  "ratio_rule_variants": [
+   "ctrl_Dfull",
+   "ctrl_Dnarrow"
+  ],
+  "count_ratios_ok": {
+   "ctrl_Dfull": true,
+   "ctrl_Dnarrow": true
+  },
+  "bar_pass": true
+ },
+ "real_plausibility": {
+  "32": {
+   "rank": 1,
+   "mean_rank": 3.75,
+   "non_blackout_D_share": 0.09413612969138539,
+   "tag_agreement_implied": 0.7145193233286711,
+   "pred_D_share": 0.27340941853364975,
+   "spells_per_graded_min": 4.99505844879357,
+   "spells_per_HA_min": 6.874653451621847,
+   "d_share_ok": false,
+   "spell_rate_ok": false,
+   "real_plausible": false
+  },
+  "41": {
+   "rank": 2,
+   "mean_rank": 4.25,
+   "non_blackout_D_share": 0.10149006303371436,
+   "tag_agreement_implied": 0.6646874329597495,
+   "pred_D_share": 0.2910353336648684,
+   "spells_per_graded_min": 3.304859087103496,
+   "spells_per_HA_min": 4.661528626225316,
+   "d_share_ok": true,
+   "spell_rate_ok": true,
+   "real_plausible": true
+  },
+  "17": {
+   "rank": 3,
+   "mean_rank": 5.75,
+   "non_blackout_D_share": 0.09518669159743239,
+   "tag_agreement_implied": 0.6447480510751441,
+   "pred_D_share": 0.27389413119975825,
+   "spells_per_graded_min": 3.2293194508268446,
+   "spells_per_HA_min": 4.447449868657182,
+   "d_share_ok": false,
+   "spell_rate_ok": true,
+   "real_plausible": false
+  },
+  "33": {
+   "rank": 4,
+   "mean_rank": 5.75,
+   "non_blackout_D_share": 0.09413612969138539,
+   "tag_agreement_implied": 0.6700590730296219,
+   "pred_D_share": 0.27340941853364975,
+   "spells_per_graded_min": 3.172664723619356,
+   "spells_per_HA_min": 4.366509564735237,
+   "d_share_ok": false,
+   "spell_rate_ok": true,
+   "real_plausible": false
+  },
+  "40": {
+   "rank": 5,
+   "mean_rank": 5.75,
+   "non_blackout_D_share": 0.10149006303371436,
+   "tag_agreement_implied": 0.7158418148966191,
+   "pred_D_share": 0.2910353336648684,
+   "spells_per_graded_min": 5.117810357743128,
+   "spells_per_HA_min": 7.218710044040346,
+   "d_share_ok": true,
+   "spell_rate_ok": false,
+   "real_plausible": false
+  }
+ },
+ "chosen_real_plausible": true,
+ "real_bands": {
+  "non_blackout_D_share": [
+   0.1,
+   0.18
+  ],
+  "spells_per_graded_min": [
+   2.7,
+   4.3
+  ]
+ },
+ "git": "d560d7c",
+ "seeds": [
+  100,
+  101
+ ],
+ "grid": "grid4"
+}
