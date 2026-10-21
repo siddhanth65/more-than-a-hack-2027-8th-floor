@@ -1,6 +1,6 @@
 # Technical document: frame-level possession labelling (More Than A Hack 2027)
 
-*Status: candidate a2 results filled in (section 6). The only remaining `FILL` is the final public-window read, reserved for the final candidate.*
+*Status: Plan 2c done; candidate a3b results filled in (section 6.2), with candidate a2 (section 6.1) kept as the previous iteration. The only remaining `FILL` is the final public-window read, reserved for the final candidate.*
 
 ## 1. Summary
 
@@ -43,6 +43,12 @@ Smart-Tagging `Team` semantics: it is the team performing the event. Attacking c
 
 A centred 3-state (H, A, D) Viterbi per half, with switch costs `tau_HA` and `tau_D` and a per-frame centring of the cost matrix so that smoothed evidence does not swamp the switch costs. Post-processing is O(segments): fill short gaps, remove islands, merge A-B-A below a minimum duration unless a strong touch says otherwise, and snap team-change boundaries to touches within 50 frames (the snap was worth about +0.02 spellF1 in a fold experiment).
 
+### 2.5 Simulator realism (Plan 2c)
+
+- **Sparse, typed set-piece tags.** The simulator's set-piece tags are now sparse and typed, derived from DFL throw-in events and the raw ball, and calibrated per type to the real tag rates (per minute, sim vs real): throw-in 0.233 vs 0.245, goal kick 0.087 vs 0.094, free kick 0.058 vs 0.047. Corners and kick-offs are under-produced; the total is 0.40 vs 0.56, so the sim is slightly tag-sparser than the real match, the conservative direction.
+- **Dead-ball realism.** Hover speed 2 to 6 m/s with occasional fast returns. On non-blackout frames the simulated ball speed is p50 5.0 vs real 5.1 and p90 13.9 vs 14.3, and ball_out is 0.029 vs 0.032.
+- **Set-piece dead prior.** An optional set-piece dead prior in the tag stream had no measurable effect and is left at 0.
+
 ## 3. Assets used and dropped
 
 | asset | decision | note |
@@ -52,6 +58,7 @@ A centred 3-state (H, A, D) Viterbi per half, with switch costs `tau_HA` and `ta
 | tactical homography | used | pitch coordinates |
 | DFL open data, 6 matches (9001 to 9006) | used as proxy truth | per-frame ball-alive flag and possession team |
 | DFL match J03WR9 (= 9007) | sealed test match | not touched until selection is registered |
+| DFL throw-in events + raw ball (9001 to 9007) | used | typed, sparse set-piece tags in the simulator (2.5) |
 | PathCRF (external) | used | see 3.2 |
 | broadcast video and broadcast tracking | **dropped (no-go)** | census in 3.1 |
 
@@ -97,10 +104,10 @@ One real match with no private ground truth cannot be used for tuning, so:
 1. **Proxy**: 6 DFL matches plus the sealed 9007, 5 seeds of simulated blackouts each.
 2. **Blackout simulator** fitted to the real gap statistics (79 blackouts, median 20.8 s). Dead-ball behaviour on visible frames was recalibrated to the real tracker (ball static 2 %, out of pitch 3 %, median speed about 5 m/s).
 3. **Corruption model** calibrated label-free to the real tracker: player outages (inside blackouts mean 18.3 players, p10 11.4; real 18.8 and 12), mass outages, identity-swap rate (`swap_rate_per_team_min` 0.2 per team-minute; `flip_rate_per_min` 0.02 is the team-flip rate), teleports about 0.025 per player-minute (real about 0).
-4. **LOMO selection** over grid `grid2` (tau_HA, tau_D, dead weight, PathCRF weight in {0, 0.5, 1, 2}, dead policy). Cells are ranked by mean rank over the four truth variants. Spec bar: margin over the best baseline `>= max(0.05, 2x seed SD)` on every variant, AND folds won on ctrl_Dfull `>= n_folds - 1`, AND the ctrl_Dfull and ctrl_Dnarrow count ratios (n_pred/n_gt) in [0.8, 1.25] (raw ratios are recorded only).
-5. **Sealed match**: 9007 is read once, after selection is registered; the read is logged. Disclosure: 9007 is sealed for the pipeline (never scored by `select_lomo`), but its labels were used for the PathCRF clean evaluation (92.6 %), the PathCRF robustness experiment, the choice of the PathCRF output head (`run_infer.py`: the emission marginal was picked on 15 000 frames of the corrupted sim half game_9007_H1 s100 against the ball-owning team), and the ctrl-truth diagnostic (66 % disagreement on 9007 H1). The sealed a2 result is reported with this caveat.
-6. **Real-match plausibility (label-free)**: the candidate's non-blackout D share on the real match must lie in [0.10, 0.18] (the public window implies about 0.15 on visible frames). The first candidate (a1) had 0.028 on visible frames with a dead model trained on unrealistic visible-ball dead time; this criterion is what exposed it.
-7. **Public 5-minute window**: reads are budgeted at 3, used only for conventions and plausibility, never for tuning. 2 of 3 are used; the last is reserved for the final candidate.
+4. **LOMO selection** over grid `grid2` (tau_HA, tau_D, dead weight, PathCRF weight in {0, 0.5, 1, 2}, dead policy) for a2, and over `grid3` for a3b (dead weight {2, 3, 4, 6} x dead policy x set-piece dead prior, with PathCRF weight {0.5, 1}). Cells are ranked by mean rank over the four truth variants. Spec bar: margin over the best baseline `>= max(0.05, 2x seed SD)` on every variant, AND folds won on ctrl_Dfull `>= n_folds - 1`, AND the ctrl_Dfull and ctrl_Dnarrow count ratios (n_pred/n_gt) in [0.8, 1.25] (raw ratios are recorded only).
+5. **Sealed match**: each sealed read is taken after selection is registered and logged. Sealed reads taken are now three: 9006 for a1; 9007 for a2 and for a3b, each logged in `docs/reads/sealed.jsonl`. Disclosure: 9007 is sealed for the pipeline (never scored by `select_lomo`), but its labels were used for the PathCRF clean evaluation (92.6 %), the PathCRF robustness experiment, the choice of the PathCRF output head (`run_infer.py`: the emission marginal was picked on 15 000 frames of the corrupted sim half game_9007_H1 s100 against the ball-owning team), and the ctrl-truth diagnostic (66 % disagreement on 9007 H1). The sealed a2 and a3b results are reported with this caveat.
+6. **Real-match plausibility (label-free)**: the candidate's non-blackout D share on the real match must lie in [0.10, 0.18] (the public window implies about 0.15 on visible frames). For a3b this real-match plausibility gate chose among the top cells. The first candidate (a1) had 0.028 on visible frames with a dead model trained on unrealistic visible-ball dead time; this criterion is what exposed it.
+7. **Public 5-minute window**: reads are budgeted at 3, used only for conventions and plausibility, never for tuning. 2 of 3 are used (a3b took none); the last is reserved for the final candidate.
 
 ### Earlier candidate a1 (for context)
 
@@ -115,7 +122,7 @@ The public read showed a1 below the baseline on the 5-minute window. The causes 
 
 ## 6. Results
 
-### 6.1 Candidate a2
+### 6.1 Candidate a2 (previous iteration)
 
 Selection a2 used grid2 (64 cells), leave-one-match-out (LOMO) over DFL matches 9001 to 9006, seeds 100 and 101, ranking by mean rank over the four truth variants. The chosen cell is 60: tau_HA 30, tau_D 100, w_dead 2, w_pathcrf 1.0, dead policy full, aba_s 1.0.
 
@@ -172,16 +179,60 @@ For context, the earlier candidate a1 scored spellF1 0.290 on public read 2 (bas
 
 **Known weakness.** a2 is the PathCRF-era baseline. Its known weakness is dead-ball under-detection on visible-ball frames: the candidate's D share outside blackouts is 0.023 against a truth of 0.155, and the real-match plausibility criterion (non-blackout D share in [0.10, 0.18]) failed for all top-5 cells (0.047 to 0.076). The next iteration targets this.
 
+### 6.2 Candidate a3b (Plan 2c)
+
+Selection a3b used grid3, LOMO over 9001 to 9006, seeds 100 and 101. The rank-1 cell by mean rank was w_dead 3 (ctrl 0.434 / raw 0.491), but the real-match plausibility gate chose cell 52: w_dead 4, w_pathcrf 1.0, dead policy full.
+
+**LOMO spellF1 on the simulated-blackout proxy, cell 52** (new, harder simulator build; compare with 6.1 only with care)
+
+| truth variant | a3b (cell 52) |
+|---|---|
+| raw_Dfull | 0.488 |
+| ctrl_Dfull | 0.431 |
+| raw_Dnarrow | 0.468 |
+| ctrl_Dnarrow | 0.410 |
+
+Spec bar: pass; folds won 6 of 6. Set-piece-type sensitivity: with the set-piece type held constant the real-match visible-dead share moves by +0.002 (sim F1 -0.0125, in-sim only), so the typing does not drive the result.
+
+**Sealed read 3** (match 9007)
+
+| raw_Dfull | ctrl_Dfull | raw_Dnarrow | ctrl_Dnarrow |
+|---|---|---|---|
+| 0.466 | 0.406 | 0.448 | 0.385 |
+
+This is NOT comparable with a2's sealed read (0.528 / 0.464 / 0.510 / 0.438). a2 was read on the earlier dense-tag build of 9007; on the new build a2's parameter cell scores LOMO ctrl 0.430 against 0.431 for a3b's cell. The drop therefore reflects the harder, more realistic build, not the cell.
+
+**Real-match candidate a3b** (label-free drift check)
+
+| quantity | a2 | a3b |
+|---|---|---|
+| spells | 518 | 548 |
+| spells per possession-minute | 5.96 | 7.3 |
+| predicted D share, overall | 0.180 | 0.294 |
+| predicted D share, visible-ball frames | n/a | 0.106 |
+| predicted D share, blackouts | 0.425 | 0.647 |
+| implied-team tag agreement | 0.669 | 0.661 |
+
+**Public 5-minute window** (aggregate label shares only, no scoring read taken)
+
+| D share | truth | a2 | a3b |
+|---|---|---|---|
+| overall | 0.196 | 0.055 | 0.103 |
+| non-blackout frames | 0.155 | 0.023 | 0.078 |
+
+Visible-dead detection has roughly doubled but is still about half of the truth. On the simulation the remaining loss is in missed and false team changes on visible-ball frames, which is the target of the next iteration.
+
 | table | content | status |
 |---|---|---|
 | selection a2 (grid2, 6 folds 9001-9006, 2 seeds) | best cell, four variant scores, margins over baselines, folds won, seed SD | done (section 6) |
 | sealed match 9007 | raw and ctrl spellF1 of the registered cell | done (section 6) |
 | candidate drift on the real match | spell count, non-blackout D share, tag agreement | done (section 6) |
+| selection a3b (grid3, 6 folds, 2 seeds) and sealed read 3 | cell 52, four variant scores, sealed 9007 | done (section 6.2) |
 | final public window read (3 of 3) | spellF1, macroF1 | FILL |
 
 ## 7. Limitations
 
-- 9007 label exposure: the sealed match was used for PathCRF evaluation, robustness, output-head choice and the ctrl-truth diagnostic (see section 5); the sealed a2 score is therefore not a fully untouched estimate.
+- 9007 label exposure: the sealed match was used for PathCRF evaluation, robustness, output-head choice and the ctrl-truth diagnostic (see section 5); the sealed a2 and a3b scores are therefore not a fully untouched estimate.
 - One real match: no real-data tuning set; the proxy is DFL with simulated blackouts, and DFL possession and dead definitions are not identical to the competition's (hence four truth variants).
 - The simulator under-represents the worst real tracking: real long player outages (p90 about 102 s) versus simulated (p90 about 35 s). PathCRF may be over-rated by the simulation; its accuracy falls to 54 to 68 % under identity switches.
 - Error analysis of a1 on the proxy: only 34 % of true possessions were matched at IoU 0.5; short possessions under 3 s are rarely matched; the largest loss is missed or false team changes on visible-ball frames and the team at blackout starts. Oracle boundaries would add about +0.18, so boundary placement remains the largest lever.
@@ -200,6 +251,7 @@ scripts\reproduce.ps1                     # full chain: simulator, PathCRF cache
 - `scripts/reproduce.ps1` checks the mtah venv (Python 3.12, `MTAH_VENV`; pins in `pyproject.toml`), `MTAH_DATA_DIR`, and PathCRF (`MTAH_PATHCRF_REPO`, `MTAH_PATHCRF_PY`), then prints the md5 of the candidate.
 - PathCRF setup, pinned versions and the thread pin: `third_party/pathcrf/SETUP.md`.
 - The full chain first runs `scripts/parse_dfl_match.py` (in the repository) on the raw DFL XML (`E:\football-synthesizer\data\dfl_open`, or `MTAH_DFL_RAW`) to produce `runs/dfl_extra` (match 9007); the raw XML is not in the repository; `-CandidateOnly` needs only the competition data and PathCRF.
+- Candidate a3b: md5 `17f3d177f347787d510d36092837f507` (clean-clone regeneration check in progress).
 - Output file: `runs/candidates/a2.csv` (format checked with the official `validate_submission.py`). md5: `811b7bfddf25ac9f54341c3157b42868` (regenerated byte-identically from a clean clone with `scripts/reproduce.ps1 -CandidateOnly -Name a2`, including a fresh PathCRF posterior run, 2026-10-21).
 
 ## 9. Rules compliance
