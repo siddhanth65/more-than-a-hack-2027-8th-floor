@@ -1,0 +1,166 @@
+{
+ "git": "13028dd",
+ "seeds": [
+  100,
+  101
+ ],
+ "grid": "grid2",
+ "grid_size": 64,
+ "selection": "mean rank over 4 variants, tie ctrl_Dfull; highest-ranked real-plausible cell among the top 5 (real non-blackout D share in [0.1, 0.18]; fallback rank 1)",
+ "scorer_md5": "7718cb8a237452b48b35713984d31c75",
+ "best_cell": {
+  "tau_HA": 30.0,
+  "tau_D": 100.0,
+  "w_dead": 2.0,
+  "w_pathcrf": 1.0,
+  "dead_policy": "full",
+  "aba_s": 1.0
+ },
+ "best_cell_index": 60,
+ "chosen_rank": 1,
+ "best": {
+  "raw_Dfull": 0.5274675948905106,
+  "ctrl_Dfull": 0.47071074670924845,
+  "raw_Dnarrow": 0.5032576193236534,
+  "ctrl_Dnarrow": 0.44362628688053096
+ },
+ "baselines": {
+  "raw_Dfull": {
+   "b4": 0.07660381151980071,
+   "smooth50": 0.23273321919450854
+  },
+  "ctrl_Dfull": {
+   "b4": 0.0510823674499482,
+   "smooth50": 0.20787775341568446
+  },
+  "raw_Dnarrow": {
+   "b4": 0.07978330652416506,
+   "smooth50": 0.24786695985432772
+  },
+  "ctrl_Dnarrow": {
+   "b4": 0.052931207391370035,
+   "smooth50": 0.22049675863557983
+  }
+ },
+ "seed_sd": {
+  "raw_Dfull": 0.0007182510621379307,
+  "ctrl_Dfull": 0.0010122138776384158,
+  "raw_Dnarrow": 0.0017499878304853553,
+  "ctrl_Dnarrow": 0.0009650887206293312
+ },
+ "baseline_used": {
+  "raw_Dfull": "smooth50",
+  "ctrl_Dfull": "smooth50",
+  "raw_Dnarrow": "smooth50",
+  "ctrl_Dnarrow": "smooth50"
+ },
+ "spec_bar": {
+  "margins_vs_best_baseline": {
+   "raw_Dfull": 0.29473437569600214,
+   "ctrl_Dfull": 0.262832993293564,
+   "raw_Dnarrow": 0.2553906594693257,
+   "ctrl_Dnarrow": 0.22312952824495114
+  },
+  "required_margin": {
+   "raw_Dfull": 0.05,
+   "ctrl_Dfull": 0.05,
+   "raw_Dnarrow": 0.05,
+   "ctrl_Dnarrow": 0.05
+  },
+  "seed_sd": {
+   "raw_Dfull": 0.0007182510621379307,
+   "ctrl_Dfull": 0.0010122138776384158,
+   "raw_Dnarrow": 0.0017499878304853553,
+   "ctrl_Dnarrow": 0.0009650887206293312
+  },
+  "baseline_used": {
+   "raw_Dfull": "smooth50",
+   "ctrl_Dfull": "smooth50",
+   "raw_Dnarrow": "smooth50",
+   "ctrl_Dnarrow": "smooth50"
+  },
+  "folds_won_ctrl_Dfull": 6,
+  "n_folds": 6,
+  "folds_won_needed": 5,
+  "count_ratios": {
+   "raw_Dfull": 0.8865807276884925,
+   "ctrl_Dfull": 1.1282490146245354,
+   "raw_Dnarrow": 0.885255150603682,
+   "ctrl_Dnarrow": 1.126435924444572
+  },
+  "ratio_band": [
+   0.8,
+   1.25
+  ],
+  "ratio_rule_variants": [
+   "ctrl_Dfull",
+   "ctrl_Dnarrow"
+  ],
+  "count_ratios_ok": {
+   "ctrl_Dfull": true,
+   "ctrl_Dnarrow": true
+  },
+  "bar_pass": true
+ },
+ "use_pathcrf": true,
+ "pathcrf_threads": 4,
+ "real_plausibility": {
+  "60": {
+   "rank": 1,
+   "mean_rank": 1.0,
+   "non_blackout_D_share": 0.05001252963741157,
+   "tag_agreement_implied": 0.6690353082311957,
+   "pred_D_share": 0.17998577336850122,
+   "spells_per_HA_min": 5.964764134648601,
+   "real_plausible": false
+  },
+  "44": {
+   "rank": 2,
+   "mean_rank": 4.0,
+   "non_blackout_D_share": 0.05884110492125605,
+   "tag_agreement_implied": 0.6713764020761993,
+   "pred_D_share": 0.19880143777107714,
+   "spells_per_HA_min": 6.540903233916842,
+   "real_plausible": false
+  },
+  "26": {
+   "rank": 3,
+   "mean_rank": 4.25,
+   "non_blackout_D_share": 0.05964107407907165,
+   "tag_agreement_implied": 0.7100840626457144,
+   "pred_D_share": 0.2113850821808293,
+   "spells_per_HA_min": 7.411575947699897,
+   "real_plausible": false
+  },
+  "61": {
+   "rank": 4,
+   "mean_rank": 5.25,
+   "non_blackout_D_share": 0.07643078821057502,
+   "tag_agreement_implied": 0.6631960446658127,
+   "pred_D_share": 0.16414762962916332,
+   "spells_per_HA_min": 5.783960054525874,
+   "real_plausible": false
+  },
+  "28": {
+   "rank": 5,
+   "mean_rank": 7.25,
+   "non_blackout_D_share": 0.04688975846714344,
+   "tag_agreement_implied": 0.6622572529654821,
+   "pred_D_share": 0.17683199355395104,
+   "spells_per_HA_min": 6.9513482097793,
+   "real_plausible": false
+  }
+ },
+ "chosen_real_plausible": false,
+ "pathcrf_train_matches": [
+  9001,
+  9002,
+  9003,
+  9004,
+  9005
+ ],
+ "pathcrf_val": 9006,
+ "clean": 9007,
+ "sealed_match": 9007,
+ "lengths_mode": "unit"
+}
