@@ -89,3 +89,24 @@ def test_existing_keys_still_present():
     for k in ("n_spells", "spells_per_HA_min", "pred_D_share", "spell_len_median_s",
               "share_changes_in_blackout", "D_starts_near_sp_share", "tag_agreement"):
         assert k in r
+
+
+def test_spells_per_graded_min_unit():
+    """17 spells over 5 graded minutes (with D time and an ungraded stretch) -> 3.4 per graded minute, the real band's
+    anchor; spells_per_HA_min (per predicted H/A minute) is larger whenever there is D."""
+    from mtah.io.match import Match
+    fps = 25.0; F = int(6 * 60 * fps)
+    half = np.zeros(F, np.int8); half[:int(5 * 60 * fps)] = 1          # 5 graded minutes, 1 ungraded
+    labels = np.full(F, "D", dtype="<U1")
+    spell = int(10 * fps)
+    for k in range(17):                                                  # 17 H/A spells of 10 s, D between them
+        s = k * int(17 * fps); labels[s:s + spell] = "H" if k % 2 == 0 else "A"
+    labels[int(5 * 60 * fps):] = "H"                                     # ungraded: never counted
+    m = Match(fps=fps, pos=np.zeros((F, 2, 2), np.float32), speed=np.zeros((F, 2), np.float32),
+              team=np.array([0, 1], np.int8), ball=np.zeros((F, 2), np.float32), ball_speed=np.zeros(F, np.float32),
+              half=half, pitch=(105.0, 68.0))
+    r = drift_report(labels, m, pd.DataFrame(columns=["start", "end", "code", "team", "type", "half"]),
+                     np.zeros(F, bool), code_table={})
+    assert r["n_spells"] == 17
+    assert abs(r["spells_per_graded_min"] - 3.4) < 1e-9
+    assert abs(r["spells_per_HA_min"] - 17 / (17 * 10 / 60)) < 1e-9 and r["spells_per_HA_min"] > r["spells_per_graded_min"]

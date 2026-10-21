@@ -45,8 +45,10 @@ GRIDS = {"grid1": GRID, "grid2": GRID2, "grid3": GRID3, "grid4": GRID4}
 
 # label-free real-match plausibility: non-blackout D share of the prediction must lie in this band
 REAL_D_SHARE_BAND = (0.10, 0.18)
-# ... AND the predicted spell rate (drift_report spells_per_HA_min: H/A spells per minute of predicted H/A time) in
-# this band: 3.4/min (public-window truth, 17 spells in 5 min) x [0.8, 1.25], the band the sim count-ratio bar uses
+# ... AND the predicted spell rate (drift_report spells_per_graded_min: H/A spells per GRADED minute, D time included)
+# in this band: 3.4/min (public-window truth, 17 spells in 5 graded min) x [0.8, 1.25], the band the sim count-ratio bar
+# uses. NOT spells per predicted-H/A minute (spells_per_HA_min, reported only): a3b real = 5.2 per graded min, 7.3 per
+# H/A min.
 REAL_SPELL_RATE_BAND = (2.7, 4.3)
 
 
@@ -212,18 +214,18 @@ def mean_rank(table, variants):
     return t.sort_values(["mean_rank", "ctrl_Dfull"], ascending=[True, False]).reset_index(drop=True)
 
 
-def real_band_checks(non_blackout_D_share, spells_per_HA_min, band=REAL_D_SHARE_BAND, rate_band=REAL_SPELL_RATE_BAND):
+def real_band_checks(non_blackout_D_share, spells_per_graded_min, band=REAL_D_SHARE_BAND, rate_band=REAL_SPELL_RATE_BAND):
     """{"d_share_ok", "spell_rate_ok", "real_plausible"} for the two label-free real-match bands (NaN never passes)."""
-    v, r = float(non_blackout_D_share), float(spells_per_HA_min)
+    v, r = float(non_blackout_D_share), float(spells_per_graded_min)
     d_ok = bool(np.isfinite(v) and band[0] <= v <= band[1])
     r_ok = bool(np.isfinite(r) and rate_band[0] <= r <= rate_band[1])
     return {"d_share_ok": d_ok, "spell_rate_ok": r_ok, "real_plausible": d_ok and r_ok}
 
 
-def is_real_plausible(non_blackout_D_share, spells_per_HA_min, band=REAL_D_SHARE_BAND, rate_band=REAL_SPELL_RATE_BAND):
-    """True when the real-match non-blackout D share lies in `band` AND the predicted spell rate (spells per minute of
-    predicted H/A time, drift_report spells_per_HA_min) lies in `rate_band` (NaN is never plausible)."""
-    return real_band_checks(non_blackout_D_share, spells_per_HA_min, band, rate_band)["real_plausible"]
+def is_real_plausible(non_blackout_D_share, spells_per_graded_min, band=REAL_D_SHARE_BAND, rate_band=REAL_SPELL_RATE_BAND):
+    """True when the real-match non-blackout D share lies in `band` AND the predicted spell rate (spells per graded
+    minute, drift_report spells_per_graded_min) lies in `rate_band` (NaN is never plausible)."""
+    return real_band_checks(non_blackout_D_share, spells_per_graded_min, band, rate_band)["real_plausible"]
 
 
 def choose_plausible(ranked, plaus):

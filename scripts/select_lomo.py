@@ -2,7 +2,7 @@
 
 With a real-data dir, the top-k cells by mean rank are also decoded on the real match (label-free drift metrics);
 the chosen cell is the highest-ranked one that is real-plausible: non-blackout D share in select.REAL_D_SHARE_BAND AND
-predicted spells per H/A minute in select.REAL_SPELL_RATE_BAND (tag_agreement_implied is reported, not gated).
+predicted spells per GRADED minute in select.REAL_SPELL_RATE_BAND (tag_agreement_implied is reported, not gated).
 Cells with merge_theta < 1 use a per-fold MergeModel (mtah.spells.merge) trained on an inner split of the fold's train
 matches (select.train_merge_model); the registered one is written as merge_model.joblib.
 Cells with w_switch > 0 or snap_mode "hazard" read the switch hazard (mtah.evidence.switch): one SwitchModel per fold
@@ -38,7 +38,8 @@ from mtah.evidence.switch import SwitchModel
 from mtah.spells.merge import MergeModel
 from mtah.sim.dataset import SEALED_MATCH, VARIANTS, list_sim_keys, load_half_sim, lomo_folds, match_id
 
-REAL_KEYS = ("non_blackout_D_share", "tag_agreement_implied", "pred_D_share", "spells_per_HA_min")
+REAL_KEYS = ("non_blackout_D_share", "tag_agreement_implied", "pred_D_share", "spells_per_graded_min",
+             "spells_per_HA_min")   # gated: D share + spells_per_graded_min; the rest reported only
 REAL_TOP_K = 5
 
 
@@ -228,12 +229,13 @@ def real_plausibility(sim_dir, seeds, keys, base, grid, ranked, data_dir, out, t
                       merge_model=merge if uses_merge(grid[i]) else None)
         d = drift_report(lab, m, tags, mask, code_table=cfg.tag.code_table)
         rec = {"rank": rank, "mean_rank": float(mr[i]), **{k: float(d[k]) for k in REAL_KEYS}}
-        rec.update(real_band_checks(rec["non_blackout_D_share"], rec["spells_per_HA_min"]))
+        rec.update(real_band_checks(rec["non_blackout_D_share"], rec["spells_per_graded_min"]))
         plaus[i] = rec
         rows.append({"cell": i, **grid[i], **rec})
     tab = pd.DataFrame(rows); tab.to_csv(out / "summary_real.csv", index=False)
     print(f"REAL-MATCH PLAUSIBILITY (top {len(top)}; plausible = non_blackout_D_share in {list(REAL_D_SHARE_BAND)} "
-          f"AND spells_per_HA_min in {list(REAL_SPELL_RATE_BAND)}; tag_agreement_implied reported only)")
+          f"AND spells_per_graded_min in {list(REAL_SPELL_RATE_BAND)}; tag_agreement_implied and spells_per_HA_min "
+          "reported only)")
     print(tab.to_string(index=False), flush=True)
     return plaus
 
@@ -459,9 +461,9 @@ def run_grid(sim_dir, seeds, keys, base, out, grid, real_data_dir=None, grid_nam
     selection = "mean rank over 4 variants, tie ctrl_Dfull"
     if plaus is not None:
         selection += (f"; highest-ranked real-plausible cell among the top {top_k} "
-                      f"(real non-blackout D share in {list(REAL_D_SHARE_BAND)} and spells per H/A minute in "
+                      f"(real non-blackout D share in {list(REAL_D_SHARE_BAND)} and spells per graded minute in "
                       f"{list(REAL_SPELL_RATE_BAND)}; fallback rank 1)")
-    real_bands = {"non_blackout_D_share": list(REAL_D_SHARE_BAND), "spells_per_HA_min": list(REAL_SPELL_RATE_BAND)}
+    real_bands = {"non_blackout_D_share": list(REAL_D_SHARE_BAND), "spells_per_graded_min": list(REAL_SPELL_RATE_BAND)}
     merge_info = c_merge.info if c_merge is not None else None
     real_json = None if plaus is None else {str(i): v for i, v in plaus.items()}
     chosen_real_plausible = None if plaus is None else bool(plaus.get(best_i, {}).get("real_plausible", False))

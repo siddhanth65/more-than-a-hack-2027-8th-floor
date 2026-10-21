@@ -120,7 +120,7 @@ def test_is_real_plausible_bounds():
     assert REAL_SPELL_RATE_BAND == (2.7, 4.3)
     assert is_real_plausible(0.10, 3.4) and is_real_plausible(0.18, 3.4) and is_real_plausible(0.14, 3.4)
     assert not is_real_plausible(0.099, 3.4) and not is_real_plausible(0.181, 3.4) and not is_real_plausible(float("nan"), 3.4)
-    # both bands must hold: the spell rate gate
+    # both bands must hold: the spell rate gate (spells per GRADED minute; a3b real 5.2 fails, truth 17/5 = 3.4 passes)
     assert is_real_plausible(0.14, 2.7) and is_real_plausible(0.14, 4.3)
     assert not is_real_plausible(0.14, 2.69) and not is_real_plausible(0.14, 4.31) and not is_real_plausible(0.14, 5.2)
     assert not is_real_plausible(0.14, float("nan")) and not is_real_plausible(0.05, 5.2)

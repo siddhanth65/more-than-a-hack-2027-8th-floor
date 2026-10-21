@@ -157,17 +157,18 @@ def test_run_selection_two_policies_pathcrf_and_real(tmp_path, monkeypatch):
     assert set(summ["cell"]) == {0, 1, 2, 3}
     real_tab = pd.read_csv(out / "summary_real.csv")
     assert {"cell", "mean_rank", "non_blackout_D_share", "tag_agreement_implied", "pred_D_share",
-            "spells_per_HA_min", "d_share_ok", "spell_rate_ok", "real_plausible"} <= set(real_tab.columns)
+            "spells_per_graded_min", "spells_per_HA_min", "d_share_ok", "spell_rate_ok", "real_plausible"} <= set(real_tab.columns)
     assert set(real_tab["cell"]) == {0, 1, 2, 3}
     b = json.loads((out / "best.json").read_text()); reg = json.loads((out / "registration.json").read_text())
     assert set(b["real_plausibility"]) == {"0", "1", "2", "3"} and reg["real_plausibility"] == b["real_plausibility"]
     want = sel.choose_plausible(summ, {int(k): v for k, v in b["real_plausibility"].items()})
     assert b["cell"] == grid[want] == best
     for v in b["real_plausibility"].values():
-        assert v["real_plausible"] == sel.is_real_plausible(v["non_blackout_D_share"], v["spells_per_HA_min"])
+        assert v["real_plausible"] == sel.is_real_plausible(v["non_blackout_D_share"], v["spells_per_graded_min"])
+        assert v["spell_rate_ok"] == (sel.REAL_SPELL_RATE_BAND[0] <= v["spells_per_graded_min"] <= sel.REAL_SPELL_RATE_BAND[1])
         assert v["real_plausible"] == (v["d_share_ok"] and v["spell_rate_ok"])
     assert b["real_bands"] == {"non_blackout_D_share": list(sel.REAL_D_SHARE_BAND),
-                               "spells_per_HA_min": list(sel.REAL_SPELL_RATE_BAND)}
+                               "spells_per_graded_min": list(sel.REAL_SPELL_RATE_BAND)}
     uses_team = best.get("w_teamctrl", 0.0) > 0
     assert (out / "team_model.joblib").exists() == uses_team and reg["use_teamctrl"] == uses_team
     assert reg["team_policy"] == (best["team_policy"] if uses_team else None)
