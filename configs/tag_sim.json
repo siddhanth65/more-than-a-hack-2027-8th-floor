@@ -8,8 +8,8 @@
  "jitter_s": 1.0,
  "carry_max_s": 60.0,
  "keep_sp_by_type": {
-  "Free kick": 0.16,
-  "Goal kick": 0.78,
-  "Throw-in": 0.72
+  "Free kick": 0.14,
+  "Goal kick": 0.96,
+  "Throw-in": 0.57
  }
 }

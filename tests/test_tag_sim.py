@@ -99,7 +99,7 @@ def test_keep_sp_by_type_deterministic_and_partial():
 def test_default_keeps_and_config_in_sync():
     import json
     from pathlib import Path
-    assert TagSimParams().keep_sp_by_type == {"Free kick": 0.16, "Goal kick": 0.78, "Throw-in": 0.72}
+    assert TagSimParams().keep_sp_by_type == {"Free kick": 0.14, "Goal kick": 0.96, "Throw-in": 0.57}
     cfg = json.loads((Path(__file__).resolve().parents[1] / "configs" / "tag_sim.json").read_text())
     assert TagSimParams.from_dict(cfg) == TagSimParams()
     assert TagSimParams.from_dict(json.loads(json.dumps(TagSimParams().to_dict()))) == TagSimParams()
