@@ -1,6 +1,6 @@
 # Technical document: frame-level possession labelling (More Than A Hack 2027)
 
-*Status: Plan 2f done; the candidate remains a5c (variant a6 was tried and not selected, section 6.5); candidate a5c results filled in (section 6.4), with candidates a4 (section 6.3), a3b (section 6.2) and a2 (section 6.1) kept as previous iterations. The public-window label shares for a5c and the final public-window read are still to be added. The clean-clone regeneration check of a5c is in progress.*
+*Status: Plan 3r done; the candidate is now a8r (broadcast replay stream added; chosen by the pre-registered rule, section 6.6). a5c and earlier (a4, a3b, a2) are kept as previous iterations; a5c is also the fallback that needs only tracking data. Variant a6 was tried and not selected (section 6.5). The public window has been read three times (budget used); sealed reads taken: six.*
 
 ## 1. Summary
 
@@ -74,11 +74,11 @@ A centred 3-state (H, A, D) Viterbi per half, with switch costs `tau_HA` and `ta
 | DFL match J03WR9 (= 9007) | sealed test match | not touched until selection is registered |
 | DFL throw-in events + raw ball (9001 to 9007) | used | typed, sparse set-piece tags in the simulator (2.5) |
 | PathCRF (external) | used | see 3.2 |
-| broadcast video and broadcast tracking | **dropped (no-go)** | census in 3.1 |
+| broadcast video and broadcast tracking | **used (replay/close-up cue only)** | ball fusion dropped (3.1); video now gives a per-frame replay cue (3.3) |
 
-### 3.1 Broadcast fusion: tried and dropped
+### 3.1 Broadcast ball fusion: tried and dropped
 
-We measured whether the broadcast recording could supply the ball inside tactical blackouts. The two feeds share one constant clock offset: tactical frame = broadcast frame + 4014 (+160.58 s, within 0.3 s). Of the valid broadcast frames, 23 % are out of sync (replays).
+We measured whether the broadcast recording could supply the ball inside tactical blackouts. An early census assumed one constant clock offset (tactical frame = broadcast frame + 4014); this is corrected in 3.3, where the offset differs per half. Of the valid broadcast frames, 23 % were out of sync (replays).
 
 | on tactical blackout frames | share |
 |---|---|
@@ -87,7 +87,28 @@ We measured whether the broadcast recording could supply the ball inside tactica
 | broadcast ball present | 18.7 % |
 | plausibility-checked usable broadcast ball | 1.3 % (692 frames) |
 
-Both trackers lose the ball at the same times, so there is nothing to borrow. Broadcast fusion was dropped. The offset is recorded in case a video-based ball detector is ever tried.
+Both trackers lose the ball at the same times, so there is nothing to borrow. Broadcast ball fusion was dropped. The broadcast is used in a different way, as a replay cue (3.3).
+
+### 3.3 Broadcast replay stream (Plan 3r)
+
+The broadcast video is now used, but not for the ball. Replays and close-ups show play that is not live, and they cluster around dead ball time (a replay follows a goal or a stoppage), so a per-frame replay/close-up cue is evidence for D. The cue combines three things:
+
+- **Broadcast homography validity** per frame (a valid pitch homography means a wide live view).
+- **Broadcast-tracking synchronisation.** The clock offset differs per half: tactical frame = broadcast frame + 4014 in the first half and + 26920 in the second, with the cut at broadcast frame 87190. This corrects the single-offset census in 3.1. Frames out of sync are replays.
+- **Pitch-green pixel share** (Otsu threshold 0.45), decoded every 12 frames (about 10 min of CPU locally; no cloud processing).
+
+The result is smoothed over 2 s.
+
+**Label-free validation of the cue on the real match** (no labels used):
+
+| check | result |
+|---|---|
+| replay-like on blackout frames vs outside | 74 % vs 22 % |
+| in the 30 s before restarts: kick-off / corner / goal kick / free kick / throw-in | 0.88 / 0.68 / 0.56 / 0.54 / 0.30 (0.19 elsewhere on visible-ball frames) |
+| PROGRESSION mid-phase frames replay-like | 5.6 % |
+| P(replay given a5c dead) vs P(replay given a5c alive), visible-ball frames | 0.64 vs 0.13 |
+
+**Stream.** A D log-likelihood term w·[cue·log(0.64/0.13) + (1−cue)·log(0.36/0.87)] is added to the decoder. It is absent on the simulator (no video), so simulator scores are unchanged by construction.
 
 ### 3.2 PathCRF dependency and licence
 
@@ -121,7 +142,7 @@ One real match with no private ground truth cannot be used for tuning, so:
 4. **LOMO selection** over grid `grid2` (tau_HA, tau_D, dead weight, PathCRF weight in {0, 0.5, 1, 2}, dead policy) for a2, and over `grid3` for a3b (dead weight {2, 3, 4, 6} x dead policy x set-piece dead prior, with PathCRF weight {0.5, 1}), and over `grid4` for a4 (96 cells, section 6.3). Cells are ranked by mean rank over the four truth variants. Spec bar: margin over the best baseline `>= max(0.05, 2x seed SD)` on every variant, AND folds won on ctrl_Dfull `>= n_folds - 1`, AND the ctrl_Dfull and ctrl_Dnarrow count ratios (n_pred/n_gt) in [0.8, 1.25] (raw ratios are recorded only).
 5. **Sealed match**: each sealed read is taken after selection is registered and logged. Sealed reads taken are now six: 9006 for a1; 9007 for a2, a3b, a4, a5c and a6, each logged in `docs/reads/sealed.jsonl`. Disclosure: 9007 is sealed for the pipeline (never scored by `select_lomo`), but its labels were used for the PathCRF clean evaluation (92.6 %), the PathCRF robustness experiment, the choice of the PathCRF output head (`run_infer.py`: the emission marginal was picked on 15 000 frames of the corrupted sim half game_9007_H1 s100 against the ball-owning team), and the ctrl-truth diagnostic (66 % disagreement on 9007 H1). The sealed a2, a3b, a4, a5c and a6 results are reported with this caveat.
 6. **Real-match plausibility (label-free)**: the candidate's non-blackout D share on the real match must lie in [0.10, 0.18] (the public window implies about 0.15 on visible frames). For a3b this real-match plausibility gate chose among the top cells; for a4 it was joined by the spell-rate band (2.6). The first candidate (a1) had 0.028 on visible frames with a dead model trained on unrealistic visible-ball dead time; this criterion is what exposed it.
-7. **Public 5-minute window**: reads are budgeted at 3, used only for conventions and plausibility, never for tuning. 2 of 3 are used (a3b, a4 and a5c took none); the last is reserved for the final candidate.
+7. **Public 5-minute window**: reads are budgeted at 3, used only for conventions and plausibility, never for tuning. All 3 are used: read 3 (report-only, pre-registered) was taken on a5c (section 6.6); a3b, a4 and a5c otherwise took none. Read 4 on a8r was not taken (our own three-read budget).
 
 ### Earlier candidate a1 (for context)
 
@@ -242,7 +263,7 @@ Visible-dead detection has roughly doubled but is still about half of the truth.
 | sealed match 9007 | raw and ctrl spellF1 of the registered cell | done (section 6) |
 | candidate drift on the real match | spell count, non-blackout D share, tag agreement | done (section 6) |
 | selection a3b (grid3, 6 folds, 2 seeds) and sealed read 3 | cell 52, four variant scores, sealed 9007 | done (section 6.2) |
-| final public window read (3 of 3) | spellF1, macroF1 | FILL |
+| final public window read (3 of 3) | spellF1, macroF1 | done on a5c (section 6.6) |
 
 ### 6.3 Candidate a4 (Plan 2d)
 
@@ -341,6 +362,22 @@ Result. The label-free plausibility bands chose strength 8 with offset -2.5 (vis
 
 Decision. a5c remains the candidate: the sealed match and the simulator (seven matches) both prefer it, and the window gain rests on only five minutes of evidence. The prior stays in the code at strength 0, so it has no effect on a5c output. Sealed read 6 is logged in `docs/reads/sealed.jsonl`.
 
+### 6.6 Candidate a8r (Plan 3r): broadcast replay stream
+
+a8r adds the broadcast replay stream (3.3) to a5c. The weight was chosen by a rule fixed in advance (`docs/reads/plan3r-preregistration.md`): label-free admissibility (visible-dead share 0.10 to 0.18, 2.7 to 4.3 spells per graded minute, PROGRESSION false-dead at most a5c + 0.02, tag agreement at least a5c − 0.01), then the highest pre-restart dead coverage. Of 12 settings, 5 were admissible; the choice is weight 1.0 with dead offset −2.0 (a tie with weight 1.5 was broken to the smaller weight). By this rule a8r is the candidate.
+
+| label-free measure on the real match | a8r | a5c |
+|---|---|---|
+| pre-restart dead coverage | 0.350 | 0.344 |
+| visible-dead share | 0.177 | 0.178 |
+| spells per graded minute | 3.08 | n/a |
+| implied tag agreement | 0.723 | 0.729 |
+| spells | 326 | 328 |
+
+Honest assessment: this is a small change. The cue largely agrees with the dead time that the tracking-based model already finds. The simulator cannot test it (no video), so its simulator scores equal a5c's by construction.
+
+**Public 5-minute window, read 3** (report-only, pre-registered, on a5c): spellF1 0.656, macroF1 0.802; 19 predicted against 17 true possessions (false splits 2, false merges 1, boundary-only 5). The a5c and a8r labels are nearly identical, so this read is reported for a5c and stands for a8r too; read 4 on a8r was not taken (our own three-read budget). For context: a1 scored 0.290 and the organisers' smoother 0.326 on this window.
+
 ## 7. Limitations
 
 - 9007 label exposure: the sealed match was used for PathCRF evaluation, robustness, output-head choice and the ctrl-truth diagnostic (see section 5); the sealed a2, a3b, a4, a5c and a6 scores are therefore not a fully untouched estimate.
@@ -349,7 +386,8 @@ Decision. a5c remains the candidate: the sealed match and the simulator (seven m
 - Error analysis of a1 on the proxy: only 34 % of true possessions were matched at IoU 0.5; short possessions under 3 s are rarely matched; the largest loss is missed or false team changes on visible-ball frames and the team at blackout starts. Oracle boundaries would add about +0.18, so boundary placement remains the largest lever.
 - Ball-control parameters were flat in a sweep; further gains need new evidence, not retuning.
 - Dead-ball realism on visible frames is calibrated only on aggregates (static, out, speed p50).
-- With more time: a video-based ball detector on the broadcast feed (the offset is known); a semi-Markov decoder; set-piece taker rules.
+- The replay-cue weight was chosen label-free on one match, and the simulator cannot test the broadcast stream (no video), so its benefit is unmeasured on proxy truth; the gain over a5c is small.
+- With more time: a video-based ball detector on the broadcast feed (the per-half offsets are known); a semi-Markov decoder; set-piece taker rules.
 
 ## 8. Reproduction
 
@@ -364,7 +402,8 @@ scripts\reproduce.ps1                     # full chain: simulator, PathCRF cache
 - The full chain first runs `scripts/parse_dfl_match.py` (in the repository) on the raw DFL XML (`E:\football-synthesizer\data\dfl_open`, or `MTAH_DFL_RAW`) to produce `runs/dfl_extra` (match 9007); the raw XML is not in the repository; `-CandidateOnly` needs only the competition data and PathCRF.
 - Candidate a3b: md5 `17f3d177f347787d510d36092837f507` (regenerated byte-identically from a clean clone with `scripts/reproduce.ps1 -CandidateOnly -Name a3b`, 2026-10-21).
 - Candidate a4: md5 `2f32357af37a747b8b953c2053137889` (regenerated byte-identically from a clean clone, 2026-10-22).
-- Candidate a5c (the submitted candidate): md5 `2a672be6795bdfb0c9699fea0f235730` (regenerated byte-identically from a clean clone, 2026-10-22).
+- Candidate a5c (previous candidate, and the fallback that needs only tracking data): md5 `2a672be6795bdfb0c9699fea0f235730` (regenerated byte-identically from a clean clone, 2026-10-22).
+- Candidate a8r (the submitted candidate): md5 `bd627150d9455c3d865ac6790086a5d1`, regenerated byte-identically from a clean clone including the cue rebuild (2026-10-22). `scripts/reproduce.ps1 -CandidateOnly -Name a8r` also rebuilds the broadcast cue from the video when the cache is missing (requires the broadcast bundle under the data dir).
 - Output file: `runs/candidates/a2.csv` (format checked with the official `validate_submission.py`). md5: `811b7bfddf25ac9f54341c3157b42868` (regenerated byte-identically from a clean clone with `scripts/reproduce.ps1 -CandidateOnly -Name a2`, including a fresh PathCRF posterior run, 2026-10-21).
 
 ## 9. Rules compliance
