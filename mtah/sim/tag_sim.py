@@ -23,7 +23,7 @@ class TagSimParams:
     # per set-piece type keep probability (case-insensitive type names; types not listed are kept):
     # per-type calibration knobs, starting values: re-calibrated after the next rebuild now that restarts are typed
     # from THROW_IN events and the clean DFL ball (real: ~5 free kicks and ~0.245 throw-ins/min)
-    keep_sp_by_type: dict = field(default_factory=lambda: {"Free kick": 0.14, "Goal kick": 0.96, "Throw-in": 0.57})
+    keep_sp_by_type: dict = field(default_factory=lambda: {"Free kick": 0.16, "Goal kick": 0.78, "Throw-in": 0.72})
 
     def to_dict(self):
         return asdict(self)
