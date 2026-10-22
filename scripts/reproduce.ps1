@@ -1,6 +1,8 @@
 ﻿# Reproduce the MTAH possession submission. Windows PowerShell 5.1.
 #   scripts\reproduce.ps1                  full chain: simulator -> PathCRF cache -> LOMO selection -> candidate
 #   scripts\reproduce.ps1 -CandidateOnly   regenerate the CSV from the committed models/<Name>/ (config + dead model)
+#                                          a8r (use_replay) first builds runs\broadcast\cue.npz if missing: needs the
+#                                          broadcast video under $env:MTAH_DATA_DIR\broadcast
 param(
     [switch]$CandidateOnly,
     [string]$Name = "a2"
@@ -54,6 +56,20 @@ if (-not (Test-Path $PcRepo) -or -not (Test-Path $PcPy)) {
 }
 
 if ($CandidateOnly) {
+    # 3b. broadcast replay stream (a8r and any config with use_replay): build the per-frame cue if it is not cached
+    $Cfg = Get-Content -Raw (Join-Path $Root "runs\select\$Name\config.json") | ConvertFrom-Json
+    $UseReplay = ($Cfg.PSObject.Properties.Name -contains "use_replay") -and $Cfg.use_replay
+    if ($UseReplay -and -not (Test-Path (Join-Path $Root "runs\broadcast\cue.npz"))) {
+        $Video = Join-Path $env:MTAH_DATA_DIR "broadcast\BAR-ATH_broadcast.mp4"
+        if (-not (Test-Path (Join-Path $Root "runs\broadcast\green.npz")) -and -not (Test-Path $Video)) {
+            Write-Host "candidate $Name uses the broadcast replay stream: the broadcast video must be present at $Video"
+            Write-Host "(with the broadcast tracking and homography under $env:MTAH_DATA_DIR\broadcast)."
+            exit 1
+        }
+        Write-Host "building the broadcast replay cue (needs the broadcast video under MTAH_DATA_DIR\broadcast; ~10 min decode)"
+        & $Py scripts\broadcast_cue.py --cue-only
+        if ($LASTEXITCODE -ne 0) { exit 1 }
+    }
     & $Py scripts\make_candidate.py --select "runs/select/$Name" --name $Name
     if ($LASTEXITCODE -ne 0) { exit 1 }
     $Csv = Join-Path $Root "runs\candidates\$Name.csv"

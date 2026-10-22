@@ -1,0 +1,140 @@
+{
+ "ball": {
+  "sigma_m": 1.0,
+  "c_flight": 3.0,
+  "c_contest": 3.0,
+  "r_contest_m": 2.0,
+  "tau_switch": 6.0,
+  "tau_flight": 1.0,
+  "w_vel": 0.15,
+  "cand_radius_m": 5.0,
+  "top_k": 4,
+  "alpha_loose": 0.5,
+  "min_seg": 3,
+  "eps": 0.001
+ },
+ "tag": {
+  "p_tag": 0.85,
+  "p_sp_team": 0.8,
+  "sp_team_after_s": 10.0,
+  "code_table": {
+   "BUILD UP": {
+    "sign": 1,
+    "p": 0.77
+   },
+   "PROGRESSION": {
+    "sign": 1,
+    "p": 0.69
+   },
+   "ATTACKING TRANSITION": {
+    "sign": 1,
+    "p": 0.63
+   },
+   "LONG BALL": {
+    "sign": 1,
+    "p": 0.62
+   },
+   "BALL IN FINAL THIRD": {
+    "sign": 1,
+    "p": 0.61
+   },
+   "DEFENDING IN ATTACKING THIRD": {
+    "sign": -1,
+    "p": 0.77
+   },
+   "DEFENDING IN MIDDLE THIRD": {
+    "sign": -1,
+    "p": 0.69
+   },
+   "DEFENSIVE TRANSITION": {
+    "sign": -1,
+    "p": 0.62
+   },
+   "DEFENDING IN DEFENSIVE THIRD": {
+    "sign": -1,
+    "p": 0.52
+   },
+   "BALL IN THE BOX": {
+    "sign": 0,
+    "p": 0.5
+   },
+   "CREATING CHANCES": {
+    "sign": 0,
+    "p": 0.5
+   },
+   "PLAYERS IN THE BOX": {
+    "sign": 0,
+    "p": 0.5
+   },
+   "GOALS": {
+    "sign": 0,
+    "p": 0.5
+   },
+   "SET PIECES": {
+    "sign": 1,
+    "p": 0.8
+   }
+  },
+  "sp_dead_bonus": 0.0,
+  "sp_dead_before_s": 2.0,
+  "sp_dead_after_s": 3.0
+ },
+ "touch": {
+  "k": 3,
+  "theta_dv": 5.0,
+  "r_touch_m": 1.5,
+  "contest_ratio": 1.3,
+  "theta_hi": 6.0
+ },
+ "decoder": {
+  "weights": {
+   "ball": 1.0,
+   "tag": 1.0,
+   "dead": 4.0,
+   "pathcrf": 1.0,
+   "teamctrl": 2.0
+  },
+  "lengths": {
+   "ball": 1.0,
+   "tag": 1.0,
+   "dead": 1.0,
+   "pathcrf": 1.0,
+   "teamctrl": 1.0
+  },
+  "tau_HA": 30.0,
+  "tau_HD": 100.0,
+  "tau_DH": 100.0,
+  "w_switch": 0.0,
+  "tau_floor": 3.0
+ },
+ "post": {
+  "island_s": 0.4,
+  "d_fill_s": 0.0,
+  "aba_s": 1.0,
+  "snap_w": 50,
+  "snap_mode": "touch",
+  "merge_theta": 0.7
+ },
+ "dead_model_path": null,
+ "dead_offset": -2.0,
+ "dead_policy": "long_rel",
+ "use_pathcrf": true,
+ "pathcrf": {
+  "ckpt": 140,
+  "eps": 0.001,
+  "conf_alpha": 1.0
+ },
+ "use_teamctrl": true,
+ "team_policy": "full",
+ "use_switch": false,
+ "switch_policy": "full",
+ "lengths": {
+  "ball": 1.0,
+  "tag": 1.0,
+  "dead": 1.0,
+  "pathcrf": 1.0,
+  "teamctrl": 1.0
+ },
+ "use_replay": true,
+ "replay_w": 1.0
+}

@@ -1,0 +1,209 @@
+{
+ "git": "671ae2c",
+ "seeds": [
+  100,
+  101
+ ],
+ "grid": "grid8",
+ "grid_size": 3,
+ "selection": "mean rank over 4 variants, tie ctrl_Dfull; highest-ranked real-plausible cell among the top 5 (real non-blackout D share in [0.1, 0.18] and spells per graded minute in [2.7, 4.3]; fallback rank 1)",
+ "scorer_md5": "7718cb8a237452b48b35713984d31c75",
+ "best_cell": {
+  "tau_HA": 30.0,
+  "tau_D": 100.0,
+  "w_dead": 4.0,
+  "w_pathcrf": 1.0,
+  "dead_policy": "long_rel",
+  "sp_dead_bonus": 0.0,
+  "w_teamctrl": 2.0,
+  "w_ball": 1.0,
+  "team_policy": "full",
+  "aba_s": 1.0,
+  "w_switch": 0.0,
+  "snap_mode": "touch",
+  "merge_theta": 0.7,
+  "dead_offset": -2.0
+ },
+ "best_cell_index": 0,
+ "chosen_rank": 1,
+ "best": {
+  "raw_Dfull": 0.5241520296542342,
+  "ctrl_Dfull": 0.49440225540290905,
+  "raw_Dnarrow": 0.5088715315392794,
+  "ctrl_Dnarrow": 0.47978358220175116
+ },
+ "baselines": {
+  "raw_Dfull": {
+   "b4": 0.0741919910552533,
+   "smooth50": 0.23293849272771405
+  },
+  "ctrl_Dfull": {
+   "b4": 0.04934514274807428,
+   "smooth50": 0.20934700255201552
+  },
+  "raw_Dnarrow": {
+   "b4": 0.07686980007300202,
+   "smooth50": 0.2461288179393779
+  },
+  "ctrl_Dnarrow": {
+   "b4": 0.050467180756486846,
+   "smooth50": 0.21999471363143108
+  }
+ },
+ "seed_sd": {
+  "raw_Dfull": 0.0066106751723481365,
+  "ctrl_Dfull": 0.01071691798185086,
+  "raw_Dnarrow": 0.002514452897016074,
+  "ctrl_Dnarrow": 0.006444283689236494
+ },
+ "baseline_used": {
+  "raw_Dfull": "smooth50",
+  "ctrl_Dfull": "smooth50",
+  "raw_Dnarrow": "smooth50",
+  "ctrl_Dnarrow": "smooth50"
+ },
+ "spec_bar": {
+  "margins_vs_best_baseline": {
+   "raw_Dfull": 0.2912135369265202,
+   "ctrl_Dfull": 0.2850552528508935,
+   "raw_Dnarrow": 0.26274271359990153,
+   "ctrl_Dnarrow": 0.2597888685703201
+  },
+  "required_margin": {
+   "raw_Dfull": 0.05,
+   "ctrl_Dfull": 0.05,
+   "raw_Dnarrow": 0.05,
+   "ctrl_Dnarrow": 0.05
+  },
+  "seed_sd": {
+   "raw_Dfull": 0.0066106751723481365,
+   "ctrl_Dfull": 0.01071691798185086,
+   "raw_Dnarrow": 0.002514452897016074,
+   "ctrl_Dnarrow": 0.006444283689236494
+  },
+  "baseline_used": {
+   "raw_Dfull": "smooth50",
+   "ctrl_Dfull": "smooth50",
+   "raw_Dnarrow": "smooth50",
+   "ctrl_Dnarrow": "smooth50"
+  },
+  "folds_won_ctrl_Dfull": 6,
+  "n_folds": 6,
+  "folds_won_needed": 5,
+  "count_ratios": {
+   "raw_Dfull": 0.6846691270643198,
+   "ctrl_Dfull": 0.8719237643982939,
+   "raw_Dnarrow": 0.6836438556059351,
+   "ctrl_Dnarrow": 0.8705203873370221
+  },
+  "ratio_band": [
+   0.8,
+   1.25
+  ],
+  "ratio_rule_variants": [
+   "ctrl_Dfull",
+   "ctrl_Dnarrow"
+  ],
+  "count_ratios_ok": {
+   "ctrl_Dfull": true,
+   "ctrl_Dnarrow": true
+  },
+  "bar_pass": true
+ },
+ "use_pathcrf": true,
+ "pathcrf_threads": 4,
+ "use_teamctrl": true,
+ "team_policy": "full",
+ "real_plausibility": {
+  "0": {
+   "rank": 1,
+   "mean_rank": 1.0,
+   "non_blackout_D_share": 0.17767025849605797,
+   "tag_agreement_implied": 0.7294156630215892,
+   "pred_D_share": 0.4057548612903429,
+   "spells_per_graded_min": 3.0971250873427048,
+   "spells_per_HA_min": 5.211864406779661,
+   "d_share_ok": true,
+   "spell_rate_ok": true,
+   "real_plausible": true
+  },
+  "1": {
+   "rank": 2,
+   "mean_rank": 2.0,
+   "non_blackout_D_share": 0.161266071669526,
+   "tag_agreement_implied": 0.724349107072362,
+   "pred_D_share": 0.38960196906651895,
+   "spells_per_graded_min": 3.219876996292263,
+   "spells_per_HA_min": 5.2750448610853296,
+   "d_share_ok": true,
+   "spell_rate_ok": true,
+   "real_plausible": true
+  },
+  "2": {
+   "rank": 3,
+   "mean_rank": 3.0,
+   "non_blackout_D_share": 0.14166200821173158,
+   "tag_agreement_implied": 0.7204754606541701,
+   "pred_D_share": 0.3653159760035755,
+   "spells_per_graded_min": 3.2765317234997515,
+   "spells_per_HA_min": 5.1624613187336355,
+   "d_share_ok": true,
+   "spell_rate_ok": true,
+   "real_plausible": true
+  }
+ },
+ "chosen_real_plausible": true,
+ "real_bands": {
+  "non_blackout_D_share": [
+   0.1,
+   0.18
+  ],
+  "spells_per_graded_min": [
+   2.7,
+   4.3
+  ]
+ },
+ "use_merge": true,
+ "merge_model": {
+  "n_rows": 2315,
+  "pos_rate": 0.3369330453563715,
+  "held_match": 9006,
+  "n_halves": 4,
+  "n_ref_cells": 3,
+  "label_seconds": 2.41,
+  "total_seconds": 165.24
+ },
+ "use_switch": false,
+ "switch_policy": null,
+ "pathcrf_train_matches": [
+  9001,
+  9002,
+  9003,
+  9004,
+  9005
+ ],
+ "pathcrf_val": 9006,
+ "clean": 9007,
+ "sealed_match": 9007,
+ "lengths_mode": "unit",
+ "plan3r": {
+  "derived_from": "a5c",
+  "preregistration": "docs/reads/plan3r-preregistration.md",
+  "use_replay": true,
+  "replay_w": 1.0,
+  "dead_offset": -2.0,
+  "decision": {
+   "result": "CHOSEN",
+   "w": 1.0,
+   "dead_offset": -2.0,
+   "clause": "rule 4: highest pre-restart D coverage among 5 admissible settings (exact tie broken by smaller w)",
+   "tied_with": [
+    {
+     "w": 1.5,
+     "dead_offset": -2.0
+    }
+   ]
+  },
+  "note": "all a5c artefacts unchanged; the replay stream needs runs/broadcast/cue.npz (scripts/broadcast_cue.py --cue-only, broadcast video under the data dir)"
+ }
+}

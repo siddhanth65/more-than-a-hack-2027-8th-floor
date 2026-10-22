@@ -1,0 +1,218 @@
+{
+ "preregistration": "docs/reads/plan3r-preregistration.md",
+ "select": "runs/select/a5c",
+ "bounds": {
+  "D_share": [
+   0.1,
+   0.18
+  ],
+  "spell_rate": [
+   2.7,
+   4.3
+  ],
+  "progression_D_max": 0.03971587891662241,
+  "tag_agree_min": 0.7194156630215892
+ },
+ "n_frames": {
+  "prerestart_visible": 5702,
+  "progression_mid_visible": 15064
+ },
+ "rows": [
+  {
+   "w": 0.0,
+   "dead_offset": -2.0,
+   "D_share": 0.17767025849605797,
+   "spell_rate": 3.0971250873427048,
+   "tag_agree": 0.7294156630215892,
+   "prerestart_D": 0.34391441599438793,
+   "progression_D": 0.019715878916622413,
+   "pred_D_share": 0.4057548612903429,
+   "n_spells": 328,
+   "fails": [],
+   "admissible": false
+  },
+  {
+   "w": 0.5,
+   "dead_offset": -2.0,
+   "D_share": 0.17687992752086668,
+   "spell_rate": 3.0971250873427048,
+   "tag_agree": 0.7244735347162923,
+   "prerestart_D": 0.34759733426867767,
+   "progression_D": 0.019848645778013808,
+   "pred_D_share": 0.4065039626834197,
+   "n_spells": 328,
+   "fails": [],
+   "admissible": true
+  },
+  {
+   "w": 0.5,
+   "dead_offset": -2.5,
+   "D_share": 0.16228771902770014,
+   "spell_rate": 3.2104345417576816,
+   "tag_agree": 0.7177492876670774,
+   "prerestart_D": 0.3384777271132936,
+   "progression_D": 0.014471587891662242,
+   "pred_D_share": 0.39251024506317,
+   "n_spells": 340,
+   "fails": [
+    "tag_agree"
+   ],
+   "admissible": false
+  },
+  {
+   "w": 0.5,
+   "dead_offset": -3.0,
+   "D_share": 0.14174875185535016,
+   "spell_rate": 3.304859087103496,
+   "tag_agree": 0.7154080796785596,
+   "prerestart_D": 0.31462644686075064,
+   "progression_D": 0.009160913436006373,
+   "pred_D_share": 0.3688222741207501,
+   "n_spells": 350,
+   "fails": [
+    "tag_agree"
+   ],
+   "admissible": false
+  },
+  {
+   "w": 1.0,
+   "dead_offset": -2.0,
+   "D_share": 0.17713052026909806,
+   "spell_rate": 3.078240178273542,
+   "tag_agree": 0.7228698287616095,
+   "prerestart_D": 0.35040336723956506,
+   "progression_D": 0.015932023366967606,
+   "pred_D_share": 0.40745450310656756,
+   "n_spells": 326,
+   "fails": [],
+   "admissible": true
+  },
+  {
+   "w": 1.0,
+   "dead_offset": -2.5,
+   "D_share": 0.1641093355436899,
+   "spell_rate": 3.219876996292263,
+   "tag_agree": 0.7192935495392621,
+   "prerestart_D": 0.33882848123465453,
+   "progression_D": 0.014272437599575145,
+   "pred_D_share": 0.393164921910901,
+   "n_spells": 341,
+   "fails": [
+    "tag_agree"
+   ],
+   "admissible": false
+  },
+  {
+   "w": 1.0,
+   "dead_offset": -3.0,
+   "D_share": 0.14379204657169845,
+   "spell_rate": 3.2765317234997515,
+   "tag_agree": 0.7236662729723773,
+   "prerestart_D": 0.3232199228340933,
+   "progression_D": 0.009094530005310674,
+   "pred_D_share": 0.37246706157109855,
+   "n_spells": 347,
+   "fails": [],
+   "admissible": true
+  },
+  {
+   "w": 1.5,
+   "dead_offset": -2.0,
+   "D_share": 0.1779112130616651,
+   "spell_rate": 3.0876826328081233,
+   "tag_agree": 0.7218236681399645,
+   "prerestart_D": 0.35040336723956506,
+   "progression_D": 0.015865639936271908,
+   "pred_D_share": 0.4089841807411697,
+   "n_spells": 327,
+   "fails": [],
+   "admissible": true
+  },
+  {
+   "w": 1.5,
+   "dead_offset": -2.5,
+   "D_share": 0.16486111378838406,
+   "spell_rate": 3.2104345417576816,
+   "tag_agree": 0.7177878286179329,
+   "prerestart_D": 0.3414591371448615,
+   "progression_D": 0.014604354753053638,
+   "pred_D_share": 0.39405251263715163,
+   "n_spells": 340,
+   "fails": [
+    "tag_agree"
+   ],
+   "admissible": false
+  },
+  {
+   "w": 1.5,
+   "dead_offset": -3.0,
+   "D_share": 0.14612448676677525,
+   "spell_rate": 3.285974178034333,
+   "tag_agree": 0.7193198197529366,
+   "prerestart_D": 0.3233952998947738,
+   "progression_D": 0.009028146574614976,
+   "pred_D_share": 0.3756208413856487,
+   "n_spells": 348,
+   "fails": [
+    "tag_agree"
+   ],
+   "admissible": false
+  },
+  {
+   "w": 2.0,
+   "dead_offset": -2.0,
+   "D_share": 0.18131349152803747,
+   "spell_rate": 3.0593552692043793,
+   "tag_agree": 0.7240772812745445,
+   "prerestart_D": 0.36338126972991935,
+   "progression_D": 0.01573287307488051,
+   "pred_D_share": 0.4133340047967669,
+   "n_spells": 324,
+   "fails": [
+    "D_share"
+   ],
+   "admissible": false
+  },
+  {
+   "w": 2.0,
+   "dead_offset": -2.5,
+   "D_share": 0.1655068720242111,
+   "spell_rate": 3.1821071781539376,
+   "tag_agree": 0.7199027147095373,
+   "prerestart_D": 0.3467204489652753,
+   "progression_D": 0.01009028146574615,
+   "pred_D_share": 0.39534298142354446,
+   "n_spells": 337,
+   "fails": [],
+   "admissible": true
+  },
+  {
+   "w": 2.0,
+   "dead_offset": -3.0,
+   "D_share": 0.1477629778129036,
+   "spell_rate": 3.2482043598960075,
+   "tag_agree": 0.7170767094779904,
+   "prerestart_D": 0.32409680813749564,
+   "progression_D": 0.009426447158789167,
+   "pred_D_share": 0.37884386586678587,
+   "n_spells": 344,
+   "fails": [
+    "tag_agree"
+   ],
+   "admissible": false
+  }
+ ],
+ "decision": {
+  "result": "CHOSEN",
+  "w": 1.0,
+  "dead_offset": -2.0,
+  "clause": "rule 4: highest pre-restart D coverage among 5 admissible settings (exact tie broken by smaller w)",
+  "tied_with": [
+   {
+    "w": 1.5,
+    "dead_offset": -2.0
+   }
+  ]
+ },
+ "runtime_s": 68.68344807624817
+}
