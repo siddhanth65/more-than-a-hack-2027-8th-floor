@@ -1,0 +1,78 @@
+{
+ "candidate": {
+  "n_spells": 340,
+  "spells_per_HA_min": 5.324480080180406,
+  "spells_per_graded_min": 3.2104345417576816,
+  "pred_D_share": 0.3970426232397691,
+  "spell_len_median_s": 7.619999999999999,
+  "share_changes_in_blackout": 0.022935779816513763,
+  "D_starts_near_sp_share": 0.05785123966942149,
+  "tag_agreement": 0.546079521702172,
+  "tag_agreement_implied": 0.7223946815753849,
+  "non_blackout_D_share": 0.17144399252077028,
+  "blackout_D_share": 0.8218245830535542
+ },
+ "reference": {
+  "D_starts_near_sp_share": {
+   "min": 0.0,
+   "median": 0.0238230289279637,
+   "max": 0.10638297872340426
+  },
+  "blackout_D_share": {
+   "min": 0.2525776496958053,
+   "median": 0.422197522153013,
+   "max": 0.5429809533407236
+  },
+  "n_spells": {
+   "min": 132.0,
+   "median": 158.0,
+   "max": 183.0
+  },
+  "non_blackout_D_share": {
+   "min": 0.20615459926127008,
+   "median": 0.29577547058215775,
+   "max": 0.3555411114722132
+  },
+  "pred_D_share": {
+   "min": 0.2536488695375447,
+   "median": 0.3210743349462698,
+   "max": 0.41123320798841334
+  },
+  "share_changes_in_blackout": {
+   "min": 0.14754098360655737,
+   "median": 0.24772727272727274,
+   "max": 0.4117647058823529
+  },
+  "spell_len_median_s": {
+   "min": 7.24,
+   "median": 8.55,
+   "max": 11.18
+  },
+  "spells_per_HA_min": {
+   "min": 3.8956508256453986,
+   "median": 4.976339961865545,
+   "max": 5.565990196527555
+  },
+  "spells_per_graded_min": {
+   "min": 2.800248911014312,
+   "median": 3.214074843954576,
+   "max": 3.7980988750985842
+  },
+  "tag_agreement": {
+   "min": 0.6901992778140295,
+   "median": 0.7423373830232582,
+   "max": 0.8206349019091431
+  },
+  "tag_agreement_implied": {
+   "min": 0.6901992778140295,
+   "median": 0.7423373830232582,
+   "max": 0.8206349019091431
+  }
+ },
+ "out_of_range": [
+  "share_changes_in_blackout",
+  "tag_agreement",
+  "non_blackout_D_share",
+  "blackout_D_share"
+ ]
+}
