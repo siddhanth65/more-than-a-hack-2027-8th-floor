@@ -69,22 +69,65 @@ def _phase_runs(codes, fps, hyst_s, min_s, carry_max_s=60.0):
 THROW_IN_CLS = 4   # scripts/parse_dfl_match.py THROW_IN; same scheme for every half via load_events
 
 
-def _sp_type(cls, restart_ball, pitch):
-    """Restart type from the restart event class and the clean ball position at the restart.
-    A THROW_IN event is a throw-in whatever the geometry; otherwise corner flag / goal area / centre spot / free kick."""
+GOAL_LINE_TOL = 0.5     # m inside the goal line / touchline that counts as "crossed" (ball radius + tracking noise)
+CORNER_R = 4.0          # restart within this distance of a corner flag
+KICKOFF_R = 3.0         # restart within this distance of the centre spot
+KICKOFF_MIN_DEAD_S = 15.0   # a mid-half kick-off follows a goal: a long dead run (celebration)
+EXCURSION_MARGIN_S = 2.0    # the raw-ball excursion window extends the dead run by this on both sides
+
+
+def _sp_type(cls, restart_ball, pitch, max_ax=np.nan, max_ay=np.nan, dead_s=0.0, at_start=False):
+    """Restart type from the restart event class, the raw-ball restart position and the raw-ball excursion
+    (max |x|, max |y|) during the dead run (+ margin).
+
+    THROW_IN event -> Throw-in (whatever the geometry). Goal-line crossing (max |x| > L/2 - 0.5) with the restart within
+    4 m of a corner flag -> Corner; with the restart in the goal area (|x| > L/2 - 7, |y| < 12) -> Goal kick. Restart
+    within 3 m of the centre spot and (dead run >= 15 s or the run starts the half) -> Kick-off. Touchline crossing
+    (max |y| > W/2 - 0.5) without a goal-line crossing -> Throw-in. Else Free kick."""
     if cls is not None and int(cls) == THROW_IN_CLS:
         return "Throw-in"
     L, W = pitch
     rx, ry = float(restart_ball[0]), float(restart_ball[1])
-    if np.isnan(rx) or np.isnan(ry):
-        return "Free kick"
-    if abs(rx) > L / 2 - 3 and abs(ry) > W / 2 - 3:
-        return "Corner"
-    if abs(rx) > L / 2 - 7 and abs(ry) < 12:
-        return "Goal kick"
-    if np.hypot(rx, ry) < 2.0:
-        return "Kick-off"
+    goal_line = bool(np.isfinite(max_ax) and max_ax > L / 2 - GOAL_LINE_TOL)
+    touch_line = bool(np.isfinite(max_ay) and max_ay > W / 2 - GOAL_LINE_TOL)
+    if np.isfinite(rx) and np.isfinite(ry):
+        if goal_line and np.hypot(abs(rx) - L / 2, abs(ry) - W / 2) < CORNER_R:
+            return "Corner"
+        if goal_line and abs(rx) > L / 2 - 7 and abs(ry) < 12:
+            return "Goal kick"
+        if np.hypot(rx, ry) < KICKOFF_R and (dead_s >= KICKOFF_MIN_DEAD_S or at_start):
+            return "Kick-off"
+    if touch_line and not goal_line:
+        return "Throw-in"
     return "Free kick"
+
+
+def _excursion(ball, s, e, margin):
+    """(max |x|, max |y|) of the ball over [s - margin, e + margin) (NaN frames ignored; NaN if none)."""
+    w = np.abs(np.asarray(ball[max(0, s - margin):min(len(ball), e + margin)], np.float64))
+    ok = np.isfinite(w).all(axis=1)
+    if not ok.any():
+        return np.nan, np.nan
+    return float(w[ok, 0].max()), float(w[ok, 1].max())
+
+
+SP_TYPES = ("Throw-in", "Corner", "Goal kick", "Free kick", "Kick-off")
+# real set-piece tag rates per graded minute (public real match; reference for the sim calibration)
+REAL_SP_RATES = {"Throw-in": 0.245, "Corner": 0.113, "Goal kick": 0.094, "Free kick": 0.047, "Kick-off": 0.057}
+REAL_SP_TOTAL = 0.557
+
+
+def sp_rate_by_type(tags_df, graded_minutes):
+    """Set-piece tag rate per graded minute by type: dict over SP_TYPES (+ any other type seen) and "total"."""
+    sp = tags_df[tags_df["code"] == "SET PIECES"] if len(tags_df) else tags_df
+    counts = sp["type"].fillna("None").astype(str).value_counts().to_dict() if len(sp) else {}
+    gm = float(graded_minutes)
+    out = {t: (counts.get(t, 0) / gm if gm > 0 else float("nan")) for t in SP_TYPES}
+    for t, n in counts.items():
+        if t not in out:
+            out[t] = n / gm if gm > 0 else float("nan")
+    out["total"] = (sum(counts.values()) / gm) if gm > 0 else float("nan")
+    return out
 
 
 def _ball_at(ball, r):
@@ -96,7 +139,8 @@ def _ball_at(ball, r):
 
 
 def simulate_tags(match, labels, events, blackout_mask, params, rng, raw_ball=None):
-    """raw_ball: clean DFL ball (F,2) used to type restarts; falls back to match.ball."""
+    """raw_ball: clean DFL ball (F,2) used to type restarts (restart position + the excursion during the dead run, see
+    _sp_type); falls back to match.ball. A dead run starting at frame 0 with no restart event is a Kick-off."""
     rball = match.ball if raw_ball is None else np.asarray(raw_ball)
     fps = match.fps; F = match.n_frames
     rows = []
@@ -112,11 +156,14 @@ def simulate_tags(match, labels, events, blackout_mask, params, rng, raw_ball=No
     ev_cls = events["cls"].to_numpy() if len(events) else np.zeros(0, int)
     look = int(2.0 * fps)
     keep_sp = {str(k).lower(): float(v) for k, v in (params.keep_sp_by_type or {}).items()}
+    margin = int(EXCURSION_MARGIN_S * fps)
     for s, e in runs_of(np.asarray(labels) == "D"):
         cand = np.flatnonzero((ev_frames >= e - look) & (ev_frames <= e + look))
         if cand.size:
             r = int(ev_frames[cand[0]]); team = str(ev_team[cand[0]]); cls = int(ev_cls[cand[0]])
-            typ = _sp_type(cls, _ball_at(rball, r), match.pitch)
+            max_ax, max_ay = _excursion(rball, s, e, margin)
+            typ = _sp_type(cls, _ball_at(rball, r), match.pitch, max_ax, max_ay, dead_s=(e - s) / fps,
+                           at_start=(s == 0))
         elif s == 0:
             r = int(e); team = None; typ = "Kick-off"
         else:
