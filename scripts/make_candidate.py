@@ -10,6 +10,7 @@ import sklearn
 from mtah import N_FRAMES
 from mtah.eval.drift import blackout_mask_from_match, drift_report
 from mtah.evidence.dead import DeadModel
+from mtah.evidence.replay import replay_cue
 from mtah.evidence.switch import SwitchModel
 from mtah.evidence.team_ctrl import TeamCtrlModel
 from mtah.io.metrica_loader import STEMS, load_tactical
@@ -50,9 +51,10 @@ def load_selection(sel):
     return cfg, dead, lengths, team, merge, switch
 
 
-def candidate_labels(m, tags, cfg, dead, team=None, merge=None, switch=None, cache_key="real_tactical"):
-    """Labels of the registered pipeline on one match (the real match: cache_key "real_tactical")."""
-    ev = compute_evidence(m, tags, cfg, dead, cache_key=cache_key, team_model=team, switch_model=switch)
+def candidate_labels(m, tags, cfg, dead, team=None, merge=None, switch=None, cache_key="real_tactical", cue=None):
+    """Labels of the registered pipeline on one match (the real match: cache_key "real_tactical"); `cue` is the
+    broadcast replay cue (needed iff cfg.use_replay)."""
+    ev = compute_evidence(m, tags, cfg, dead, cache_key=cache_key, team_model=team, switch_model=switch, replay_cue=cue)
     return predict(m, tags, cfg, dead, evidence=ev, merge_model=merge)
 
 
@@ -69,7 +71,12 @@ def main():
     md5s = {n: hashlib.md5((d / f"{STEMS['tactical']}{suf}").read_bytes()).hexdigest()
             for n, suf in (("atd", "_atd.txt"), ("meta", "_atd.xml"), ("tags", "_smart_tagging.xml"), ("homography", "_homography.csv"))}
     m = load_tactical(args.data); tags = load_tags(args.data)
-    labels = candidate_labels(m, tags, cfg, dead, team, merge, switch)
+    cue = None
+    if cfg.use_replay:
+        cue = replay_cue(args.data, m.n_frames)
+        if cue is None:
+            raise SystemExit(f"{sel}: config uses the replay stream but there is no broadcast data under {args.data}")
+    labels = candidate_labels(m, tags, cfg, dead, team, merge, switch, cue=cue)
     out = ROOT / "runs" / "candidates"; out.mkdir(parents=True, exist_ok=True)
     p = Path(write_submission(labels, out / f"{args.name}.csv")); reason = validate(p)
     if reason is not None:

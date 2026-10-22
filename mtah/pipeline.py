@@ -5,6 +5,7 @@ from typing import Optional
 from mtah.decode.viterbi import DecoderParams, decode
 from mtah.evidence.ball_ctrl import BallCtrlParams, ball_ctrl_evidence
 from mtah.evidence.dead import dead_evidence, dead_table
+from mtah.evidence.replay import replay_evidence
 from mtah.evidence.pathcrf import PathCRFParams, pathcrf_evidence, pathcrf_posterior
 from mtah.evidence.tag_prior import TagPriorParams, load_tag_codes, tag_prior_evidence
 from mtah.evidence.switch import hazard_to_tau, switch_evidence, switch_features
@@ -31,6 +32,8 @@ class PipelineConfig:
     team_policy: str = "full"     # training-time feature policy of the team-control model
     use_switch: bool = False      # switch hazard (needs a SwitchModel passed to compute_evidence); not a cost stream
     switch_policy: str = "full"   # training-time feature policy of the switch model
+    use_replay: bool = False      # broadcast replay/close-up D stream (real match only; needs a cue passed to compute_evidence)
+    replay_w: float = 0.0         # weight of the replay stream's D log-likelihood (0 = stream absent)
 
     def to_dict(self):
         d = asdict(self)
@@ -48,16 +51,20 @@ class PipelineConfig:
                    dead_policy=d.get("dead_policy", "full"), dead_offset=float(d.get("dead_offset", 0.0)), use_pathcrf=d.get("use_pathcrf", False),
                    pathcrf=PathCRFParams(**{k: v for k, v in d.get("pathcrf", {}).items() if k in ("ckpt", "eps", "conf_alpha", "none_k")}),
                    use_teamctrl=d.get("use_teamctrl", False), team_policy=d.get("team_policy", "full"),
-                   use_switch=d.get("use_switch", False), switch_policy=d.get("switch_policy", "full"))
+                   use_switch=d.get("use_switch", False), switch_policy=d.get("switch_policy", "full"),
+                   use_replay=bool(d.get("use_replay", False)), replay_w=float(d.get("replay_w", 0.0)))
 
 
-def compute_evidence(match, tags, cfg, dead_model, cache_key=None, team_model=None, switch_model=None):
+def compute_evidence(match, tags, cfg, dead_model, cache_key=None, team_model=None, switch_model=None, replay_cue=None):
     """Evidence streams by name. `cache_key` names the PathCRF cache entry (required when cfg.use_pathcrf).
     "teamctrl" is added iff cfg.use_teamctrl and a `team_model` is given (its policy must equal cfg.team_policy);
     cfg.use_teamctrl with a positive teamctrl weight and no `team_model` raises (the stream would silently vanish).
     "switch" (the hazard, NOT centred and NOT a cost stream: column 0 of an (F, 3) array, NaN elsewhere) is added
     iff cfg.use_switch and a `switch_model` is given (policy must equal cfg.switch_policy); its teamctrl-margin
-    features use the "teamctrl" stream computed here (required if the model was trained with it)."""
+    features use the "teamctrl" stream computed here (required if the model was trained with it).
+    "replay" (mtah.evidence.replay.replay_evidence: D column only) is added iff cfg.use_replay, cfg.replay_w > 0 and
+    a `replay_cue` (F,) is given; cfg.use_replay without a cue raises (the cue exists only for the real match, so
+    simulator / selection configs keep use_replay False)."""
     ev = {"ball": ball_ctrl_evidence(match, cfg.ball), "tag": tag_prior_evidence(tags, match.n_frames, cfg.tag, fps=match.fps)}
     if dead_model is not None:
         if dead_model.policy != cfg.dead_policy:
@@ -84,6 +91,13 @@ def compute_evidence(match, tags, cfg, dead_model, cache_key=None, team_model=No
             raise ValueError("switch model was trained with teamctrl features but no teamctrl stream is available")
         ts = ev.get("teamctrl") if switch_model.with_teamctrl else None
         ev["switch"] = switch_evidence(switch_model.predict_hazard(switch_features(match, ts, cfg.touch)))
+    if cfg.use_replay:
+        if replay_cue is None:
+            raise ValueError("cfg.use_replay needs a replay_cue (mtah.evidence.replay.replay_cue)")
+        if len(replay_cue) != match.n_frames:
+            raise ValueError(f"replay_cue has {len(replay_cue)} frames, match has {match.n_frames}")
+        if cfg.replay_w > 0:
+            ev["replay"] = replay_evidence(replay_cue, cfg.replay_w)
     return ev
 
 
