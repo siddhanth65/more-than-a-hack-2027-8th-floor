@@ -96,7 +96,7 @@ def test_config_omits_and_ignores_runtime_params(monkeypatch):
     monkeypatch.setenv("MTAH_PATHCRF_REPO", "X:/env_repo")
     monkeypatch.setenv("MTAH_PATHCRF_PY", "X:/env_py.exe")
     d = PipelineConfig().to_dict()
-    assert set(d["pathcrf"]) == {"ckpt", "eps", "conf_alpha"}
+    assert set(d["pathcrf"]) == {"ckpt", "eps", "conf_alpha", "none_k"}
     d["pathcrf"].update(repo="C:/old/repo", python="C:/old/py.exe", cache_dir="C:/old/cache", threads=99, ckpt=141)
     p = PipelineConfig.from_dict(d).pathcrf
     assert (p.repo, p.python, p.ckpt) == ("X:/env_repo", "X:/env_py.exe", 141)
@@ -240,3 +240,86 @@ def test_integration_sim_9007_h1_seed100(tmp_path):
     assert nan_share <= 0.05, nan_share
     assert n > 0
     assert agree >= 0.70, agree
+
+
+def test_none_k_scales_confidence_by_out_of_pitch_mass():
+    p = np.full(3, 0.8, np.float32)
+    imp = np.array([0.0, 0.0, 0.5], np.float32)
+    pn = np.array([0.0, 0.5, 0.5], np.float32)
+    base = pathcrf_evidence(p, np.zeros(3, np.float32), eps=1e-3, conf_alpha=1.0)
+    e = pathcrf_evidence(p, imp, eps=1e-3, conf_alpha=1.0, p_none=pn, none_k=2.0)
+    np.testing.assert_allclose(e[0, :2], base[0, :2], rtol=1e-6)
+    np.testing.assert_allclose(e[1, :2], 0.25 * base[1, :2], rtol=1e-6)          # (1 - 0.5) ** 2
+    np.testing.assert_allclose(e[2, :2], 0.5 * 0.25 * base[2, :2], rtol=1e-6)    # times the imputation confidence
+    e1 = pathcrf_evidence(p, np.zeros(3, np.float32), p_none=np.array([np.nan, 1.0, 0.2], np.float32), none_k=1.0)
+    np.testing.assert_allclose(e1[0, :2], base[0, :2], rtol=1e-6)                # NaN p_none = no penalty
+    assert e1[1, 0] == 0 and e1[1, 1] == 0                                        # all mass off-pitch: no opinion weight
+    np.testing.assert_allclose(e1[2, :2], 0.8 * base[2, :2], rtol=1e-6)
+
+
+def test_none_k_zero_is_identical():
+    rng = np.random.default_rng(0)
+    p = rng.uniform(size=50).astype(np.float32); p[::7] = np.nan
+    imp = rng.uniform(0, 0.3, size=50).astype(np.float32)
+    pn = rng.uniform(size=50).astype(np.float32)
+    ref = pathcrf_evidence(p, imp, 1e-3, 0.7)
+    np.testing.assert_array_equal(pathcrf_evidence(p, imp, 1e-3, 0.7, p_none=pn, none_k=0.0), ref)
+    np.testing.assert_array_equal(pathcrf_evidence(p, imp, 1e-3, 0.7, p_none=None, none_k=2.0), ref)
+
+
+def test_none_k_config_roundtrip_and_old_default():
+    cfg = PipelineConfig(); cfg.pathcrf.none_k = 1.5
+    d = cfg.to_dict()
+    assert d["pathcrf"] == {"ckpt": 140, "eps": 1e-3, "conf_alpha": 1.0, "none_k": 1.5}
+    assert PipelineConfig.from_dict(d).pathcrf.none_k == 1.5
+    old = PipelineConfig().to_dict(); old["pathcrf"].pop("none_k")
+    assert PipelineConfig.from_dict(old).pathcrf.none_k == 0.0
+
+
+def test_compute_evidence_uses_p_none_with_none_k(monkeypatch):
+    import mtah.pipeline as pl
+
+    def fake(match, cache_key, params):
+        F = match.n_frames
+        return {"p_home": np.full(F, 0.7, np.float32), "p_none": np.full(F, 0.5, np.float32),
+                "imputed_frac": np.zeros(F, np.float32)}
+    monkeypatch.setattr(pl, "pathcrf_posterior", fake)
+    cfg = PipelineConfig(); cfg.use_pathcrf = True
+    e0 = compute_evidence(carry_match(F=200), NO_TAGS, cfg, None, cache_key="k")["pathcrf"]
+    cfg.pathcrf.none_k = 1.0
+    e1 = compute_evidence(carry_match(F=200), NO_TAGS, cfg, None, cache_key="k")["pathcrf"]
+    np.testing.assert_allclose(e1[:, :2], 0.5 * e0[:, :2], rtol=1e-6)
+
+
+def test_cache_without_p_none_is_reused_with_zero(tmp_path, monkeypatch):
+    import mtah.evidence.pathcrf as pc
+    m = carry_match(F=120)
+    params = PathCRFParams(cache_dir=str(tmp_path))
+    F = m.n_frames
+    np.savez(tmp_path / "k.npz", ckpt=np.int32(params.ckpt), threads=np.int32(params.threads),
+             input_sha=np.array(pc._input_sha(m)), wrapper_sha=np.array(pc._wrapper_sha()),
+             p_home=np.full(F, 0.6, np.float32), imputed_frac=np.zeros(F, np.float32))
+    monkeypatch.setattr(pc, "_run_half", lambda *a, **k: (_ for _ in ()).throw(AssertionError("recomputed")))
+    monkeypatch.setattr(pc, "_WARNED_NO_PNONE", False)
+    with pytest.warns(UserWarning, match="p_none"):
+        r = pc.pathcrf_posterior(m, "k", params)
+    assert (r["p_none"] == 0).all() and r["p_none"].shape == (F,) and np.allclose(r["p_home"], 0.6)
+    import warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        pc.pathcrf_posterior(m, "k", params)                 # warned once only
+    assert set(np.load(tmp_path / "k.npz").files) >= {"p_home"} and "p_none" not in np.load(tmp_path / "k.npz").files
+
+
+def test_apply_cell_none_k_and_grid11():
+    from mtah.select import GRID8, GRID11, GRIDS, apply_cell, evidence_key
+    assert GRIDS["grid11"] is GRID11 and len(GRID11) == 3
+    assert [c["pathcrf_none_k"] for c in GRID11] == [0.0, 1.0, 2.0]
+    assert all({k: v for k, v in c.items() if k != "pathcrf_none_k"} == GRID8[0] for c in GRID11)
+    assert GRID11[0]["dead_policy"] == "long_rel" and GRID11[0]["w_dead"] == 4.0 and GRID11[0]["dead_offset"] == -2.0
+    assert GRID11[0]["w_teamctrl"] == 2.0 and GRID11[0]["merge_theta"] == 0.7 and GRID11[0]["w_pathcrf"] == 1.0
+    assert GRID11[0]["sp_dead_bonus"] == 0.0
+    assert [apply_cell(PipelineConfig(), c).pathcrf.none_k for c in GRID11] == [0.0, 1.0, 2.0]
+    assert apply_cell(PipelineConfig(), GRID8[0]).pathcrf.none_k == 0.0
+    assert len({evidence_key(c) for c in GRID11}) == 3
+    assert evidence_key(GRID11[0]) == evidence_key(GRID8[0])

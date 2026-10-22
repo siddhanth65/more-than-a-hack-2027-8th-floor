@@ -34,7 +34,7 @@ class PipelineConfig:
 
     def to_dict(self):
         d = asdict(self)
-        d["pathcrf"] = {k: d["pathcrf"][k] for k in ("ckpt", "eps", "conf_alpha")}   # runtime paths stay out of configs
+        d["pathcrf"] = {k: d["pathcrf"][k] for k in ("ckpt", "eps", "conf_alpha", "none_k")}   # runtime paths stay out of configs
         return d
 
     @classmethod
@@ -46,7 +46,7 @@ class PipelineConfig:
         return cls(ball=BallCtrlParams(**d["ball"]), tag=TagPriorParams(**tag), touch=TouchParams(**d["touch"]),
                    decoder=DecoderParams(**d["decoder"]), post=PostParams(**d["post"]), dead_model_path=d.get("dead_model_path"),
                    dead_policy=d.get("dead_policy", "full"), dead_offset=float(d.get("dead_offset", 0.0)), use_pathcrf=d.get("use_pathcrf", False),
-                   pathcrf=PathCRFParams(**{k: v for k, v in d.get("pathcrf", {}).items() if k in ("ckpt", "eps", "conf_alpha")}),
+                   pathcrf=PathCRFParams(**{k: v for k, v in d.get("pathcrf", {}).items() if k in ("ckpt", "eps", "conf_alpha", "none_k")}),
                    use_teamctrl=d.get("use_teamctrl", False), team_policy=d.get("team_policy", "full"),
                    use_switch=d.get("use_switch", False), switch_policy=d.get("switch_policy", "full"))
 
@@ -68,7 +68,8 @@ def compute_evidence(match, tags, cfg, dead_model, cache_key=None, team_model=No
         if cache_key is None:
             raise ValueError("cfg.use_pathcrf needs a cache_key")
         r = pathcrf_posterior(match, cache_key, cfg.pathcrf)
-        ev["pathcrf"] = pathcrf_evidence(r["p_home"], r["imputed_frac"], cfg.pathcrf.eps, cfg.pathcrf.conf_alpha)
+        ev["pathcrf"] = pathcrf_evidence(r["p_home"], r["imputed_frac"], cfg.pathcrf.eps, cfg.pathcrf.conf_alpha,
+                                         p_none=r.get("p_none"), none_k=cfg.pathcrf.none_k)
     if cfg.use_teamctrl and team_model is None and cfg.decoder.weights.get("teamctrl", 1.0) > 0:
         raise ValueError(f"cfg.use_teamctrl with teamctrl weight {cfg.decoder.weights.get('teamctrl', 1.0)} > 0 "
                          "needs a team_model")

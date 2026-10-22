@@ -178,7 +178,7 @@ def test_base_for_grid_enables_pathcrf_only_when_weighted():
     mod = _load_script()
     assert mod.base_for_grid(sel.GRID4).use_teamctrl is True and mod.base_for_grid(sel.GRID3).use_teamctrl is False
     assert mod.base_for_grid([c for c in sel.GRID4 if c["w_teamctrl"] == 0]).use_teamctrl is False
-    assert mod.ev_key(sel.GRID4[0]) == ("full", 0.0, sel.GRID4[0]["team_policy"], 0.0) and mod.ev_key(sel.GRID[0]) == ("full", 0.0, "full", 0.0)
+    assert mod.ev_key(sel.GRID4[0]) == ("full", 0.0, sel.GRID4[0]["team_policy"], 0.0, 0.0) and mod.ev_key(sel.GRID[0]) == ("full", 0.0, "full", 0.0, 0.0)
     assert mod.base_for_grid(sel.GRID).use_pathcrf is False
     assert mod.base_for_grid(sel.GRID2).use_pathcrf is True
     assert mod.base_for_grid([{**sel.GRID2[0], "w_pathcrf": 0.0}]).use_pathcrf is False

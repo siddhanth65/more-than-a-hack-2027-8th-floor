@@ -7,6 +7,7 @@ import hashlib
 import os
 import subprocess
 import tempfile
+import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -21,6 +22,7 @@ DEFAULT_PY = r"HOME/mtah-ext\pathcrf-venv\Scripts\python.exe"
 DEFAULT_CACHE = str(Path(__file__).resolve().parents[2] / "runs/cache/pathcrf")
 TIMEOUT_S = 30 * 60
 MIN_OK_RATIO = 0.5
+_WARNED_NO_PNONE = False
 
 
 @dataclass
@@ -31,6 +33,7 @@ class PathCRFParams:
     cache_dir: str = DEFAULT_CACHE
     eps: float = 1e-3
     conf_alpha: float = 1.0      # confidence = 1 - conf_alpha * imputed_frac (imputed nodes are the main damage)
+    none_k: float = 0.0          # confidence *= (1 - p_none) ** none_k (out-of-pitch mass = ball likely dead); 0 = off
     threads: int = 4
     # repo, python, cache_dir, threads are runtime settings: never serialised (see PipelineConfig.to_dict)
 
@@ -87,7 +90,17 @@ def pathcrf_posterior(match, cache_key, params):
                         and str(z["input_sha"]) == meta["input_sha"] and str(z["wrapper_sha"]) == meta["wrapper_sha"]
                         and int(z["ckpt"]) == params.ckpt and int(z["threads"]) == params.threads
                         and len(z["p_home"]) == F):
-                    return {k: z[k] for k in ("p_home", "p_none", "imputed_frac")}
+                    r = {k: z[k] for k in ("p_home", "imputed_frac")}
+                    if "p_none" in z.files:
+                        r["p_none"] = z["p_none"]
+                    else:   # cache written without p_none: keep it valid, treat the out-of-pitch mass as 0
+                        global _WARNED_NO_PNONE
+                        if not _WARNED_NO_PNONE:
+                            warnings.warn(f"PathCRF cache {cache.name} has no p_none: treating p_none as 0 "
+                                          "(none_k has no effect on such entries)", stacklevel=2)
+                            _WARNED_NO_PNONE = True
+                        r["p_none"] = np.zeros(F, np.float32)
+                    return r
         except (OSError, ValueError):
             pass
     res = {k: np.full(F, np.nan, np.float32) for k in ("p_home", "p_none", "imputed_frac")}
@@ -109,12 +122,17 @@ def pathcrf_posterior(match, cache_key, params):
     return res
 
 
-def pathcrf_evidence(p_home, imputed_frac, eps=1e-3, conf_alpha=1.0):
+def pathcrf_evidence(p_home, imputed_frac, eps=1e-3, conf_alpha=1.0, p_none=None, none_k=0.0):
     """(F,3) float32: H = c*log(p+eps), A = c*log(1-p+eps), D = NaN, c = clip(1 - conf_alpha*imputed_frac, 0, 1).
 
+    With none_k > 0 and p_none given, c *= (1 - p_none) ** none_k (p_none clipped to [0, 1]; NaN p_none = 0):
+    the more posterior mass on the out-of-pitch nodes, the less the team opinion counts.
     Rows are NaN (no opinion) where p_home is NaN."""
     p = np.asarray(p_home, np.float64)
     c = np.clip(1.0 - conf_alpha * np.asarray(imputed_frac, np.float64), 0.0, 1.0)
+    if none_k > 0 and p_none is not None:
+        pn = np.clip(np.nan_to_num(np.asarray(p_none, np.float64), nan=0.0), 0.0, 1.0)
+        c = c * (1.0 - pn) ** none_k
     out = np.full((len(p), 3), np.nan, np.float32)
     ok = np.isfinite(p)
     out[ok, 0] = c[ok] * np.log(p[ok] + eps)

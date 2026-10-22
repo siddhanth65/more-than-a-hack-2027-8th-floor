@@ -68,8 +68,13 @@ GRID9 = [{**GRID8[0], "sp_dead_bonus": b} for b in (0.0, 2.0, 4.0, 6.0)]
 # grid10: stronger tag-anchored pre-restart prior paired with a lower global dead offset (Plan 2f)
 GRID10 = [{**GRID8[0], "sp_dead_bonus": b, "dead_offset": o}
           for b, o in itertools.product((4.0, 6.0, 8.0), (-2.0, -2.5, -3.0))]
+# grid11 (Plan 2g T-A): a5c's registered cell (GRID8[0]: long_rel, w_dead 4, dead_offset -2.0, w_teamctrl 2 full, merge 0.7,
+# w_pathcrf 1, bonus 0) x the PathCRF out-of-pitch confidence exponent pathcrf_none_k {0, 1, 2}
+# (PathCRFParams.none_k: conf *= (1 - p_none) ** none_k). 3 cells; none_k 0 is a5c itself. none_k is part of evidence_key.
+GRID11 = [{**GRID8[0], "pathcrf_none_k": k} for k in (0.0, 1.0, 2.0)]
 GRIDS = {"grid1": GRID, "grid2": GRID2, "grid3": GRID3, "grid4": GRID4, "grid5": GRID5, "grid6": GRID6, "grid7": GRID7,
-         "grid8": GRID8, "grid9": GRID9, "grid10": GRID10}
+         "grid8": GRID8, "grid9": GRID9, "grid10": GRID10,
+         "grid11": GRID11}
 
 # label-free real-match plausibility: non-blackout D share of the prediction must lie in this band
 REAL_D_SHARE_BAND = (0.10, 0.18)
@@ -90,6 +95,7 @@ def apply_cell(cfg, cell):
         cfg.decoder.weights["pathcrf"] = cell["w_pathcrf"]   # 0 disables the stream in cost_matrix; use_pathcrf is the caller's (base config)
     if "sp_dead_bonus" in cell:
         cfg.tag.sp_dead_bonus = float(cell["sp_dead_bonus"])
+    cfg.pathcrf.none_k = float(cell.get("pathcrf_none_k", cfg.pathcrf.none_k))
     if "w_teamctrl" in cell:
         cfg.decoder.weights["teamctrl"] = cell["w_teamctrl"]   # weight only; use_teamctrl is the caller's (base config)
     if "w_ball" in cell:
@@ -110,11 +116,11 @@ def uses_switch(cell):
 
 
 def evidence_key(cell):
-    """Evidence depends on a cell only through (dead_policy, sp_dead_bonus, team_policy, dead_offset). The switch hazard (when
+    """Evidence depends on a cell only through (dead_policy, sp_dead_bonus, team_policy, dead_offset, pathcrf_none_k). The switch hazard (when
     the base config has use_switch) is the same for every key: the selection's switch model is trained without the
     teamctrl margin features (SWITCH_POLICY), so it does not depend on the dead or team policy."""
     return (cell.get("dead_policy", "full"), float(cell.get("sp_dead_bonus", 0.0)), cell.get("team_policy", "full"),
-            float(cell.get("dead_offset", 0.0)))
+            float(cell.get("dead_offset", 0.0)), float(cell.get("pathcrf_none_k", 0.0)))
 
 
 def train_dead(sims, variant="ctrl_Dfull", policy="full"):
