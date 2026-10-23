@@ -1,0 +1,57 @@
+"""Register candidate a10 = a5c + learned sequence streams (exp-seq AB4_12, merge off) at the calibrated dead cell.
+
+runs/select/a10/: a5c's config.json with dead_offset = the chosen cell's, merge off (merge_theta 1.0) and a
+"seq_stream" block (mtah.evidence.seqstream); a5c's dead/team models and drift reference; the final learned models
+(seq_modelA.joblib: HGB, mtah venv sklearn; seq_modelB.pt: BiGRU, run in the PathCRF venv) and registration.json.
+Usage: python scripts/register_a10.py [--dead-offset X --seq-d-offset Y]  (default: lomo/calib_AB4_12.json "chosen")
+"""
+import argparse, json, shutil, sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+MAIN = Path(r"WORKDIR/possession")
+A5C = MAIN / "runs" / "select" / "a5c"
+EXP = MAIN / "runs" / "select" / "exp_seq"
+OUT = MAIN / "runs" / "select" / "a10"
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--dead-offset", type=float); ap.add_argument("--seq-d-offset", type=float)
+    a = ap.parse_args()
+    cal = json.loads((EXP / "lomo" / "calib_AB4_12.json").read_text())
+    ch = cal["chosen"]
+    if a.dead_offset is not None:
+        ch = next(r for r in cal["table"] if r["dead_offset"] == a.dead_offset and r["seq_d_offset"] == a.seq_d_offset)
+    if ch is None or not ch["admissible"]:
+        raise SystemExit("no admissible calibration cell chosen")
+    fin = json.loads((EXP / "final" / "config.json").read_text())
+    cfg = json.loads((A5C / "config.json").read_text())
+    cfg["dead_offset"] = float(ch["dead_offset"]); cfg["post"]["merge_theta"] = 1.0
+    cfg["seq_stream"] = {"weights": fin["stream_weights"], "lengths": fin["stream_lengths"],
+                         "d_offset": float(ch["seq_d_offset"]), "modelA": "seq_modelA.joblib", "modelB": "seq_modelB.pt",
+                         "step_features": fin["feature_spec"]["step_features"]}
+    OUT.mkdir(parents=True, exist_ok=True)
+    for f in ("dead_model.joblib", "team_model.joblib", "drift_reference.json"):
+        shutil.copy2(A5C / f, OUT / f)
+    shutil.copy2(EXP / "final" / "modelA.joblib", OUT / "seq_modelA.joblib")
+    shutil.copy2(EXP / "final" / "modelB.pt", OUT / "seq_modelB.pt")
+    (OUT / "config.json").write_text(json.dumps(cfg, indent=1))
+    reg = {"candidate": "a10", "base": "a5c (runs/select/a5c: config, dead + team models)",
+           "learned_streams": {"variant": fin["variant"], "weights": fin["stream_weights"],
+                               "feature_spec": fin["feature_spec"], "training": fin["training"],
+                               "modelA": json.loads((EXP / "final" / "modelA.json").read_text()),
+                               "modelB": {k: v for k, v in json.loads((EXP / "final" / "modelB.json").read_text()).items()
+                                          if k != "hist"},
+                               "envs": {"modelA": "mtah venv (sklearn 1.9.1)",
+                                        "modelB": "PathCRF venv via subprocess (mtah/evidence/seq_b_infer.py)"}},
+           "merge": "off (merge_theta 1.0)",
+           "calibration": {"rule": "dead_offset x seq_d_offset on 6-fold LOMO (decoding only) + real-match label-free "
+                                   "bands (visible-dead 0.10-0.18, spells/graded min 2.7-4.3); best mean rank among "
+                                   "admissible cells", "chosen": ch, "lomo_6fold_uncalibrated": fin["lomo_6fold"]}}
+    (OUT / "registration.json").write_text(json.dumps(reg, indent=1, default=float))
+    print(json.dumps({"dead_offset": cfg["dead_offset"], "seq_d_offset": cfg["seq_stream"]["d_offset"]}))
+
+
+if __name__ == "__main__":
+    main()

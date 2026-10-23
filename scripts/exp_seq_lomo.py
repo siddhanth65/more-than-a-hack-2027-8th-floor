@@ -514,6 +514,83 @@ def stage_finalize(variant):
     log(f"final config written: {variant}")
 
 
+CAL_DEAD = (-2.0, -2.5, -3.0, -3.5, -4.0)
+CAL_SEQD = (0.0, -1.0, -2.0)
+
+
+def _shift_d(seq, wts, d_off):
+    out = {}
+    for model in wts:
+        v = seq[model].copy(); v[:, 2] += np.float32(d_off); out[model] = v
+    return out
+
+
+def stage_calib(decoder="AB4_12"):
+    """Dead calibration of `decoder` (merge off): dead_offset x seq_d_offset on the 6 folds' cached evidence and
+    predictions (decoding only) + the real-match label-free drift with the final models (a5c artefacts + the final
+    stream, runs/select/exp_seq/final/real_stream.npy; aggregates only). -> lomo/calib.csv"""
+    from make_candidate import load_selection
+    from mtah.eval.drift import drift_report
+    from mtah.io.metrica_loader import load_tactical
+    from mtah.io.tags import load_tags
+    from mtah.pipeline import predict
+    wts = DECODERS[decoder]; base = base_cfg()
+    cells = [(o, d) for o in CAL_DEAD for d in CAL_SEQD]
+    out = L / f"calib_{decoder}_folds.csv"
+    if out.exists():
+        rows = pd.read_csv(out).to_dict("records")
+    else:
+        rows = []
+        for F in MATCHES:
+            t0 = time.time()
+            for h in [Half(F, F, k, s) for k, s in halves_of(F)]:
+                for o, dd in cells:
+                    cfg = sel.apply_cell(base, {**sel.GRID8[0], "dead_offset": o})
+                    cfg.decoder.lengths = sel.estimate_lengths([], cfg, None)
+                    ev = dict(h.ev); ev["dead"] = dead_evidence(h.p_dead, logit_offset=o)
+                    hh = copy.copy(h); hh.seq = _shift_d(h.seq, wts, dd)
+                    rows += score_rows(h, decode_labels(hh, ev, wts, cfg),
+                                       {"fold": F, "dead_offset": o, "seq_d_offset": dd})
+            log(f"calib fold {F} {time.time() - t0:.0f}s")
+        pd.DataFrame(rows).to_csv(out, index=False)
+    d = pd.DataFrame(rows)
+    sf = d.pivot_table(index=["dead_offset", "seq_d_offset"], columns="variant", values="spell_f1", aggfunc="mean")
+    oth = d[d.variant == "ctrl_Dfull"].groupby(["dead_offset", "seq_d_offset"])[["macro_f1", "n_pred"]].mean()
+    t = sf.join(oth).reset_index()
+    # ---- real match: label-free drift per cell -------------------------------------------------------------------
+    data = os.environ.get("MTAH_DATA_DIR", r"HOME/mtah-data")
+    cfg0, dead, lengths, team, _, _, _ = load_selection(MAIN / "runs" / "select" / "a5c", with_seq=True)
+    cfg0.pathcrf.cache_dir = str(MAIN / "runs" / "cache" / "pathcrf"); cfg0.post.merge_theta = 1.0
+    m = load_tactical(data); tags = load_tags(data)
+    ev0 = compute_evidence(m, tags, cfg0, dead, cache_key="real_tactical", team_model=team)
+    p_dead = dead.predict_proba(dead_table(m, tags, dead.policy))
+    assert np.array_equal(dead_evidence(p_dead, logit_offset=cfg0.dead_offset), ev0["dead"])
+    arr = np.load(FINAL / "real_stream.npy"); fc = json.loads((FINAL / "config.json").read_text())
+    real_seq = {k[len("seq"):]: arr[i] for i, k in enumerate(fc["stream_weights"])}
+    strong = compute_strong(m, cfg0); mask = blackout_mask_from_match(m)
+    real = []
+    for o, dd in cells:
+        cfg = copy.deepcopy(cfg0); cfg.dead_offset = o
+        ev = dict(ev0); ev["dead"] = dead_evidence(p_dead, logit_offset=o)
+        for model, w in wts.items():
+            v = real_seq[model].copy(); v[:, 2] += np.float32(dd)
+            ev[f"seq{model}"] = v; cfg.decoder.weights[f"seq{model}"] = float(w); cfg.decoder.lengths[f"seq{model}"] = 1.0
+        lab = predict(m, tags, cfg, dead, evidence=ev, strong=strong)
+        r = drift_report(lab, m, tags, mask, code_table=cfg.tag.code_table)
+        real.append({"dead_offset": o, "seq_d_offset": dd, "real_vis_dead": r["non_blackout_D_share"],
+                     "real_spells_per_min": r["spells_per_graded_min"], "real_tag_implied": r["tag_agreement_implied"]})
+    t = t.merge(pd.DataFrame(real), on=["dead_offset", "seq_d_offset"])
+    t["admissible"] = [bool(sel.real_band_checks(v, r)["real_plausible"]) for v, r in
+                       zip(t.real_vis_dead, t.real_spells_per_min)]
+    t = sel.mean_rank(t, list(VARS))
+    t.to_csv(L / f"calib_{decoder}.csv", index=False)
+    pd.set_option("display.width", 250)
+    log("CALIB\n" + t.round(4).to_string(index=False))
+    adm = t[t.admissible]
+    (L / f"calib_{decoder}.json").write_text(json.dumps({"chosen": adm.iloc[0].to_dict() if len(adm) else None,
+                                                         "table": t.to_dict(orient="records")}, indent=1, default=float))
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("stage"); ap.add_argument("--folds", type=int, nargs="*", default=MATCHES)
@@ -522,7 +599,7 @@ def main():
     assert SEALED_MATCH not in a.folds
     {"seed": lambda: stage_seed(), "evidence": lambda: stage_evidence(a.folds), "feat": stage_feat,
      "A": lambda: stage_A(a.folds), "decode": lambda: stage_decode(a.folds), "summary": stage_summary,
-     "finalA": stage_finalA, "finalize": lambda: stage_finalize(a.variant)}[a.stage]()
+     "finalA": stage_finalA, "finalize": lambda: stage_finalize(a.variant), "calib": stage_calib}[a.stage]()
 
 
 if __name__ == "__main__":

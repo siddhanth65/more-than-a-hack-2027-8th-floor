@@ -34,8 +34,9 @@ if ($CandidateOnly) {
     $Sel = Join-Path $Root "runs\select\$Name"
     $Mod = Join-Path $Root "models\$Name"
     New-Item -ItemType Directory -Force $Sel | Out-Null
-    # config.json, the dead model and every other model artefact the candidate uses (team / merge / switch)
-    $Files = @("config.json", "dead_model.joblib") + @(Get-ChildItem -Path $Mod -Filter "*.joblib" | Where-Object { $_.Name -ne "dead_model.joblib" } | ForEach-Object { $_.Name })
+    # config.json, the dead model and every other model artefact the candidate uses (team / merge / switch, and for
+    # a10 the learned sequence streams: seq_modelA.joblib, seq_modelB.pt - Model B runs in the PathCRF venv below)
+    $Files = @("config.json", "dead_model.joblib") + @(Get-ChildItem -Path $Mod -Include "*.joblib", "*.pt" -Recurse | Where-Object { $_.Name -ne "dead_model.joblib" } | ForEach-Object { $_.Name })
     foreach ($f in $Files) {
         if (-not (Test-Path (Join-Path $Mod $f))) { Write-Host "missing $Mod\$f"; exit 1 }
         Copy-Item -Force (Join-Path $Mod $f) (Join-Path $Sel $f)   # always overwrite with the committed artefact

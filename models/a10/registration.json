@@ -1,0 +1,150 @@
+{
+ "candidate": "a10",
+ "base": "a5c (runs/select/a5c: config, dead + team models)",
+ "learned_streams": {
+  "variant": "AB4_12/off",
+  "weights": {
+   "seqA": 4.0,
+   "seqB": 12.0
+  },
+  "feature_spec": {
+   "module": "scripts/exp_seq_feats.py",
+   "step_frames": 5,
+   "streams": [
+    "ball",
+    "tag",
+    "dead",
+    "pathcrf",
+    "teamctrl"
+   ],
+   "step_features": [
+    "ball_ha",
+    "ball_d",
+    "ball_miss",
+    "tag_ha",
+    "tag_d",
+    "tag_miss",
+    "dead_ha",
+    "dead_d",
+    "dead_miss",
+    "pathcrf_ha",
+    "pathcrf_d",
+    "pathcrf_miss",
+    "teamctrl_ha",
+    "teamctrl_d",
+    "teamctrl_miss",
+    "ball_present",
+    "blackout",
+    "ball_speed",
+    "ball_absx",
+    "ball_absy",
+    "touch_H",
+    "touch_A",
+    "touch_C",
+    "strong_H",
+    "strong_A",
+    "log_since_touch",
+    "log_until_touch",
+    "last_touch_team",
+    "next_touch_team",
+    "pcrf_phome",
+    "pcrf_imputed",
+    "pcrf_miss"
+   ],
+   "windows_steps": [
+    10,
+    25,
+    50
+   ],
+   "A_input": "windowed(X): [X, past mean W, future mean W] for W in 10 25 50 within each half",
+   "B_input": "standardised X (modelB.pt mu/sd), 600-step windows stride 300, centre kept",
+   "team_symmetrised": true,
+   "logp_clip": 0.0001,
+   "upsample": "each frame takes its 5-frame step's value (exp_seq_feats.upsample)"
+  },
+  "training": {
+   "matches": [
+    9001,
+    9002,
+    9003,
+    9004,
+    9005,
+    9006
+   ],
+   "seeds": [
+    100,
+    101
+   ],
+   "evidence": "per match: a5c streams from dead/team models trained on the other five matches (out-of-sample, as fold test caches)"
+  },
+  "modelA": {
+   "max_iter": 150,
+   "fold_best_its": [
+    200,
+    150,
+    150,
+    150,
+    150,
+    150
+   ],
+   "hp": {
+    "learning_rate": 0.08,
+    "max_leaf_nodes": 31,
+    "min_samples_leaf": 200,
+    "l2_regularization": 1.0,
+    "max_bins": 63
+   },
+   "train_stride": 2,
+   "rows": 342332,
+   "n_features": 224,
+   "seconds": 60.6
+  },
+  "modelB": {
+   "epochs": 13,
+   "fold_best_epochs": [
+    10,
+    14,
+    17,
+    11,
+    13,
+    13
+   ],
+   "seconds": 527.3,
+   "arch": "Linear(nf,64)+ReLU -> BiGRU(64, 2 layers) -> cls(3) + boundary(1)"
+  },
+  "envs": {
+   "modelA": "mtah venv (sklearn 1.9.1)",
+   "modelB": "PathCRF venv via subprocess (mtah/evidence/seq_b_infer.py)"
+  }
+ },
+ "merge": "off (merge_theta 1.0)",
+ "calibration": {
+  "rule": "dead_offset x seq_d_offset on 6-fold LOMO (decoding only) + real-match label-free bands (visible-dead 0.10-0.18, spells/graded min 2.7-4.3); best mean rank among admissible cells",
+  "chosen": {
+   "dead_offset": -2.0,
+   "seq_d_offset": -2.0,
+   "ctrl_Dfull": 0.5565532820537651,
+   "ctrl_Dnarrow": 0.5212686261790743,
+   "raw_Dfull": 0.5897109918633598,
+   "raw_Dnarrow": 0.5481843571537952,
+   "macro_f1": 0.8476729713344068,
+   "n_pred": 163.70833333333334,
+   "real_vis_dead": 0.16572855022456964,
+   "real_spells_per_min": 3.5220355413988687,
+   "real_tag_implied": 0.7657114955413424,
+   "admissible": true,
+   "mean_rank": 11.0
+  },
+  "lomo_6fold_uncalibrated": {
+   "ctrl_Dfull": 0.577589010413919,
+   "raw_Dfull": 0.6137348444071905,
+   "ctrl_Dnarrow": 0.5356994905274782,
+   "raw_Dnarrow": 0.5653731008947948,
+   "macro_f1": 0.863077567757382,
+   "n_pred": 160.0,
+   "wins": 6,
+   "losses": 0,
+   "mean_rank": 1.5
+  }
+ }
+}
