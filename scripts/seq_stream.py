@@ -5,7 +5,7 @@ Model A (HGB) runs in this venv (pinned sklearn); Model B (BiGRU) runs in the Pa
 selection's artefacts (scripts/make_candidate.load_selection); PathCRF is read from its cache only.
 Output: .npy (n_streams, F, 3) float32 log-probabilities (d_offset NOT applied), np.save = byte-reproducible.
 
-  python scripts/seq_stream.py --sim game_9001_H1 100 --out x.npy                         (final dir + a5c)
+  python scripts/seq_stream.py --sim game_9001_H1 100 --out x.npy                         (final dir + a13)
   python scripts/seq_stream.py --real <DATA_DIR> --out real.npy --select runs/select/a10  (registered selection)
 """
 import argparse, hashlib, json, os, sys
@@ -54,8 +54,8 @@ def main():
     ap = argparse.ArgumentParser()
     g = ap.add_mutually_exclusive_group(required=True)
     g.add_argument("--sim", nargs=2, metavar=("KEY", "SEED")); g.add_argument("--real", metavar="DATA_DIR")
-    ap.add_argument("--select", default=None, help="selection dir with a seq_stream block (default: a5c + --final)")
-    ap.add_argument("--final", default=str(MAIN / "runs" / "select" / "exp_seq" / "final"))
+    ap.add_argument("--select", default=None, help="selection dir with a seq_stream block (default: a13 + --final)")
+    ap.add_argument("--final", default=str(MAIN / "runs" / "select" / "exp_seq2" / "final"))
     ap.add_argument("--out", required=True)
     a = ap.parse_args()
     from make_candidate import load_selection
@@ -63,7 +63,7 @@ def main():
         cfg, dead, lengths, team, merge, switch, spec = load_selection(a.select, with_seq=True)
         model_dir = Path(a.select)
     else:
-        cfg, dead, lengths, team, merge, switch, _ = load_selection(MAIN / "runs" / "select" / "a5c", with_seq=True)
+        cfg, dead, lengths, team, merge, switch, _ = load_selection(MAIN / "runs" / "select" / "a13", with_seq=True)
         spec, model_dir = spec_from_final(a.final), Path(a.final)
     cfg.pathcrf.cache_dir = str(MAIN / "runs" / "cache" / "pathcrf")
     m, tags, ck = load_match(a.sim, a.real)

@@ -1,4 +1,9 @@
-"""exp-seq T2: 6-fold LOMO of the learned sequence stream(s) as EXTRA decoder evidence on top of a5c.
+"""exp-seq2 (Plan 7 T2, candidate a14): the exp-seq 6-fold LOMO re-run on the corrected (ball-smoothed, rel-touch) build.
+Adapted from exp-seq T2: base decoder = a13's cell (GRID8[0], rel touches; decoder key "a13"), decoders a13 / A4 / B12 /
+AB4_12 (merge ON only for the a13 reference), calibration grid dead_offset {-2,-2.5,-3} x seq_d_offset {-1,-2,-3} with the
+extra label-free real drift (confident-PathCRF agreement, replay-D). Output dir runs/select/exp_seq2 (nothing cached on
+the old build is reused; the PathCRF cache is input-hashed and unchanged). Stage `seed` is the exp-seq prototype's: unused.
+Original docstring of exp-seq T2 follows (a5c = the base decoder):
 
 Folds: 9001-9006 held out in turn (train on the other five, seeds 100 101; 9007 is never loaded). Per fold F:
   * test halves of F: evidence from dead/team models trained on all five train matches (src "fold{F}");
@@ -49,7 +54,7 @@ from mtah.spells.postprocess import postprocess
 
 MAIN = Path(r"WORKDIR/possession")
 SIM = MAIN / "runs" / "sim"
-P = MAIN / "runs" / "select" / "exp_seq"
+P = MAIN / "runs" / "select" / "exp_seq2"   # fresh dir: exp_seq's caches were built on the pre-smoothing sim
 L = P / "lomo"
 FINAL = P / "final"
 MATCHES = [9001, 9002, 9003, 9004, 9005, 9006]
@@ -58,9 +63,10 @@ STREAMS = ("ball", "tag", "dead", "pathcrf", "teamctrl")
 VARS = ("ctrl_Dfull", "raw_Dfull", "ctrl_Dnarrow", "raw_Dnarrow")
 LAB = {"H": 0, "A": 1, "D": 2}
 THETA = 0.7
-DECODERS = {"a5c": {}, "A2": {"A": 2.0}, "A4": {"A": 4.0}, "A8": {"A": 8.0},
-            "B4": {"B": 4.0}, "B8": {"B": 8.0}, "B12": {"B": 12.0}, "B16": {"B": 16.0},
-            "AB4_8": {"A": 4.0, "B": 8.0}, "AB4_12": {"A": 4.0, "B": 12.0}}
+# exp-seq2 (a14): the base decoder is a13's cell (GRID8[0], rel touches); only a10's winning variant (AB4_12, merge off)
+# plus its single-stream ablations are decoded. Merge ON is trained for the base decoder only (the a13 reproduction).
+DECODERS = {"a13": {}, "A4": {"A": 4.0}, "B12": {"B": 12.0}, "AB4_12": {"A": 4.0, "B": 12.0}}
+MERGE_DECODERS = ("a13",)
 HP_A = dict(learning_rate=0.08, max_leaf_nodes=31, min_samples_leaf=200, l2_regularization=1.0, max_bins=63)
 TRAIN_STRIDE = 2
 
@@ -125,7 +131,7 @@ def base_cfg():
     return base
 
 
-def a5c_cfg(base=None):
+def base_decoder_cfg(base=None):
     cfg = sel.apply_cell(base or base_cfg(), sel.GRID8[0])
     cfg.decoder.lengths = sel.estimate_lengths([], cfg, None)   # unit lengths (LENGTHS_MODE "unit")
     return cfg
@@ -193,7 +199,7 @@ def ensure_halves(src, train_ms, ms, base, cfg):
 
 
 def stage_evidence(folds):
-    base = base_cfg(); cfg = a5c_cfg(base)
+    base = base_cfg(); cfg = base_decoder_cfg(base)
     for F in folds:
         train, V, _ = split(F)
         ensure_halves(src_fold(F), train, [F], base, cfg)
@@ -206,7 +212,7 @@ def stage_evidence(folds):
 def stage_seed():
     """Prototype (fold 9001) halves -> lomo layout (+ p_dead, checked against the cached dead evidence); models,
     feature-independent predictions A/B (inner 9006, test 9001) and the model json."""
-    base = base_cfg(); cfg = a5c_cfg(base)
+    base = base_cfg(); cfg = base_decoder_cfg(base)
     md = L / "models"; md.mkdir(parents=True, exist_ok=True)
     for m in MATCHES:
         src_old = "fold9001" if m == 9001 else f"cf{m}"
@@ -399,7 +405,7 @@ def score_rows(h, lab, tags):
 
 
 def stage_decode(folds):
-    base = base_cfg(); cfg = a5c_cfg(base)
+    base = base_cfg(); cfg = base_decoder_cfg(base)
     (L / "merge").mkdir(exist_ok=True)
     for F in folds:
         out = L / f"decode_f{F}.csv"
@@ -411,20 +417,23 @@ def stage_decode(folds):
         test = [Half(F, F, k, s) for k, s in halves_of(F)]
         rows, minfo = [], {}
         for d, wts in DECODERS.items():
-            mp = L / "merge" / f"f{F}_{d}.joblib"
-            if mp.exists():
-                mm = MergeModel.load(mp)
-            else:
-                mm = train_merge_for(val, wts, base); mm.save(mp)
-            minfo[d] = mm.info
+            mm = None
+            if d in MERGE_DECODERS:
+                mp = L / "merge" / f"f{F}_{d}.joblib"
+                if mp.exists():
+                    mm = MergeModel.load(mp)
+                else:
+                    mm = train_merge_for(val, wts, base); mm.save(mp)
+                minfo[d] = mm.info
             for h in test:
                 lab = decode_labels(h, h.ev, wts, cfg)
                 rows += score_rows(h, lab, {"fold": F, "decoder": d, "merge": "off"})
-                lab_m = apply_merge_model(lab, h.s.match, h.ev, h.strong, mm, THETA)
-                rows += score_rows(h, lab_m, {"fold": F, "decoder": d, "merge": "on"})
+                if mm is not None:
+                    lab_m = apply_merge_model(lab, h.s.match, h.ev, h.strong, mm, THETA)
+                    rows += score_rows(h, lab_m, {"fold": F, "decoder": d, "merge": "on"})
             dd = pd.DataFrame(rows); dd = dd[(dd.decoder == d) & (dd.variant == "ctrl_Dfull")]
-            log(f"f{F} {d}: ctrl_Dfull off {dd[dd['merge'] == 'off'].spell_f1.mean():.4f} "
-                f"on {dd[dd['merge'] == 'on'].spell_f1.mean():.4f}  merge {mm.info}")
+            log(f"f{F} {d}: ctrl_Dfull off {dd[dd['merge'] == 'off'].spell_f1.mean():.4f}"
+                + (f" on {dd[dd['merge'] == 'on'].spell_f1.mean():.4f}  merge {mm.info}" if mm is not None else ""))
         (L / f"merge_info_f{F}.json").write_text(json.dumps(minfo, indent=1))
         tmp = out.with_suffix(".tmp.csv"); pd.DataFrame(rows).to_csv(tmp, index=False); os.replace(tmp, out)
         log(f"decode fold {F} done {time.time() - t0:.0f}s")
@@ -444,9 +453,10 @@ def stage_summary():
     ft = fold_table()
     folds = sorted(ft.fold.unique())
     mean = ft.groupby("name")[list(VARS) + ["macro_f1", "macro_f1_raw", "n_pred", "n_gt"]].mean()
-    ref = ft[ft.name == "a5c/on"].set_index("fold")["ctrl_Dfull"]
+    ref = ft[ft.name == "a13/on"].set_index("fold")["ctrl_Dfull"]
     diff = ft.assign(delta=ft.ctrl_Dfull - ft.fold.map(ref))
     mean["wins"] = diff.groupby("name")["delta"].apply(lambda x: int((x >= 0.02).sum()))
+    mean["wins_pos"] = diff.groupby("name")["delta"].apply(lambda x: int((x > 0).sum()))
     mean["losses"] = diff.groupby("name")["delta"].apply(lambda x: int((x <= -0.02).sum()))
     mean["min_delta"] = diff.groupby("name")["delta"].min()
     t = sel.mean_rank(mean.reset_index(), list(VARS))
@@ -499,7 +509,7 @@ def stage_finalize(variant):
     cfg = {"variant": variant, "decoder": d, "stream_weights": {f"seq{k}": v for k, v in wts.items()},
            "stream_lengths": {f"seq{k}": 1.0 for k in wts}, "merge": mg == "on", "merge_theta": THETA if mg == "on" else 1.0,
            "merge_model": "merge_model.joblib" if mg == "on" else None,
-           "base_selection": "runs/select/a5c",
+           "base_selection": "runs/select/a13",
            "models": {k: {"A": "modelA.joblib", "B": "modelB.pt"}[k] for k in wts},
            "feature_spec": {"module": "scripts/exp_seq_feats.py", "step_frames": fx.STEP, "streams": list(fx.STREAMS),
                             "step_features": feat_names, "windows_steps": [10, 25, 50],
@@ -507,15 +517,15 @@ def stage_finalize(variant):
                             "B_input": "standardised X (modelB.pt mu/sd), 600-step windows stride 300, centre kept",
                             "team_symmetrised": True, "logp_clip": 1e-4,
                             "upsample": "each frame takes its 5-frame step's value (exp_seq_feats.upsample)"},
-           "training": {"matches": MATCHES, "seeds": SEEDS, "evidence": "per match: a5c streams from dead/team models "
+           "training": {"matches": MATCHES, "seeds": SEEDS, "evidence": "per match: a13-cell streams from dead/team models "
                         "trained on the other five matches (out-of-sample, as fold test caches)"},
            "lomo_6fold": {k: row[k] for k in list(VARS) + ["macro_f1", "n_pred", "wins", "losses", "mean_rank"]}}
     (FINAL / "config.json").write_text(json.dumps(cfg, indent=1))
     log(f"final config written: {variant}")
 
 
-CAL_DEAD = (-2.0, -2.5, -3.0, -3.5, -4.0)
-CAL_SEQD = (0.0, -1.0, -2.0)
+CAL_DEAD = (-2.0, -2.5, -3.0)
+CAL_SEQD = (-1.0, -2.0, -3.0)
 
 
 def _shift_d(seq, wts, d_off):
@@ -527,7 +537,7 @@ def _shift_d(seq, wts, d_off):
 
 def stage_calib(decoder="AB4_12"):
     """Dead calibration of `decoder` (merge off): dead_offset x seq_d_offset on the 6 folds' cached evidence and
-    predictions (decoding only) + the real-match label-free drift with the final models (a5c artefacts + the final
+    predictions (decoding only) + the real-match label-free drift with the final models (a13 artefacts + the final
     stream, runs/select/exp_seq/final/real_stream.npy; aggregates only). -> lomo/calib.csv"""
     from make_candidate import load_selection
     from mtah.eval.drift import drift_report
@@ -558,10 +568,13 @@ def stage_calib(decoder="AB4_12"):
     oth = d[d.variant == "ctrl_Dfull"].groupby(["dead_offset", "seq_d_offset"])[["macro_f1", "n_pred"]].mean()
     t = sf.join(oth).reset_index()
     # ---- real match: label-free drift per cell -------------------------------------------------------------------
+    from touch_candidates import agreement
+    from touch_common import load_real
     data = os.environ.get("MTAH_DATA_DIR", r"HOME/mtah-data")
-    cfg0, dead, lengths, team, _, _, _ = load_selection(MAIN / "runs" / "select" / "a5c", with_seq=True)
+    cfg0, dead, lengths, team, _, _, _ = load_selection(MAIN / "runs" / "select" / "a13", with_seq=True)
     cfg0.pathcrf.cache_dir = str(MAIN / "runs" / "cache" / "pathcrf"); cfg0.post.merge_theta = 1.0
-    m = load_tactical(data); tags = load_tags(data)
+    m = load_real(); tags = load_tags(data)
+    zc = np.load(MAIN / "runs" / "select" / "exp_robust" / "real_cache.npz", allow_pickle=False)   # p_home, replay cue
     ev0 = compute_evidence(m, tags, cfg0, dead, cache_key="real_tactical", team_model=team)
     p_dead = dead.predict_proba(dead_table(m, tags, dead.policy))
     assert np.array_equal(dead_evidence(p_dead, logit_offset=cfg0.dead_offset), ev0["dead"])
@@ -577,8 +590,11 @@ def stage_calib(decoder="AB4_12"):
             ev[f"seq{model}"] = v; cfg.decoder.weights[f"seq{model}"] = float(w); cfg.decoder.lengths[f"seq{model}"] = 1.0
         lab = predict(m, tags, cfg, dead, evidence=ev, strong=strong)
         r = drift_report(lab, m, tags, mask, code_table=cfg.tag.code_table)
+        ag = agreement(lab, m, zc)
         real.append({"dead_offset": o, "seq_d_offset": dd, "real_vis_dead": r["non_blackout_D_share"],
-                     "real_spells_per_min": r["spells_per_graded_min"], "real_tag_implied": r["tag_agreement_implied"]})
+                     "real_spells_per_min": r["spells_per_graded_min"], "real_tag_implied": r["tag_agreement_implied"],
+                     "real_pred_D": r["pred_D_share"], "real_pathcrf_agree": ag["pathcrf_confident_HA_agree"],
+                     "real_replay_D": ag["D_share_when_replay_cue"], "real_spells_per_HA_min": r["spells_per_HA_min"]})
     t = t.merge(pd.DataFrame(real), on=["dead_offset", "seq_d_offset"])
     t["admissible"] = [bool(sel.real_band_checks(v, r)["real_plausible"]) for v, r in
                        zip(t.real_vis_dead, t.real_spells_per_min)]
