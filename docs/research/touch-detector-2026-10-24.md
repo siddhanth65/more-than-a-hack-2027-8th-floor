@@ -122,3 +122,42 @@ off-distribution, so this is a feed change without retraining. Not an improvemen
   computed on a smoothed sim ball; the adversarial residual (0.956 without touches) needs its own look.
 - a10 (and the merge model, teamctrl) were fit with abs touches; switching the default requires a re-registration, not a
   silent flip. Default left at `abs`.
+
+## 5. Plan 7 T1: smoothed sim ball, `rel` default, rebuild (label-free; no sealed/public reads)
+
+`CorruptParams.ball_smooth_mode/win/poly` (`mtah/sim/corrupt.py: smooth_ball`): Savitzky-Golay (poly 2) of the sim ball x, y per
+run of visible frames, applied last in `build_half` (after dead-ball realism and blackouts), no random draws. Runs shorter
+than the window are untouched. `scripts/calib_ball_smooth.py` (sims 9001-9006 seed 100, median over the 12 halves, vs the
+real match, graded visible frames; `sigma` = 1.4826 MAD of the velocity change |dv|; the 0.73 reference is the k=3 value):
+
+| window | sigma k=3 | sigma k=8 | speed p50 | speed p90 | sum of rel. errors (k=3, p50, p90) |
+|---|---|---|---|---|---|
+| real | 0.733 | 1.897 | 5.08 | 14.30 | |
+| none | 1.741 | 1.619 | 5.00 | 13.90 | 1.418 |
+| 5 / 7 / 9 | 1.563 / 1.372 / 1.174 | 1.474 / 1.430 / 1.394 | 4.38 / 3.93 / 3.67 | 13.81 / 13.72 / 13.66 | 1.305 / 1.139 / 0.924 |
+| 11 / **13** | 1.035 / **0.913** | 1.371 / 1.347 | 3.51 / 3.42 | 13.60 / 13.55 | 0.770 / **0.626** |
+| 17 / 25 (outside the grid, info) | 0.761 / 0.598 | 1.291 / 1.212 | 3.32 / 3.33 | 13.46 / 13.29 | 0.444 / 0.599 |
+
+Window 13 (grid edge) is the closest of {5..13} and is the new default (dataclass and `configs/corrupt.json`). The k=3 sigma
+is still 1.25x the real one, and the smoothing costs the median speed (5.0 to 3.4 m/s: the dead-ball hover random walk and
+the jitter carried speed; the real median is 5.1) while the k=8 sigma moves away from the real value (1.62 to 1.35 vs 1.90).
+One smoother cannot match all of them; the choice is the stated criterion, not a fit of the touches.
+
+`TouchParams.mode` default is now `rel`; configs saved without a touch mode (a5c, a10 and older) load as `abs`
+(`PipelineConfig.from_dict`), so registered candidates are unchanged.
+
+Rebuild (`build_sim.py`, 5 seeds, plus `--extra-dir runs/dfl_extra --only 9007`): `pos`, `speed`, `team`, `half`, the
+blackout masks and the truth variants are byte-identical to the previous build on all 60 halves of 9001-9006 (PathCRF cache
+hit 0.03 s); the ball changes in all 60; the simulated tags are re-drawn (they read the ball), 99 vs 101 tags in 9001 H1.
+`rel` touches per visible minute on the rebuilt sims: 17.7 (14.6-22.1) vs 19.1 before and 8.0 real: the near-player peaks that
+survive the smoothing keep the sim at 2.2x the real rate.
+
+Adversarial sim-vs-real AUC (`scripts/touch_adversarial_rebuild.py`: sim step features fully recomputed on the rebuilt sims
+with fold models, real side as in section 3 with `rel` touches):
+
+| step features | abs (cached) | rel, old build | rel, new build |
+|---|---|---|---|
+| base AUC | 0.9970 | 0.9648 | **0.9518** |
+| windowed AUC | 0.9955 | 0.9891 | 0.9855 |
+| touch group alone | 0.988 | 0.614 | 0.590 |
+| all except the touch group | 0.956 | 0.956 | 0.945 |
