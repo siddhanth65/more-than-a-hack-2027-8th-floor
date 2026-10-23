@@ -1,0 +1,189 @@
+{
+ "git": "1aed107",
+ "seeds": [
+  100,
+  101
+ ],
+ "grid": "grid8",
+ "grid_size": 3,
+ "selection": "mean rank over 4 variants, tie ctrl_Dfull; highest-ranked real-plausible cell among the top 5 (real non-blackout D share in [0.1, 0.18] and spells per graded minute in [2.7, 4.3]; fallback rank 1)",
+ "scorer_md5": "7718cb8a237452b48b35713984d31c75",
+ "best_cell": {
+  "tau_HA": 30.0,
+  "tau_D": 100.0,
+  "w_dead": 4.0,
+  "w_pathcrf": 1.0,
+  "dead_policy": "long_rel",
+  "sp_dead_bonus": 0.0,
+  "w_teamctrl": 2.0,
+  "w_ball": 1.0,
+  "team_policy": "full",
+  "aba_s": 1.0,
+  "w_switch": 0.0,
+  "snap_mode": "touch",
+  "merge_theta": 0.7,
+  "dead_offset": -2.0
+ },
+ "best_cell_index": 0,
+ "chosen_rank": 1,
+ "best": {
+  "raw_Dfull": 0.5022636739862177,
+  "ctrl_Dfull": 0.477157099762713,
+  "raw_Dnarrow": 0.48478614322206465,
+  "ctrl_Dnarrow": 0.46019191333602
+ },
+ "baselines": {
+  "raw_Dfull": {
+   "b4": 0.0840943009711922,
+   "smooth50": 0.2335789581069402
+  },
+  "ctrl_Dfull": {
+   "b4": 0.05593766947577817,
+   "smooth50": 0.20909390749175638
+  },
+  "raw_Dnarrow": {
+   "b4": 0.08741707421527616,
+   "smooth50": 0.24670962778950858
+  },
+  "ctrl_Dnarrow": {
+   "b4": 0.05738157765622595,
+   "smooth50": 0.2194911374410268
+  }
+ },
+ "seed_sd": {
+  "raw_Dfull": 0.00890655162251052,
+  "ctrl_Dfull": 0.0037038857118058327,
+  "raw_Dnarrow": 0.009522427456058464,
+  "ctrl_Dnarrow": 0.005895442489144221
+ },
+ "baseline_used": {
+  "raw_Dfull": "smooth50",
+  "ctrl_Dfull": "smooth50",
+  "raw_Dnarrow": "smooth50",
+  "ctrl_Dnarrow": "smooth50"
+ },
+ "spec_bar": {
+  "margins_vs_best_baseline": {
+   "raw_Dfull": 0.26868471587927756,
+   "ctrl_Dfull": 0.2680631922709566,
+   "raw_Dnarrow": 0.23807651543255606,
+   "ctrl_Dnarrow": 0.2407007758949932
+  },
+  "required_margin": {
+   "raw_Dfull": 0.05,
+   "ctrl_Dfull": 0.05,
+   "raw_Dnarrow": 0.05,
+   "ctrl_Dnarrow": 0.05
+  },
+  "seed_sd": {
+   "raw_Dfull": 0.00890655162251052,
+   "ctrl_Dfull": 0.0037038857118058327,
+   "raw_Dnarrow": 0.009522427456058464,
+   "ctrl_Dnarrow": 0.005895442489144221
+  },
+  "baseline_used": {
+   "raw_Dfull": "smooth50",
+   "ctrl_Dfull": "smooth50",
+   "raw_Dnarrow": "smooth50",
+   "ctrl_Dnarrow": "smooth50"
+  },
+  "folds_won_ctrl_Dfull": 6,
+  "n_folds": 6,
+  "folds_won_needed": 5,
+  "count_ratios": {
+   "raw_Dfull": 0.6795301173804197,
+   "ctrl_Dfull": 0.8652183368227857,
+   "raw_Dnarrow": 0.678521172985776,
+   "ctrl_Dnarrow": 0.8638374822840365
+  },
+  "ratio_band": [
+   0.8,
+   1.25
+  ],
+  "ratio_rule_variants": [
+   "ctrl_Dfull",
+   "ctrl_Dnarrow"
+  ],
+  "count_ratios_ok": {
+   "ctrl_Dfull": true,
+   "ctrl_Dnarrow": true
+  },
+  "bar_pass": true
+ },
+ "use_pathcrf": true,
+ "pathcrf_threads": 4,
+ "use_teamctrl": true,
+ "team_policy": "full",
+ "real_plausibility": {
+  "0": {
+   "rank": 1,
+   "mean_rank": 1.0,
+   "non_blackout_D_share": 0.17346801087187,
+   "tag_agreement_implied": 0.7388345771185846,
+   "pred_D_share": 0.4021100738399945,
+   "spells_per_graded_min": 2.8705061785127506,
+   "spells_per_HA_min": 4.8010612872319145,
+   "d_share_ok": true,
+   "spell_rate_ok": true,
+   "real_plausible": true
+  },
+  "1": {
+   "rank": 2,
+   "mean_rank": 2.0,
+   "non_blackout_D_share": 0.1534880582917285,
+   "tag_agreement_implied": 0.7293112026395702,
+   "pred_D_share": 0.37908307471499525,
+   "spells_per_graded_min": 2.946045814789402,
+   "spells_per_HA_min": 4.744669850056267,
+   "d_share_ok": true,
+   "spell_rate_ok": true,
+   "real_plausible": true
+  },
+  "2": {
+   "rank": 3,
+   "mean_rank": 3.0,
+   "non_blackout_D_share": 0.1374693987701679,
+   "tag_agreement_implied": 0.7313761591787756,
+   "pred_D_share": 0.3574850337095627,
+   "spells_per_graded_min": 3.031027905600635,
+   "spells_per_HA_min": 4.7174432731120435,
+   "d_share_ok": true,
+   "spell_rate_ok": true,
+   "real_plausible": true
+  }
+ },
+ "chosen_real_plausible": true,
+ "real_bands": {
+  "non_blackout_D_share": [
+   0.1,
+   0.18
+  ],
+  "spells_per_graded_min": [
+   2.7,
+   4.3
+  ]
+ },
+ "use_merge": true,
+ "merge_model": {
+  "n_rows": 2330,
+  "pos_rate": 0.3536480686695279,
+  "held_match": 9006,
+  "n_halves": 4,
+  "n_ref_cells": 3,
+  "label_seconds": 2.33,
+  "total_seconds": 180.79
+ },
+ "use_switch": false,
+ "switch_policy": null,
+ "pathcrf_train_matches": [
+  9001,
+  9002,
+  9003,
+  9004,
+  9005
+ ],
+ "pathcrf_val": 9006,
+ "clean": 9007,
+ "sealed_match": 9007,
+ "lengths_mode": "unit"
+}
