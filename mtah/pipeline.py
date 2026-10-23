@@ -46,7 +46,7 @@ class PipelineConfig:
         if tag.get("code_table") is None:          # configs saved before the per-code table existed
             from mtah.evidence.tag_prior import load_tag_codes
             tag["code_table"] = load_tag_codes()
-        return cls(ball=BallCtrlParams(**d["ball"]), tag=TagPriorParams(**tag), touch=TouchParams(**d["touch"]),
+        return cls(ball=BallCtrlParams(**d["ball"]), tag=TagPriorParams(**tag), touch=TouchParams(**{"mode": "abs", **d["touch"]}),   # saved before the touch mode existed: abs
                    decoder=DecoderParams(**d["decoder"]), post=PostParams(**d["post"]), dead_model_path=d.get("dead_model_path"),
                    dead_policy=d.get("dead_policy", "full"), dead_offset=float(d.get("dead_offset", 0.0)), use_pathcrf=d.get("use_pathcrf", False),
                    pathcrf=PathCRFParams(**{k: v for k, v in d.get("pathcrf", {}).items() if k in ("ckpt", "eps", "conf_alpha", "none_k")}),

@@ -3,7 +3,9 @@ from dataclasses import replace
 import numpy as np
 
 from mtah.io.match import Match, speeds_from_positions
-from mtah.sim.corrupt import CorruptParams, corrupt
+import pytest
+
+from mtah.sim.corrupt import CorruptParams, corrupt, smooth_ball
 
 
 NO_OUT = dict(outage_rate_out_per_player_min=0.0, outage_rate_in_per_player_min=0.0)
@@ -296,3 +298,43 @@ def test_spawned_dead_rng_leaves_the_half_stream_alone():
     a, b = np.random.default_rng([100, 3]), np.random.default_rng([100, 3])
     child = a.spawn(1)[0]; child.random(1000)
     assert a.random() == b.random()
+
+
+def _jittery_ball(F=400, seed=0):
+    rng = np.random.default_rng(seed)
+    b = np.cumsum(np.full((F, 2), 0.1), axis=0) + rng.normal(0, 0.3, (F, 2))
+    b[150:170] = np.nan                         # a gap: two visible runs
+    b[300:305] = np.nan; b[305:312] = b[305:312]  # a 5-frame hole
+    return b.astype(np.float32)
+
+
+def test_smooth_ball_reduces_jitter_keeps_gaps_and_draws_nothing():
+    b = _jittery_ball()
+    p = CorruptParams(ball_smooth_mode="savgol", ball_smooth_win=9)
+    st = np.random.get_state()
+    o = smooth_ball(b, p)
+    assert np.array_equal(np.isnan(o), np.isnan(b))                      # NaN frames untouched
+    assert np.array_equal(smooth_ball(b, p), o, equal_nan=True)                          # deterministic
+    vis = ~np.isnan(b[:, 0])
+    d_in = np.nanstd(np.diff(b[:140], axis=0)); d_out = np.nanstd(np.diff(o[:140], axis=0))
+    assert d_out < 0.5 * d_in
+    assert np.nanmax(np.abs(o - b)) < 1.5                                # smoothing, not a rewrite
+    assert str(np.random.get_state()[1][:3]) == str(st[1][:3])
+
+
+def test_smooth_ball_none_and_short_runs():
+    b = _jittery_ball()
+    assert np.array_equal(smooth_ball(b, CorruptParams(ball_smooth_mode="none")), b, equal_nan=True)
+    s = np.full((30, 2), np.nan, np.float32); s[10:15] = np.random.default_rng(1).normal(0, 1, (5, 2))
+    o = smooth_ball(s, CorruptParams(ball_smooth_mode="savgol", ball_smooth_win=9))
+    assert np.array_equal(o, s, equal_nan=True)                          # run shorter than the window: unchanged
+    with pytest.raises(ValueError):
+        smooth_ball(b, CorruptParams(ball_smooth_mode="savgol", ball_smooth_win=8))
+    with pytest.raises(ValueError):
+        smooth_ball(b, CorruptParams(ball_smooth_mode="boxcar"))
+
+
+def test_smooth_ball_preserves_a_straight_line():
+    t = np.arange(200, dtype=np.float32)
+    b = np.column_stack([0.2 * t, -0.1 * t]).astype(np.float32)
+    np.testing.assert_allclose(smooth_ball(b, CorruptParams(ball_smooth_mode="savgol", ball_smooth_win=11)), b, atol=1e-3)

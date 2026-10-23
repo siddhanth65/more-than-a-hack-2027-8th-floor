@@ -21,16 +21,17 @@ def test_velocity_change_peak():
 
 def test_detect_touch_by_home():
     m = kick_match()
-    t = detect_touches(m, TouchParams())
+    ABS = TouchParams(mode="abs")
+    t = detect_touches(m, ABS)
     assert len(t) == 1 and t[0, 1] == 0 and t[0, 2] == 0 and t[0, 3] > 15
-    strong = strong_touch_frames(t, 0, TouchParams(), m.n_frames)
-    assert strong.sum() == 1 and not strong_touch_frames(t, 1, TouchParams(), m.n_frames).any()
+    strong = strong_touch_frames(t, 0, ABS, m.n_frames)
+    assert strong.sum() == 1 and not strong_touch_frames(t, 1, ABS, m.n_frames).any()
 
 
 def test_continuity_gate_drops_teleport():
     m = kick_match()
     m.ball[52, 0] += 10.0                   # a 10 m jump next to the touch
-    assert len(detect_touches(m, TouchParams())) == 0
+    assert len(detect_touches(m, TouchParams(mode="abs"))) == 0
 
 
 # ---- mode "rel" (feed-adaptive) -------------------------------------------------------------------------------------
@@ -80,16 +81,27 @@ def test_rel_threshold_is_relative_to_the_half_noise_level():
     quiet = pass_match(0.01, seed=4); noisy = pass_match(0.15, seed=5)
     # put the player on the ball for the whole noisy path so the proximity gate cannot hide jitter peaks
     noisy.pos[:, 0, 0] = noisy.ball[:, 0]; noisy.pos[:, 0, 1] = 0.0
-    n_abs = len(detect_touches(noisy, TouchParams(k=3)))
+    n_abs = len(detect_touches(noisy, TouchParams(k=3, mode="abs")))
     n_rel = len(detect_touches(noisy, replace(REL, max_rate_per_min=1e9)))
     assert n_abs > 10 and n_rel < n_abs
     assert len(detect_touches(quiet, REL)) == 2
 
 
-def test_rel_default_is_abs():
-    assert TouchParams().mode == "abs"
+def test_default_is_rel_and_abs_available():
+    assert TouchParams().mode == "rel"
     m = kick_match()
-    assert np.array_equal(detect_touches(m, TouchParams()), detect_touches(m, TouchParams(mode="abs")))
+    assert np.array_equal(detect_touches(m, TouchParams()), detect_touches(m, TouchParams(mode="rel")))
+    assert len(detect_touches(m, TouchParams(mode="abs"))) == 1
+
+
+def test_old_config_without_mode_loads_as_abs():
+    from mtah.pipeline import PipelineConfig
+    d = PipelineConfig().to_dict(); assert d["touch"]["mode"] == "rel"
+    old = {k: v for k, v in d["touch"].items() if k in ("k", "theta_dv", "r_touch_m", "contest_ratio", "theta_hi")}
+    d["touch"] = old
+    assert PipelineConfig.from_dict(d).touch.mode == "abs"
+    d["touch"] = dict(old, mode="rel")
+    assert PipelineConfig.from_dict(d).touch.mode == "rel"
 
 
 def test_rel_rate_cap_and_unknown_mode():

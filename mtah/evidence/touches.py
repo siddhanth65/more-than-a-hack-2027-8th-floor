@@ -11,7 +11,9 @@ DV_SIGMA_REF = 1.75    # robust sigma (m/s) of the k=3 velocity change on the DF
 
 @dataclass
 class TouchParams:
-    """mode "abs" (default, what a5c / a10 were selected with): peaks of the k-frame velocity change above the absolute
+    """mode "rel" (default since the fix-touch branch) | "abs" (what a5c / a10 were selected with; configs saved before the
+    mode field existed load as "abs", see PipelineConfig.from_dict).
+    mode "abs": peaks of the k-frame velocity change above the absolute
     theta_dv (m/s), nearest player within r_touch_m AT the peak frame.
     mode "rel" (feed-adaptive): the velocity change at scale k_rel is turned into a robust z-score against each half's
     own noise level (median / MAD over its visible frames); a touch is a local maximum of max(z, direction score) >=
@@ -24,7 +26,7 @@ class TouchParams:
     r_touch_m: float = 1.5
     contest_ratio: float = 1.3
     theta_hi: float = 6.0
-    mode: str = "abs"
+    mode: str = "rel"
     k_rel: int = 8
     z_thr: float = 2.5
     z_min: float = 1.5          # rate floor: if a half has fewer than min_rate_per_min touches, accept weaker peaks down to z_min

@@ -30,7 +30,7 @@ from mtah.io.tags import load_tags
 CACHE = MAIN / "runs" / "select" / "exp_robust" / "real_cache.npz"
 FPS = 25
 VARIANTS = {
-    "abs": TouchParams(),
+    "abs": TouchParams(mode="abs"),
     "rel": TouchParams(mode="rel"),
     "rel_k5": TouchParams(mode="rel", k_rel=5, gate_frames=5),
     "rel_z2": TouchParams(mode="rel", z_thr=2.0, z_min=1.25),

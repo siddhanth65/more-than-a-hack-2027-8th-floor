@@ -16,7 +16,7 @@ def q(x, ps=(50, 90, 99)):
 
 def per_half(m, lo=None, hi=None):
     """Arrays over graded visible frames of ONE contiguous span (a sim half or the real match)."""
-    fps = m.fps; b = m.ball.astype(np.float64); p = TouchParams()
+    fps = m.fps; b = m.ball.astype(np.float64); p = TouchParams(mode="abs")
     vis = ~np.isnan(b[:, 0]) & m.graded
     v = np.diff(b, axis=0) * fps                        # (F-1, 2) m/s
     ok1 = vis[1:] & vis[:-1]

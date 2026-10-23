@@ -27,5 +27,8 @@
  "dead_fast_p": 0.15,
  "dead_fast_lo": 8.0,
  "dead_fast_hi": 15.0,
- "dead_keep_jitter": true
+ "dead_keep_jitter": true,
+ "ball_smooth_mode": "savgol",
+ "ball_smooth_win": 13,
+ "ball_smooth_poly": 2
 }

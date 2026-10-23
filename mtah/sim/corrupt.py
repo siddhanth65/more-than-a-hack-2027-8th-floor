@@ -3,6 +3,7 @@ from dataclasses import asdict, dataclass
 from dataclasses import replace as dc_replace
 
 import numpy as np
+from scipy.signal import savgol_filter
 
 from mtah.io.match import speeds_from_positions
 from mtah.sim.blackout_sim import runs_of
@@ -49,6 +50,11 @@ class CorruptParams:
     dead_out_keep: float = 0.2      # share of runs left where DFL has the ball (incl. out of pitch)
     dead_jitter_m: float = 0.15
     dead_keep_jitter: bool = True   # kept runs get the jitter too, so no static dead ball remains
+    # ball smoothing (see smooth_ball): the real feed's ball track is smooth (robust sigma of the 8-frame |dv| 0.73 vs the
+    # unsmoothed sim's 1.75), the DFL-derived sim ball + dead-ball jitter is not; applied last, to visible runs only
+    ball_smooth_mode: str = "savgol"   # "none" | "savgol"
+    ball_smooth_win: int = 13          # frames (odd); closest of {5..13} to the real feed (scripts/calib_ball_smooth.py)
+    ball_smooth_poly: int = 2
 
     def to_dict(self):
         return asdict(self)
@@ -100,6 +106,24 @@ def dead_ball_realism(ball, labels, pitch, fps, params, rng):
                 pos = np.where(np.abs(pos) > half, np.sign(pos) * half - (pos - np.sign(pos) * half), pos)
             out[f] = np.clip(pos + rng.normal(0, params.dead_jitter_m, 2), -half, half)
     return out.astype(np.float32)
+
+
+def smooth_ball(ball, params):
+    """Savitzky-Golay smoothing of the ball x, y, per run of consecutive visible (non-NaN) frames; runs shorter than the
+    window are left as they are, NaN frames stay NaN. Draws no random numbers. mode "none" returns a copy."""
+    out = np.asarray(ball, np.float32).copy()
+    mode = getattr(params, "ball_smooth_mode", "none")
+    if mode == "none":
+        return out
+    if mode != "savgol":
+        raise ValueError(f"unknown ball_smooth_mode {mode!r}")
+    w, po = int(params.ball_smooth_win), int(params.ball_smooth_poly)
+    if w % 2 == 0 or w <= po:
+        raise ValueError(f"ball_smooth_win must be odd and > ball_smooth_poly (got {w}, {po})")
+    for s, e in runs_of(~np.isnan(out[:, 0])):
+        if e - s >= w:
+            out[s:e] = savgol_filter(ball[s:e].astype(np.float64), w, po, axis=0, mode="interp").astype(np.float32)
+    return out
 
 
 # Plan 2b dead-ball parameters. build_half replays dead_ball_realism with these on the half's stream (and draws the

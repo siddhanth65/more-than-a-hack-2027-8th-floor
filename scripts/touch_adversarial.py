@@ -145,7 +145,7 @@ def run(tag, params, windowed):
 def main():
     ap = argparse.ArgumentParser(); ap.add_argument("--windowed", action="store_true"); ap.add_argument("--only", default=None)
     a = ap.parse_args()
-    runs = {"cached": None, "abs": TouchParams(), "rel": TouchParams(mode="rel")}
+    runs = {"cached": None, "abs": TouchParams(mode="abs"), "rel": TouchParams(mode="rel")}
     out = {}
     p = OUT / "adversarial.json"
     if p.exists():
