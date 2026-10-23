@@ -92,3 +92,48 @@ Visible-dead is the D share among frames with the ball visible. Spell quantiles 
   - Weight it below DFL, or flag the source, because of the broadcast and replay D convention.
   - It is also the volume a BiGRU/TCN head would need (lever 7).
 - **Metrica Sample Game 3: validation only.** It has the same provider and format, so it is useful for team-flip and convention checks. Do not use it for dead-ball training, since the ball is NaN in stoppages. Its D and team labels are our event-derived ones.
+
+## Plan 6: SkillCorner halves as training-only simulator data (2026-10-23)
+
+### Part 1. Simulator build (done)
+
+`build_sim.py --extra-dir runs/extra --no-dfl --only 9101 ... 9120 --seeds 100 --out runs/sim_extra` (main tree, not `runs/sim`): 40 halves, seed 100 only, 160 files, 508 MB, about 12 min with `OMP_NUM_THREADS=2`.
+
+Aggregates over the 40 halves (the blackout, corruption and tag simulators are the DFL-fitted ones, applied unchanged):
+
+| quantity | value |
+|---|---|
+| masked share (blackout) | .398 |
+| tag coverage in / out of blackouts | .626 / .767 |
+| D share, raw_Dfull = ctrl_Dfull | .441 |
+| D share, raw_Dnarrow = ctrl_Dnarrow | .422 |
+| share of D frames changed by the narrow rule | .043 |
+
+Truth: the `ctrl_Dfull` variant is the training truth for these halves (the selection's `train_dead`, `train_team_ctrl` and `train_switch` already train on `ctrl_Dfull`). The raw and ctrl D shares coincide on these halves (.441); the controlled spell filter changes H/A spell structure, as in the table above.
+
+### Part 2. PathCRF posteriors on compute-server (blocked)
+
+Stopped at the environment check, as instructed: `~/miniconda3/envs/det12/bin/python` has torch 2.5.1 but **no `torch_geometric`**, and the PathCRF checkout imports it (`dataset.py`, `inference.py`, `models/gat_lstm.py`, `models/utils.py`). Nothing was installed or cloned on the server. `~/projects/mtah/` does not exist yet. The server was at load 85 / 128 cores and 722 GB free on `/` when checked.
+
+Everything else is ready and tested:
+
+- `scripts/pathcrf_remote_assemble.py prepare --sim runs/sim_extra --seeds 100 --out runs/pathcrf_remote` was run: 40 `<key>_s100_h0.in.npz` files (722 MB uncompressed), `manifest.json` (input and wrapper sha per half), and `run_all.sh` (xargs, 8 jobs by default, `--threads 4`, skips finished halves).
+- Server steps once `torch_geometric` is available (a pure-Python package; `pip install torch_geometric` into a fresh venv or into det12, with approval): clone `hyunsungkim-ds/pathcrf` at 1b7c6f85a6b78c92e4543fde72ca2b86a933f997 into `~/projects/mtah/pathcrf`; copy `saved/140` (37 MB), `third_party/pathcrf/run_infer.py` (unchanged; its sha must equal the manifest's `wrapper_sha`) and `runs/pathcrf_remote/{in,run_all.sh,manifest.json}`; then `PY=... REPO=~/projects/mtah/pathcrf WRAPPER=.../run_infer.py tmux ... bash run_all.sh 8`.
+- Back on the laptop: copy `out/` next to `manifest.json`, then `scripts/pathcrf_remote_assemble.py assemble --out runs/pathcrf_remote --cache-dir runs/cache/pathcrf`. It re-checks the sims against the manifest, applies the same `MIN_OK_RATIO` rule, and writes the cache through `mtah.evidence.pathcrf.write_cache`, the function `pathcrf_posterior` itself uses now (refactored out; behaviour unchanged). The cache format has `ckpt, threads, input_sha, wrapper_sha, p_home, p_none, imputed_frac`; `n_chunks` and `n_ok` are not part of it and go to `assemble_summary.json`.
+- Tested: `tests/test_pathcrf_remote.py` (assembled cache equals the normal path's cache for faked wrapper outputs, is a cache hit for `pathcrf_posterior`, and stale or short outputs are refused). Real check on `game_9101_H1_s100`: the wrapper run locally took 317 s for 72 451 frames (290 of 290 windows predicted, imputed fraction .296), and the assembled cache matched a second, independent local `pathcrf_posterior` computation exactly (max abs difference 0.0 on `p_home`, `p_none`, `imputed_frac`; same machine, so deterministic at 4 threads).
+- Cross-machine float differences (different torch build and BLAS) are expected to be small; they are acceptable for TRAINING data. The verification against the server run (max abs `p_home` difference on one half) still has to be done after the server run.
+
+Selection as built needs no extra-half PathCRF at all (see Part 3: extras are never decoded), so Part 2 only matters if the extras are later decoded (as test halves, or in the merge table).
+
+### Part 3. Selection support (done)
+
+`scripts/select_lomo.py --train-extra DIR [--extra-weight W]`:
+
+- `DIR` is a `build_sim` output directory; its halves (flagged `extra=True`, at the requested seeds that exist there) join the training set of every fold at the cell's `extra_weight` (cells without one use `--extra-weight`, default 1.0; 0 removes them, so an `extra_weight` 0 cell is the DFL-only control and is the unchanged a5c computation).
+- Weights: dead, team-control and switch models take `sample_weight` (all three support it; no subsampling needed). The merge model has no row weights; its inner split trains the stream models on the extras (weighted) and then decodes only the held DFL match, so the merge table is DFL rows.
+- Cells are grouped by `extra_weight`: each group trains its own dead/team/switch/merge models per fold, and its own set for the plausibility step and the registered models.
+- Never in: test folds (`lomo_folds` runs on `--sim` only), the merge-held match (`mtah.select.inner_held_split` takes the last non-extra match), `estimate_lengths`, the drift reference (test halves only), the plausibility decode (the real match only).
+- The fold fingerprint (`fold_*.meta.json`) records the extra set (half count, key hash, default weight); a run is never resumed with a different or missing extra set. `registration.json` records `train_extra` and the chosen cell's `extra_weight`.
+- `GRID13` (`--grid grid13`): a5c's cell (`GRID8[0]`) x `extra_weight` {0, 0.5, 1.0} x `dead_offset` {-2.0, -1.0, 0.0} = 9 cells.
+
+Tests: `tests/test_select_extra.py` (8 tests: grid shape, grouping, weights reach the three trainers and weight 0 drops the extras, extras never in test/decode/held, resume guard, registration record), `tests/test_pathcrf_remote.py`.

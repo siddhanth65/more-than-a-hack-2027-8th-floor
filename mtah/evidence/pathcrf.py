@@ -38,15 +38,15 @@ class PathCRFParams:
     # repo, python, cache_dir, threads are runtime settings: never serialised (see PipelineConfig.to_dict)
 
 
-def _run_half(match, a, b, params, tmp):
-    stem = Path(tmp) / f"h{a}"
-    inp, out = f"{stem}.in.npz", f"{stem}.out.npz"
-    np.savez(inp, pos=match.pos[a:b].astype(np.float32), team=match.team.astype(np.int8),
+def write_half_input(match, a, b, path):
+    """Hand-off file for one graded half (frames a:b): the inputs of run_infer.py."""
+    np.savez(path, pos=match.pos[a:b].astype(np.float32), team=match.team.astype(np.int8),
              fps=np.float32(match.fps), pitch=np.asarray(match.pitch, np.float32))
-    env = dict(os.environ, TQDM_DISABLE="1")
-    subprocess.run([params.python, str(WRAPPER), "--in", inp, "--out", out, "--ckpt", str(params.ckpt),
-                    "--repo", params.repo, "--threads", str(params.threads)], check=True, env=env,
-                   timeout=TIMEOUT_S)
+
+
+def read_half_output(out, a):
+    """Wrapper output npz -> dict(p_home, p_none, imputed_frac); RuntimeError when under MIN_OK_RATIO of the 10 s
+    windows got a prediction (`a` only labels the message)."""
     with np.load(out) as z:
         r = {k: z[k] for k in ("p_home", "p_none", "imputed_frac")}
         n_chunks, n_ok = int(z["n_chunks"]), int(z["n_ok"])
@@ -54,6 +54,33 @@ def _run_half(match, a, b, params, tmp):
         raise RuntimeError(f"PathCRF predicted only {n_ok}/{n_chunks} chunks (ratio {n_ok / n_chunks:.2f}) "
                            f"for the half starting at frame {a}")
     return r
+
+
+def _run_half(match, a, b, params, tmp):
+    stem = Path(tmp) / f"h{a}"
+    inp, out = f"{stem}.in.npz", f"{stem}.out.npz"
+    write_half_input(match, a, b, inp)
+    env = dict(os.environ, TQDM_DISABLE="1")
+    subprocess.run([params.python, str(WRAPPER), "--in", inp, "--out", out, "--ckpt", str(params.ckpt),
+                    "--repo", params.repo, "--threads", str(params.threads)], check=True, env=env,
+                   timeout=TIMEOUT_S)
+    return read_half_output(out, a)
+
+
+def write_cache(cache, params, meta, res):
+    """Atomically write the merged per-match cache file (the format pathcrf_posterior reads back)."""
+    cache = Path(cache)
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmpname = tempfile.mkstemp(dir=cache.parent, suffix=".tmp.npz")
+    os.close(fd)
+    try:
+        np.savez(tmpname, ckpt=np.int32(params.ckpt), threads=np.int32(params.threads),
+                 input_sha=np.array(meta["input_sha"]), wrapper_sha=np.array(meta["wrapper_sha"]), **res)
+        os.replace(tmpname, cache)
+    except BaseException:
+        if os.path.exists(tmpname):
+            os.remove(tmpname)
+        raise
 
 
 def _input_sha(match):
@@ -108,17 +135,7 @@ def pathcrf_posterior(match, cache_key, params):
         for _, a, b in half_runs(match.half):
             for k, v in _run_half(match, a, b, params, tmp).items():
                 res[k][a:b] = v
-    cache.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmpname = tempfile.mkstemp(dir=cache.parent, suffix=".tmp.npz")
-    os.close(fd)
-    try:
-        np.savez(tmpname, ckpt=np.int32(params.ckpt), threads=np.int32(params.threads),
-                 input_sha=np.array(meta["input_sha"]), wrapper_sha=np.array(meta["wrapper_sha"]), **res)
-        os.replace(tmpname, cache)
-    except BaseException:
-        if os.path.exists(tmpname):
-            os.remove(tmpname)
-        raise
+    write_cache(cache, params, meta, res)
     return res
 
 

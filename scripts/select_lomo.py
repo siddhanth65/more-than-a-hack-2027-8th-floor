@@ -9,7 +9,15 @@ Cells with w_switch > 0 or snap_mode "hazard" read the switch hazard (mtah.evide
 on the fold's train halves (select.train_switch, policy select.SWITCH_POLICY = "no_team": no teamctrl margin features,
 so no out-of-fold teamctrl streams are needed); the registered one is written as switch_model.joblib.
 This real-match plausibility step runs for EVERY grid (grid1 included) unless --no-real is given.
-PathCRF threads are pinned to PathCRFParams().threads (4): the posterior cache is keyed on it, no CLI knob."""
+PathCRF threads are pinned to PathCRFParams().threads (4): the posterior cache is keyed on it, no CLI knob.
+
+Training-only extra halves (--train-extra DIR [--extra-weight W]; mtah.sim.dataset.load_extra_halves, built by
+scripts/build_sim.py --extra-dir ... --out DIR): added to EVERY fold's training set at the cell's `extra_weight` (W for
+cells without one; 0 = DFL only) for the dead, team-control and switch models (sample weights; the merge model's
+stream models are trained on them too, through its inner split), and to the training of the plausibility step and the
+registered models. They are never a test fold, never decoded for the merge table (the merge-held match is the last
+DFL match), and never part of the drift reference or the plausibility test sets. Cells are grouped by extra_weight:
+each group trains its own models. The registration records the extra set."""
 import argparse, hashlib, itertools, json, os, subprocess, sys, time
 from pathlib import Path
 
@@ -36,7 +44,9 @@ from mtah.select import (LENGTHS_MODE, REAL_D_SHARE_BAND, REAL_SPELL_RATE_BAND, 
                          train_dead, train_switch, train_team_ctrl, uses_switch)
 from mtah.evidence.switch import SwitchModel
 from mtah.spells.merge import MergeModel
-from mtah.sim.dataset import SEALED_MATCH, VARIANTS, list_sim_keys, load_half_sim, lomo_folds, match_id
+from mtah.select import ExtraSet, cell_extra_weight, extra_weight_groups
+from mtah.sim.dataset import (SEALED_MATCH, VARIANTS, list_sim_keys, load_extra_halves, load_half_sim, lomo_folds,
+                              match_id)
 
 REAL_KEYS = ("non_blackout_D_share", "tag_agreement_implied", "pred_D_share", "spells_per_graded_min",
              "spells_per_HA_min")   # gated: D share + spells_per_graded_min; the rest reported only
@@ -130,27 +140,36 @@ def _drift_summary(rows):
     return ref
 
 
-def out_of_sample_drift_reference(sim_dir, seeds, keys, base, best_cell, lengths_by_fold, dead_by_fold, team_by_fold=None,
-                                  merge_by_fold=None, grid=None, switch_by_fold=None):
-    """Re-decode the best cell on every fold's TEST halves and summarise the drift metrics (fold dead/team/merge/switch
-    models; a resumed fold retrains its merge model from `grid` and its switch model, deterministic HGB)."""
+def _group_cells(grid, ew, extra):
+    """The grid's cells in extra_weight group `ew`."""
+    d = extra.default_weight if extra is not None else 0.0
+    return [c for c in grid if cell_extra_weight(c, d) == ew]
+
+
+def out_of_sample_drift_reference(sim_dir, seeds, keys, base, best_cell, lengths_by_fold, fold_models, grid=None,
+                                  extra=None):
+    """Re-decode the best cell on every fold's TEST halves (never the extras) and summarise the drift metrics (fold
+    dead/team/merge/switch models of the best cell's extra_weight group, `fold_models[held][ew]`; a resumed fold retrains
+    its models from `grid` -- deterministic HGB -- on the fold's train halves plus the extras at that weight)."""
     rows = []
     policy = best_cell.get("dead_policy", "full"); tpol = best_cell.get("team_policy", "full")
-    team_by_fold = team_by_fold or {}; merge_by_fold = merge_by_fold or {}; switch_by_fold = switch_by_fold or {}
+    ew = cell_extra_weight(best_cell, extra.default_weight if extra is not None else 0.0)
     for held, train_keys, test_keys in lomo_folds(keys):
-        train = load_sims(sim_dir, seeds, train_keys); test = load_sims(sim_dir, seeds, test_keys)
-        lengths = lengths_by_fold.get(held) or estimate_lengths(train, base, train_dead)
-        dead = dead_by_fold.get(held, {}).get(policy)
+        base_train = load_sims(sim_dir, seeds, train_keys); test = load_sims(sim_dir, seeds, test_keys)
+        train = base_train + (extra.at(ew) if extra is not None else [])
+        lengths = lengths_by_fold.get(held) or estimate_lengths(base_train, base, train_dead)
+        m = fold_models.get(held, {}).get(ew, {})
+        dead = m.get("dead", {}).get(policy)
         if dead is None:
             dead = train_dead(train, policy=policy)
         cfg = apply_cell(base, best_cell); cfg.decoder.lengths = lengths
-        team = team_by_fold.get(held, {}).get(tpol)
+        team = m.get("team", {}).get(tpol)
         if team is None and cfg.use_teamctrl:   # (also at weight 0: merge features read the stream, as in the folds)
             team = train_team_ctrl(train, policy=tpol, touch_params=base.touch)   # resumed fold: retrain (deterministic HGB)
-        merge = merge_by_fold.get(held)
+        merge = m.get("merge")
         if merge is None and uses_merge(best_cell):
-            merge = train_merge(train, base, grid if grid is not None else [best_cell], lengths)
-        switch = switch_by_fold.get(held)
+            merge = train_merge(train, base, _group_cells(grid, ew, extra) if grid is not None else [best_cell], lengths)
+        switch = m.get("switch")
         if switch is None and base.use_switch and uses_switch(best_cell):
             switch = train_switch_model(train, base)   # resumed fold: retrain (deterministic HGB)
         for s in test:
@@ -193,39 +212,53 @@ def compute_bar(allf, halves, best, best_i):
     return bar, base_rows
 
 
-def real_plausibility(sim_dir, seeds, keys, base, grid, ranked, data_dir, out, top_k=REAL_TOP_K, shared=None):
+def real_plausibility(sim_dir, seeds, keys, base, grid, ranked, data_dir, out, top_k=REAL_TOP_K, shared=None, extra=None):
     """Decode the top-k cells (by mean rank; label-identical duplicates, select.label_duplicate_cells, skipped) on the
     real match; label-free drift metrics per cell.
 
     Dead models (one per needed policy) and lengths come from ALL non-sealed sim halves, as in the sealed/candidate
     path (team-control models likewise, one per needed team_policy, when base.use_teamctrl; the switch model when
     base.use_switch; the merge model, when a top-k cell has merge_theta < 1, from an inner split of all non-sealed
-    matches with the full grid's reference cells).
+    matches with the full grid's reference cells). With an ExtraSet the models of each extra_weight group of the top
+    cells also train on the extras at that weight (one model set per group; the real match is the only thing decoded).
     Plausible = D-share band AND spell-rate band (both recorded); tag_agreement_implied is reported, not gated.
-    If `shared` is a dict it receives {"lengths", "dead", "team", "merge", "switch"} so registration reuses them. Writes
-    summary_real.csv; returns {cell index: {metric: value, "d_share_ok", "spell_rate_ok", "real_plausible", ...}}."""
+    If `shared` is a dict it receives {"lengths", "by_ew": {extra_weight: {"dead", "team", "merge", "switch"}}} so
+    registration reuses them. Writes summary_real.csv; returns {cell index: {metric: value, "d_share_ok",
+    "spell_rate_ok", "real_plausible", ...}}."""
     dup = sel.label_duplicate_cells(grid)   # label-identical repeats (w_teamctrl 0 across team_policy): one real slot each
     top = [int(c) for c in ranked["cell"] if int(c) not in dup][:top_k]
-    train = load_sims(sim_dir, seeds, keys)
-    lengths = estimate_lengths(train, base, train_dead)
-    cfgs = policy_cfgs(base, [grid[i] for i in top], lengths)
-    dead = {p: train_dead(train, policy=p) for p in sorted({k[0] for k in cfgs})}
-    team = train_team_models(train, base, [k[2] for k in cfgs])
-    merge = train_merge(train, base, grid, lengths) if any(uses_merge(grid[i]) for i in top) else None
-    switch = train_switch_model(train, base) if any(uses_switch(grid[i]) for i in top) else None
-    del train
-    if shared is not None:
-        shared.update(lengths=lengths, dead=dead, team=team, merge=merge, switch=switch)
+    dw = extra.default_weight if extra is not None else 0.0
+    base_train = load_sims(sim_dir, seeds, keys)
+    lengths = estimate_lengths(base_train, base, train_dead)
     m = load_tactical(data_dir); tags = load_tags(data_dir); mask = blackout_mask_from_match(m)
-    ev = {k: compute_evidence(m, tags, cfg, dead[k[0]], cache_key="real_tactical", team_model=team.get(k[2]),
-                              switch_model=switch)
-          for k, cfg in cfgs.items()}
-    strong = compute_strong(m, next(iter(cfgs.values())))
+    by_ew, ev_of, strong = {}, {}, None
+    for ew in sorted({cell_extra_weight(grid[i], dw) for i in top}):
+        tops = [i for i in top if cell_extra_weight(grid[i], dw) == ew]
+        train = base_train + (extra.at(ew) if extra is not None else [])
+        cfgs = policy_cfgs(base, [grid[i] for i in tops], lengths)
+        dead = {p: train_dead(train, policy=p) for p in sorted({k[0] for k in cfgs})}
+        team = train_team_models(train, base, [k[2] for k in cfgs])
+        merge = (train_merge(train, base, _group_cells(grid, ew, extra), lengths)
+                 if any(uses_merge(grid[i]) for i in tops) else None)
+        switch = train_switch_model(train, base) if any(uses_switch(grid[i]) for i in tops) else None
+        del train
+        by_ew[ew] = dict(dead=dead, team=team, merge=merge, switch=switch)
+        ev = {k: compute_evidence(m, tags, cfg, dead[k[0]], cache_key="real_tactical", team_model=team.get(k[2]),
+                                  switch_model=switch)
+              for k, cfg in cfgs.items()}
+        if strong is None:
+            strong = compute_strong(m, next(iter(cfgs.values())))
+        for i in tops:
+            ev_of[i] = ev[ev_key(grid[i])]
+    del base_train
+    if shared is not None:
+        shared.update(lengths=lengths, by_ew=by_ew)
     mr = dict(zip(ranked["cell"].astype(int), ranked["mean_rank"]))
     rows, plaus = [], {}
     for rank, i in enumerate(top, 1):
         cfg = apply_cell(base, grid[i]); cfg.decoder.lengths = lengths
-        lab = predict(m, tags, cfg, None, evidence=ev[ev_key(grid[i])], strong=strong,
+        merge = by_ew[cell_extra_weight(grid[i], dw)]["merge"]
+        lab = predict(m, tags, cfg, None, evidence=ev_of[i], strong=strong,
                       merge_model=merge if uses_merge(grid[i]) else None)
         d = drift_report(lab, m, tags, mask, code_table=cfg.tag.code_table)
         rec = {"rank": rank, "mean_rank": float(mr[i]), **{k: float(d[k]) for k in REAL_KEYS}}
@@ -312,16 +345,17 @@ def load_switch_model(sel_dir, cfg):
 
 
 GRID_PARAM_COLS = ("tau_HA", "tau_D", "w_dead", "aba_s", "w_pathcrf", "dead_policy", "sp_dead_bonus", "w_teamctrl",
-                   "w_ball", "team_policy", "merge_theta", "w_switch", "snap_mode", "dead_offset")
+                   "w_ball", "team_policy", "merge_theta", "w_switch", "snap_mode", "dead_offset", "extra_weight")
 
 
 def grid_hash(grid):
     return hashlib.md5(json.dumps(grid, sort_keys=True).encode()).hexdigest()
 
 
-def run_fingerprint(seeds, grid, grid_name=None):
-    """What a fold table was produced with: seeds and grid must match to resume it; git only warns."""
-    return {"git": git_sha(), "seeds": [int(s) for s in seeds], "grid": grid_name, "grid_hash": grid_hash(grid)}
+def run_fingerprint(seeds, grid, grid_name=None, extra=None):
+    """What a fold table was produced with: seeds, grid and the extra training set must match to resume it; git only warns."""
+    fx = None if extra is None else {k: v for k, v in extra.info().items() if k != "dir"}
+    return {"git": git_sha(), "seeds": [int(s) for s in seeds], "grid": grid_name, "grid_hash": grid_hash(grid), "extra": fx}
 
 
 def _fold_csv_matches_grid(df, grid):
@@ -354,16 +388,18 @@ def check_resume(meta, df, grid, fp, out, held=None):
         raise SystemExit(f"refusing to resume {where}: seeds {meta.get('seeds')} != current {fp['seeds']}; use a fresh --out")
     if meta.get("grid_hash") != fp["grid_hash"] or not _fold_csv_matches_grid(df, grid):
         raise SystemExit(f"refusing to resume {where}: fold CSVs were produced with a different grid; use a fresh --out")
+    if meta.get("extra") != fp.get("extra"):
+        raise SystemExit(f"refusing to resume {where}: extra training set {meta.get('extra')} != current {fp.get('extra')}; "
+                         "use a fresh --out")
     if meta.get("git") != fp["git"]:
         print(f"WARNING: resuming {where} produced at git {meta.get('git')} (now {fp['git']})", flush=True)
 
 
-def run_grid(sim_dir, seeds, keys, base, out, grid, real_data_dir=None, grid_name=None, top_k=REAL_TOP_K):
-    fold_tables, lengths_by_fold, dead_by_fold, team_by_fold, merge_by_fold, switch_by_fold = [], {}, {}, {}, {}, {}
-    policies = sorted({c.get("dead_policy", "full") for c in grid})
-    team_policies = sorted({c.get("team_policy", "full") for c in grid})
+def run_grid(sim_dir, seeds, keys, base, out, grid, real_data_dir=None, grid_name=None, top_k=REAL_TOP_K, extra=None):
+    fold_tables, lengths_by_fold, fold_models = [], {}, {}
+    groups = extra_weight_groups(grid, extra)   # {extra_weight: [cell index]}: one model set per group
     resumed_folds = []
-    fp = run_fingerprint(seeds, grid, grid_name)
+    fp = run_fingerprint(seeds, grid, grid_name, extra)
     for held, train_keys, test_keys in lomo_folds(keys):
         fold_csv = out / f"fold_{held}.csv"; halves_csv = out / f"fold_{held}_halves.csv"
         meta_path = out / f"fold_{held}.meta.json"
@@ -374,30 +410,40 @@ def run_grid(sim_dir, seeds, keys, base, out, grid, real_data_dir=None, grid_nam
             lengths_by_fold[held] = json.loads(df["lengths"].iloc[0])
             print(f"fold {held} resumed", flush=True)
             continue
-        train = load_sims(sim_dir, seeds, train_keys); test = load_sims(sim_dir, seeds, test_keys)
-        lengths = estimate_lengths(train, base, train_dead)  # inner split: see estimate_lengths (policy-independent)
-        dead = {p: train_dead(train, policy=p) for p in policies}  # final fold dead models: all train halves, one per policy
-        team = train_team_models(train, base, team_policies)   # fold team-control models (none unless base.use_teamctrl)
-        merge = train_merge(train, base, grid, lengths)        # fold merge model, inner split of train (None: no merge cell)
-        switch = train_switch_model(train, base)               # fold switch model, all train halves (None unless use_switch)
-        lengths_by_fold[held] = lengths; dead_by_fold[held] = dead; team_by_fold[held] = team; merge_by_fold[held] = merge
-        switch_by_fold[held] = switch
-        cfgs = policy_cfgs(base, grid, lengths)
-        test_ev = {k: [compute_evidence(s.match, s.tags, cfg, dead[k[0]], cache_key=f"{s.key}_s{s.seed}",
-                                        team_model=team.get(k[2]), switch_model=switch) for s in test]
-                   for k, cfg in cfgs.items()}  # one evidence set per (dead policy, sp_dead_bonus, team policy); the
-                                                # switch hazard (when present) is the same in every set
-        test_strong = [compute_strong(s.match, next(iter(cfgs.values()))) for s in test]  # touches do not depend on the grid
-        rows, halves = [], []
-        for i, cell in enumerate(grid):
-            cfg = apply_cell(base, cell); cfg.decoder.lengths = lengths
-            res, hdf = score_cell(test, test_ev[ev_key(cell)], cfg, VARIANTS, strongs=test_strong,
-                                  merge_model=merge if uses_merge(cell) else None)
-            hdf.insert(0, "cell", i); halves.append(hdf)
-            row = {"cell": i, **cell}
-            for v in VARIANTS:
-                row[v] = res[v]["spell_f1"]; row[f"{v}_ratio"] = res[v]["ratio"]
-            rows.append(row)
+        base_train = load_sims(sim_dir, seeds, train_keys); test = load_sims(sim_dir, seeds, test_keys)
+        lengths = estimate_lengths(base_train, base, train_dead)  # DFL halves only (the extras never decide L_k)
+        lengths_by_fold[held] = lengths; fold_models[held] = {}
+        rows_by_cell, halves, test_strong = {}, [], None
+        for ew, idxs in groups.items():
+            sub = [grid[i] for i in idxs]
+            train = base_train + (extra.at(ew) if extra is not None else [])   # the extras: training only, at weight ew
+            policies = sorted({c.get("dead_policy", "full") for c in sub})
+            team_policies = sorted({c.get("team_policy", "full") for c in sub})
+            dead = {p: train_dead(train, policy=p) for p in policies}  # final fold dead models: all train halves, one per policy
+            team = train_team_models(train, base, team_policies)   # fold team-control models (none unless base.use_teamctrl)
+            merge = train_merge(train, base, sub, lengths)         # fold merge model, inner split of train (None: no merge cell)
+            switch = train_switch_model(train, base)               # fold switch model, all train halves (None unless use_switch)
+            fold_models[held][ew] = dict(dead=dead, team=team, merge=merge, switch=switch)
+            del train
+            cfgs = policy_cfgs(base, sub, lengths)
+            test_ev = {k: [compute_evidence(s.match, s.tags, cfg, dead[k[0]], cache_key=f"{s.key}_s{s.seed}",
+                                            team_model=team.get(k[2]), switch_model=switch) for s in test]
+                       for k, cfg in cfgs.items()}  # one evidence set per (dead policy, sp_dead_bonus, team policy); the
+                                                    # switch hazard (when present) is the same in every set
+            if test_strong is None:
+                test_strong = [compute_strong(s.match, next(iter(cfgs.values()))) for s in test]  # touches do not depend on the grid
+            for i in idxs:
+                cell = grid[i]
+                cfg = apply_cell(base, cell); cfg.decoder.lengths = lengths
+                res, hdf = score_cell(test, test_ev[ev_key(cell)], cfg, VARIANTS, strongs=test_strong,
+                                      merge_model=merge if uses_merge(cell) else None)
+                hdf.insert(0, "cell", i); halves.append(hdf)
+                row = {"cell": i, **cell}
+                for v in VARIANTS:
+                    row[v] = res[v]["spell_f1"]; row[f"{v}_ratio"] = res[v]["ratio"]
+                rows_by_cell[i] = row
+        rows = [rows_by_cell[i] for i in range(len(grid))]
+        del base_train
         meta_path.write_text(json.dumps(fp))   # before any fold CSV: a crash then recomputes instead of refusing
         pd.concat(halves).to_csv(halves_csv, index=False)
         brows = []
@@ -411,8 +457,10 @@ def run_grid(sim_dir, seeds, keys, base, out, grid, real_data_dir=None, grid_nam
             rows.append(row)
         pd.DataFrame(brows).to_csv(out / f"fold_{held}_baselines.csv", index=False)
         df = pd.DataFrame(rows); df["held"] = held; df["lengths"] = json.dumps(lengths)
-        if merge is not None:
-            (out / f"fold_{held}_merge.json").write_text(json.dumps(merge.info, indent=1))
+        minfo = {ew: m["merge"].info for ew, m in fold_models[held].items() if m["merge"] is not None}
+        if minfo:   # one merge model per extra_weight group; a single group keeps the plain info layout
+            (out / f"fold_{held}_merge.json").write_text(json.dumps(next(iter(minfo.values())) if len(groups) == 1
+                                                                    else {str(k): v for k, v in minfo.items()}, indent=1))
         df.to_csv(fold_csv, index=False); fold_tables.append(df)
         grid_rows = df[~df["cell"].isin(list(BASELINES))]
         print(f"fold {held} done; best ctrl_Dfull {grid_rows['ctrl_Dfull'].max():.3f}", flush=True)
@@ -424,7 +472,8 @@ def run_grid(sim_dir, seeds, keys, base, out, grid, real_data_dir=None, grid_nam
     print(ranked.head(top_k).to_string())
     plaus = None; shared = {}
     if real_data_dir is not None:
-        plaus = real_plausibility(sim_dir, seeds, keys, base, grid, ranked, real_data_dir, out, top_k=top_k, shared=shared)
+        plaus = real_plausibility(sim_dir, seeds, keys, base, grid, ranked, real_data_dir, out, top_k=top_k, shared=shared,
+                                  extra=extra)
         best_i = choose_plausible(ranked, plaus)
     else:
         best_i = int(ranked.iloc[0]["cell"])
@@ -438,8 +487,7 @@ def run_grid(sim_dir, seeds, keys, base, out, grid, real_data_dir=None, grid_nam
     bar, base_rows = compute_bar(allf, halves, best, str(best_i))
     print(base_rows.to_string())
     print("SPEC BAR", json.dumps(bar, indent=1))
-    ref = out_of_sample_drift_reference(sim_dir, seeds, keys, base, best_cell, lengths_by_fold, dead_by_fold, team_by_fold,
-                                        merge_by_fold, grid, switch_by_fold)
+    ref = out_of_sample_drift_reference(sim_dir, seeds, keys, base, best_cell, lengths_by_fold, fold_models, grid, extra)
     (out / "drift_reference.json").write_text(json.dumps(ref, indent=1))
     cbase = base_for_grid([best_cell])   # PathCRF / teamctrl / switch only if the chosen cell uses them ...
     need_merge = uses_merge(best_cell)
@@ -449,21 +497,24 @@ def run_grid(sim_dir, seeds, keys, base, out, grid, real_data_dir=None, grid_nam
         # cell) so the registered pipeline reproduces the selection-time labels exactly.
         cbase.use_teamctrl = bool(base.use_teamctrl); cbase.use_pathcrf = bool(base.use_pathcrf)
     policy = best_cell.get("dead_policy", "full"); tpol = best_cell.get("team_policy", "full")
+    best_ew = cell_extra_weight(best_cell, extra.default_weight if extra is not None else 0.0)
     need_team = bool(cbase.use_teamctrl); need_switch = bool(cbase.use_switch)
-    if (shared and policy in shared["dead"] and (not need_team or tpol in shared.get("team", {}))
-            and (not need_merge or shared.get("merge") is not None)
-            and (not need_switch or shared.get("switch") is not None)):
-        c_lengths, c_dead = shared["lengths"], shared["dead"][policy]   # already trained by the plausibility step
-        c_team = shared["team"][tpol] if need_team else None
-        c_merge = shared.get("merge") if need_merge else None
-        c_switch = shared.get("switch") if need_switch else None
+    sh = (shared or {}).get("by_ew", {}).get(best_ew)   # models the plausibility step trained for the chosen cell's group
+    if (sh and policy in sh["dead"] and (not need_team or tpol in sh.get("team", {}))
+            and (not need_merge or sh.get("merge") is not None)
+            and (not need_switch or sh.get("switch") is not None)):
+        c_lengths, c_dead = shared["lengths"], sh["dead"][policy]   # already trained by the plausibility step
+        c_team = sh["team"][tpol] if need_team else None
+        c_merge = sh.get("merge") if need_merge else None
+        c_switch = sh.get("switch") if need_switch else None
     else:
-        c_train = load_sims(sim_dir, seeds, keys)
-        c_lengths = estimate_lengths(c_train, cbase, train_dead); c_dead = train_dead(c_train, policy=policy)
+        c_base = load_sims(sim_dir, seeds, keys)
+        c_train = c_base + (extra.at(best_ew) if extra is not None else [])
+        c_lengths = estimate_lengths(c_base, cbase, train_dead); c_dead = train_dead(c_train, policy=policy)
         c_team = train_team_ctrl(c_train, policy=tpol, touch_params=cbase.touch) if need_team else None
-        c_merge = train_merge(c_train, base, grid, c_lengths) if need_merge else None   # base: the grid's streams
+        c_merge = train_merge(c_train, base, _group_cells(grid, best_ew, extra), c_lengths) if need_merge else None   # base: the grid's streams
         c_switch = train_switch_model(c_train, cbase) if need_switch else None
-        del c_train
+        del c_train, c_base
     write_candidate_artifacts(out, cbase, best_cell, c_lengths, c_dead, c_team, c_merge, c_switch)
     selection = "mean rank over 4 variants, tie ctrl_Dfull"
     if plaus is not None:
@@ -485,7 +536,8 @@ def run_grid(sim_dir, seeds, keys, base, out, grid, real_data_dir=None, grid_nam
            "use_merge": need_merge, "merge_model": merge_info,
            "use_switch": need_switch, "switch_policy": cbase.switch_policy if need_switch else None,
            "pathcrf_train_matches": [9001, 9002, 9003, 9004, 9005], "pathcrf_val": 9006, "clean": 9007,
-           "sealed_match": SEALED_MATCH, "lengths_mode": LENGTHS_MODE}
+           "sealed_match": SEALED_MATCH, "lengths_mode": LENGTHS_MODE,
+           "train_extra": None if extra is None else extra.info(), "extra_weight": best_ew if extra is not None else 0.0}
     (out / "registration.json").write_text(json.dumps(reg, indent=1))
     (out / "best.json").write_text(json.dumps({"cell": best_cell, "cell_index": best_i, "chosen_rank": chosen_rank,
                                                "scores": {v: best[v] for v in VARIANTS},
@@ -498,16 +550,18 @@ def run_grid(sim_dir, seeds, keys, base, out, grid, real_data_dir=None, grid_nam
             "chosen_real_plausible": chosen_real_plausible}
 
 
-def run_selection(sim_dir, seeds, out_dir, grid=None, base=None, real_data_dir=None, grid_name=None):
+def run_selection(sim_dir, seeds, out_dir, grid=None, base=None, real_data_dir=None, grid_name=None, extra=None):
     """Importable LOMO selection loop: fold tables, summary, best/registration, out-of-sample drift reference.
 
-    real_data_dir=None skips the real-match plausibility step (the chosen cell is then mean-rank 1)."""
+    real_data_dir=None skips the real-match plausibility step (the chosen cell is then mean-rank 1).
+    extra: an mtah.select.ExtraSet of training-only halves (see the module docstring)."""
     grid = grid if grid is not None else sel.GRID
     grid_name = grid_name or next((n for n, g in sel.GRIDS.items() if g is grid), "custom")
     out = Path(out_dir); out.mkdir(parents=True, exist_ok=True)
     keys = [k for k in list_sim_keys(sim_dir) if match_id(k) != SEALED_MATCH]
     base = base if base is not None else base_for_grid(grid)
-    return run_grid(sim_dir, list(seeds), keys, base, out, grid, real_data_dir=real_data_dir, grid_name=grid_name)
+    return run_grid(sim_dir, list(seeds), keys, base, out, grid, real_data_dir=real_data_dir, grid_name=grid_name,
+                    extra=extra)
 
 
 def run_pilot(args, keys, base, grid):
@@ -605,6 +659,11 @@ def main():
     ap.add_argument("--data", default=os.environ.get("MTAH_DATA_DIR"),
                     help="real-match data dir for the plausibility step (default $MTAH_DATA_DIR)")
     ap.add_argument("--no-real", action="store_true", help="skip the real-match plausibility step (choose mean-rank 1)")
+    ap.add_argument("--train-extra", default=None, metavar="DIR",
+                    help="build_sim output dir of training-only extra halves (e.g. runs/sim_extra: SkillCorner); added to every "
+                         "fold's training set at the cell's extra_weight, never to test folds / drift reference / plausibility")
+    ap.add_argument("--extra-weight", type=float, default=1.0, metavar="W",
+                    help="training weight of the extra halves for cells without an extra_weight (default 1.0)")
     ap.add_argument("--best-from", default=None, help="selection dir whose best.json is reused (skips the grid loop)")
     ap.add_argument("--pilot", action="store_true", help="first fold only: print L_k and the 8 corner cells; writes nothing")
     ap.add_argument("--sealed", action="store_true")
@@ -614,8 +673,14 @@ def main():
     grid = sel.GRIDS[args.grid]
     keys = [k for k in list_sim_keys(args.sim) if match_id(k) != SEALED_MATCH]
     if args.pilot:
+        if args.train_extra:
+            print("WARNING: --pilot ignores --train-extra")
         run_pilot(args, keys, base_for_grid(grid), grid)
         return
+    extra = None
+    if args.train_extra:
+        extra = ExtraSet(load_extra_halves(args.train_extra, args.seeds), args.extra_weight, args.train_extra)
+        print("training-only extra set:", json.dumps(extra.info()), flush=True)
     if args.out is None:
         args.out = args.best_from if (args.sealed and args.best_from) else str(ROOT / "runs" / "select" / time.strftime("%Y%m%d-%H%M"))
     out = Path(args.out); out.mkdir(parents=True, exist_ok=True)
@@ -626,7 +691,7 @@ def main():
     else:
         best_cell = run_selection(args.sim, args.seeds, out, grid=grid, base=base_for_grid(grid),
                                   real_data_dir=None if args.no_real else data_dir_or_exit(args.data),
-                                  grid_name=args.grid)["best_cell"]
+                                  grid_name=args.grid, extra=extra)["best_cell"]
     if args.sealed:
         sel_dir = Path(args.best_from or out)
         if not args.best_from:
