@@ -509,7 +509,7 @@ def stage_finalize(variant):
     cfg = {"variant": variant, "decoder": d, "stream_weights": {f"seq{k}": v for k, v in wts.items()},
            "stream_lengths": {f"seq{k}": 1.0 for k in wts}, "merge": mg == "on", "merge_theta": THETA if mg == "on" else 1.0,
            "merge_model": "merge_model.joblib" if mg == "on" else None,
-           "base_selection": "runs/select/a13",
+           "base_selection": "runs/select/a13r",
            "models": {k: {"A": "modelA.joblib", "B": "modelB.pt"}[k] for k in wts},
            "feature_spec": {"module": "scripts/exp_seq_feats.py", "step_frames": fx.STEP, "streams": list(fx.STREAMS),
                             "step_features": feat_names, "windows_steps": [10, 25, 50],
@@ -571,7 +571,7 @@ def stage_calib(decoder="AB4_12"):
     from touch_candidates import agreement
     from touch_common import load_real
     data = os.environ.get("MTAH_DATA_DIR", r"HOME/mtah-data")
-    cfg0, dead, lengths, team, _, _, _ = load_selection(MAIN / "runs" / "select" / "a13", with_seq=True)
+    cfg0, dead, lengths, team, _, _, _ = load_selection(MAIN / "runs" / "select" / "a13r", with_seq=True)
     cfg0.pathcrf.cache_dir = str(MAIN / "runs" / "cache" / "pathcrf"); cfg0.post.merge_theta = 1.0
     m = load_real(); tags = load_tags(data)
     zc = np.load(MAIN / "runs" / "select" / "exp_robust" / "real_cache.npz", allow_pickle=False)   # p_home, replay cue

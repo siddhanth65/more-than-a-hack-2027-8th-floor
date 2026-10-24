@@ -63,9 +63,8 @@ def test_sealed_guard_per_registration(logdir):
 
 def test_public_guard(logdir):
     mod = _load("public_read")
-    mod.check_budget()
-    readlog.append_read("public", {"note": "x"})
-    mod.check_budget()
-    readlog.append_read("public", {"note": "y"})
+    for note in "wxyz":   # budget 5 total: 4 logged + 1 done by hand
+        mod.check_budget()
+        readlog.append_read("public", {"note": note})
     with pytest.raises(SystemExit):
         mod.check_budget()

@@ -63,7 +63,7 @@ def main():
         cfg, dead, lengths, team, merge, switch, spec = load_selection(a.select, with_seq=True)
         model_dir = Path(a.select)
     else:
-        cfg, dead, lengths, team, merge, switch, _ = load_selection(MAIN / "runs" / "select" / "a13", with_seq=True)
+        cfg, dead, lengths, team, merge, switch, _ = load_selection(MAIN / "runs" / "select" / "a13r", with_seq=True)
         spec, model_dir = spec_from_final(a.final), Path(a.final)
     cfg.pathcrf.cache_dir = str(MAIN / "runs" / "cache" / "pathcrf")
     m, tags, ck = load_match(a.sim, a.real)
