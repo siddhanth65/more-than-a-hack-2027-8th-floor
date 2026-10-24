@@ -15,8 +15,8 @@ GT = Path(r"WORKDIR/repo\evaluation\gt\BAR-ATH_possession_gt_public.csv")
 
 def check_budget():
     n_prev = len(readlog.read_log("public"))
-    if n_prev >= 4:   # budget 5 total reads: user (2026-10-22) allows report-only reads that never choose between candidates
-        raise SystemExit(f"look budget: {n_prev} reads already logged (+1 done by hand on 2026-10-20; budget 5 total); refusing")
+    if n_prev >= 5:   # budget 6 total reads: user (2026-10-22) allows report-only reads that never choose between candidates; +1 (2026-10-24) for a14
+        raise SystemExit(f"look budget: {n_prev} reads already logged (+1 done by hand on 2026-10-20; budget 6 total); refusing")
 
 
 def main():
