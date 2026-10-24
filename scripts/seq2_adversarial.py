@@ -13,6 +13,7 @@ import json, os, sys, time
 os.environ["OMP_NUM_THREADS"] = "4"
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__))); sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import numpy as np
+from pathlib import Path
 
 import touch_adversarial as ta
 import mtah.evidence.pathcrf as pcrf
@@ -34,7 +35,7 @@ pcrf._run_half = _no_run
 
 
 def real_steps():
-    cfg, dead, lengths, team, merge, switch, seq = load_selection(MAIN / "runs" / "select" / "a13", with_seq=True)
+    cfg, dead, lengths, team, merge, switch, seq = load_selection(Path(__file__).resolve().parents[1] / "runs" / "select" / "a13r", with_seq=True)
     cfg.pathcrf.cache_dir = str(MAIN / "runs" / "cache" / "pathcrf")
     m = load_real(); tags = load_tags(os.environ.get("MTAH_DATA_DIR", r"HOME/mtah-data"))
     ev = compute_evidence(m, tags, cfg, dead, cache_key="real_tactical", team_model=team)
