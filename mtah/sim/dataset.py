@@ -28,6 +28,8 @@ class SimHalf:
     blackout: np.ndarray
     truth: dict
     events: pd.DataFrame
+    weight: float = 1.0        # training-row weight (selection: extra halves at extra_weight; DFL halves 1.0)
+    extra: bool = False        # a training-only extra half (SkillCorner ...): never a test fold, merge-held or reference half
 
 
 def match_id(key):
@@ -94,3 +96,15 @@ def load_half_sim(d, key, seed):
 
 def list_sim_keys(d):
     return sorted({p.name.split("_s")[0] for p in Path(d).glob("game_*_s*.json")})
+
+
+def load_extra_halves(d, seeds):
+    """Training-only extra halves (a build_sim --out dir holding game_91xx_H*_s<seed>): every key of `d` at the seeds
+    that exist there (at least one seed must), flagged extra=True with weight 1.0. At least one half is required."""
+    out = []
+    for k in list_sim_keys(d):
+        have = [s for s in seeds if (Path(d) / f"{k}_s{s}.json").exists()]
+        out += [dc_replace(load_half_sim(d, k, s), extra=True) for s in have]
+    if not out:
+        raise SystemExit(f"no extra halves in {d} for seeds {list(seeds)}")
+    return out

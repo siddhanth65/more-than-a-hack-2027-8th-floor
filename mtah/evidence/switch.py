@@ -243,13 +243,17 @@ def train_switch(sims, variant="ctrl_Dfull", policy="full", stride=2, touch_para
                  half_s=0.25):
     """SwitchModel on labelled (y >= 0) frames of `sims` (every `stride`-th frame per half). `team_streams`: one
     (F, 3) teamctrl evidence per sim or None; for an honest hazard they must be out-of-sample predictions."""
-    Xs, ys = [], []
+    Xs, ys, ws = [], [], []
     for i, s in enumerate(sims):
+        w = float(getattr(s, "weight", 1.0))   # training-row weight of the half (selection: extra halves)
+        if w <= 0:
+            continue
         ts = None if team_streams is None else team_streams[i]
         y = switch_labels(s.truth[variant], s.match.fps, half_s, s.match.ball_present)
         idx = np.flatnonzero(y >= 0)[::stride]
-        Xs.append(switch_features(s.match, ts, touch_params)[idx]); ys.append(y[idx])
-    return SwitchModel(policy=policy).fit(np.concatenate(Xs), np.concatenate(ys))
+        Xs.append(switch_features(s.match, ts, touch_params)[idx]); ys.append(y[idx]); ws.append(np.full(len(idx), w))
+    sw = None if all(float(getattr(s, "weight", 1.0)) == 1.0 for s in sims) else np.concatenate(ws)
+    return SwitchModel(policy=policy).fit(np.concatenate(Xs), np.concatenate(ys), sample_weight=sw)
 
 
 def switch_evidence(h):

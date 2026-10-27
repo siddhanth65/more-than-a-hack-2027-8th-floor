@@ -72,9 +72,14 @@ GRID10 = [{**GRID8[0], "sp_dead_bonus": b, "dead_offset": o}
 # w_pathcrf 1, bonus 0) x the PathCRF out-of-pitch confidence exponent pathcrf_none_k {0, 1, 2}
 # (PathCRFParams.none_k: conf *= (1 - p_none) ** none_k). 3 cells; none_k 0 is a5c itself. none_k is part of evidence_key.
 GRID11 = [{**GRID8[0], "pathcrf_none_k": k} for k in (0.0, 1.0, 2.0)]
+# grid13 (Plan 6): a5c's registered cell (GRID8[0]) x the weight of the training-only SkillCorner halves
+# (`extra_weight`: 0 = DFL only, the control; scripts/select_lomo.py --train-extra) x the dead offset (SkillCorner's
+# realistic dead share may remove the need for -2.0). 9 cells; (extra_weight 0, dead_offset -2.0) is a5c itself.
+GRID13 = [{**GRID8[0], "extra_weight": w, "dead_offset": o}
+          for w, o in itertools.product((0.0, 0.5, 1.0), (-2.0, -1.0, 0.0))]
 GRIDS = {"grid1": GRID, "grid2": GRID2, "grid3": GRID3, "grid4": GRID4, "grid5": GRID5, "grid6": GRID6, "grid7": GRID7,
          "grid8": GRID8, "grid9": GRID9, "grid10": GRID10,
-         "grid11": GRID11}
+         "grid11": GRID11, "grid13": GRID13}
 
 # label-free real-match plausibility: non-blackout D share of the prediction must lie in this band
 REAL_D_SHARE_BAND = (0.10, 0.18)
@@ -123,21 +128,78 @@ def evidence_key(cell):
             float(cell.get("dead_offset", 0.0)), float(cell.get("pathcrf_none_k", 0.0)))
 
 
+def cell_extra_weight(cell, default=0.0):
+    """Weight of the training-only extra halves for a cell: its `extra_weight`, else `default`."""
+    return float(cell.get("extra_weight", default))
+
+
+class ExtraSet:
+    """Training-only extra halves (SkillCorner ...) for the selection: added to every fold's training set at a per-cell
+    weight (`extra_weight`; `default_weight` for cells without one), never to test folds, the drift reference or the
+    plausibility test sets. Sims are loaded once (extra=True) and re-weighted views are cheap (arrays shared)."""
+
+    def __init__(self, sims, default_weight=1.0, path=None):
+        self.sims = list(sims); self.default_weight = float(default_weight); self.path = None if path is None else str(path)
+
+    def at(self, w):
+        """The extra sims with training weight w (none when w <= 0)."""
+        from dataclasses import replace
+        return [replace(s, weight=float(w), extra=True) for s in self.sims] if w > 0 else []
+
+    def info(self):
+        import hashlib
+        keys = sorted(f"{s.key}_s{s.seed}" for s in self.sims)
+        return {"dir": self.path, "n_halves": len(keys), "keys_sha": hashlib.sha256("|".join(keys).encode()).hexdigest()[:16],
+                "default_weight": self.default_weight}
+
+
+def extra_weight_groups(grid, extra):
+    """{extra_weight: [cell indices]} (sorted by weight). Without an ExtraSet every weight must be 0."""
+    default = extra.default_weight if extra is not None else 0.0
+    groups = {}
+    for i, c in enumerate(grid):
+        groups.setdefault(cell_extra_weight(c, default), []).append(i)
+    if extra is None and any(w > 0 for w in groups):
+        raise SystemExit("grid cells have extra_weight > 0 but no --train-extra was given")
+    return dict(sorted(groups.items()))
+
+
+def sim_weight(s):
+    """Training-row weight of a sim half (1.0 for plain sims)."""
+    return float(getattr(s, "weight", 1.0))
+
+
+def native_sims(sims):
+    """The sims that are not training-only extras (the DFL halves)."""
+    return [s for s in sims if not getattr(s, "extra", False)]
+
+
+def _row_weights(sims, counts):
+    """Per-row weights (one count per sim) or None when every sim has weight 1 (then the fit is the unweighted one)."""
+    w = [sim_weight(s) for s in sims]
+    if all(x == 1.0 for x in w):
+        return None
+    return np.concatenate([np.full(int(n), x) for x, n in zip(w, counts)])
+
+
 def train_dead(sims, variant="ctrl_Dfull", policy="full"):
-    X = np.concatenate([dead_table(s.match, s.tags, policy) for s in sims])   # base or base+long table by policy
+    sims = [s for s in sims if sim_weight(s) > 0]
+    Xs = [dead_table(s.match, s.tags, policy) for s in sims]   # base or base+long table by policy
     y = np.concatenate([(s.truth[variant] == "D").astype(int) for s in sims])
-    return DeadModel(policy=policy).fit(X, y)
+    return DeadModel(policy=policy).fit(np.concatenate(Xs), y, sample_weight=_row_weights(sims, [len(x) for x in Xs]))
 
 
 def train_team_ctrl(sims, variant="ctrl_Dfull", policy="full", stride=5, touch_params=None):
     """TeamCtrlModel on frames whose truth is H or A AND whose ball is visible (every `stride`-th such frame per
     half; consecutive frames are near duplicates). y = 1 for H. The model adds the team-swap mirror itself."""
     Xs, ys = [], []
+    sims = [s for s in sims if sim_weight(s) > 0]
     for s in sims:
         t = s.truth[variant]
         idx = np.flatnonzero(np.isin(t, ("H", "A")) & s.match.ball_present)[::stride]
         Xs.append(team_features(s.match, touch_params)[idx]); ys.append((t[idx] == "H").astype(int))
-    return TeamCtrlModel(policy=policy).fit(np.concatenate(Xs), np.concatenate(ys))
+    return TeamCtrlModel(policy=policy).fit(np.concatenate(Xs), np.concatenate(ys),
+                                            sample_weight=_row_weights(sims, [len(y) for y in ys]))
 
 
 # Switch-hazard feature policy used by the selection. "no_team": trained WITHOUT the teamctrl margin features, so no
@@ -175,6 +237,18 @@ LENGTHS_MODE = "unit"   # "unit": L_k = 1 for every stream (the tau grid absorbs
 EVIDENCE_STREAMS = ("ball", "tag", "dead", "pathcrf")
 
 
+def inner_held_split(train_sims, who, what):
+    """(inner, held) of the honest inner split: the held halves are those of the last NON-extra train match (by match_id),
+    inner is every other train half, training-only extras included (they never are the held match and are never decoded).
+    With < 2 native train matches both fall back to in-sample (warns)."""
+    mids = sorted({match_id(s.key) for s in native_sims(train_sims)})
+    if len(mids) < 2:
+        print(f"WARNING: {who}: <2 train matches, falling back to in-sample {what}")
+        return list(train_sims), native_sims(train_sims)
+    held = [s for s in train_sims if match_id(s.key) == mids[-1] and not getattr(s, "extra", False)]
+    return [s for s in train_sims if not any(s is h for h in held)], held
+
+
 def estimate_lengths(train_sims, cfg, train_fn, mode=None):
     """Correlation lengths L_k per evidence stream.
 
@@ -197,13 +271,7 @@ def estimate_lengths(train_sims, cfg, train_fn, mode=None):
         return {k: 1.0 for k in keys}
     if mode != "residual":
         raise ValueError(f"unknown lengths mode {mode!r}; expected 'unit' or 'residual'")
-    mids = sorted({match_id(s.key) for s in train_sims})
-    if len(mids) < 2:
-        print("WARNING: estimate_lengths: <2 train matches, falling back to in-sample dead model")
-        inner, held = list(train_sims), list(train_sims)
-    else:
-        inner = [s for s in train_sims if match_id(s.key) != mids[-1]]
-        held = [s for s in train_sims if match_id(s.key) == mids[-1]]
+    inner, held = inner_held_split(train_sims, "estimate_lengths", "dead model")
     dead_model = train_fn(inner)
     cfg = copy.deepcopy(cfg); cfg.use_teamctrl = False; cfg.use_switch = False   # no team/switch models here
     acc = {}
@@ -318,13 +386,7 @@ def merge_training_table(train_sims, base, ref_cells, lengths, train_dead_fn=Non
     train_team_fn = train_team_fn or train_team_ctrl
     train_switch_fn = train_switch_fn or train_switch
     t0 = time.time()
-    mids = sorted({match_id(s.key) for s in train_sims})
-    if len(mids) < 2:
-        print("WARNING: merge_training_table: <2 train matches, falling back to in-sample stream models")
-        inner, held = list(train_sims), list(train_sims)
-    else:
-        inner = [s for s in train_sims if match_id(s.key) != mids[-1]]
-        held = [s for s in train_sims if match_id(s.key) == mids[-1]]
+    inner, held = inner_held_split(train_sims, "merge_training_table", "stream models")
     keys = sorted({evidence_key(c) for c in ref_cells})
     dead = {p: train_dead_fn(inner, policy=p) for p in sorted({k[0] for k in keys})}
     team = ({p: train_team_fn(inner, policy=p, touch_params=base.touch) for p in sorted({k[2] for k in keys})}
@@ -352,7 +414,7 @@ def merge_training_table(train_sims, base, ref_cells, lengths, train_dead_fn=Non
             tab["key"] = s.key; tab["seed"] = s.seed; tab["ref_cell"] = ci
             tabs.append(tab[np.isfinite(tab["y"].to_numpy(float))])
     df = pd.concat(tabs, ignore_index=True) if tabs else pd.DataFrame()
-    info = {"held_match": int(mids[-1]) if mids else None, "n_halves": len(held), "n_ref_cells": len(ref_cells),
+    info = {"held_match": int(match_id(held[0].key)) if held else None, "n_halves": len(held), "n_ref_cells": len(ref_cells),
             "n_rows": int(len(df)), "pos_rate": float(df["y"].mean()) if len(df) else float("nan"),
             "label_seconds": round(t_label, 2), "total_seconds": round(time.time() - t0, 2)}
     return df, info
