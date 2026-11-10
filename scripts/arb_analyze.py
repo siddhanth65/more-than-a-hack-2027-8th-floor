@@ -70,11 +70,11 @@ def exp1(a):
     for fam in BASE:
         streams += [(fam, "pathcrf"), (fam, "teamctrl")] + ([(fam, "seqB")] if fam in ("a14", "a16") else [])
     rows = []      # per (unit, mask file): stream -> counts
-    for name in SIM_KEYS + ["real"]:
+    for name in (["real"] if a.only_real else SIM_KEYS + ["real"]):
         match, tags, truth = load_unit(name)
         conf = ac.confident_control(match, rule)
         for cm in ("c0", "c1"):
-            f = out / f"{name}_m{cm}.npz"
+            f = (Path(a.real_out) if (name == "real" and a.real_out) else out) / f"{name}_m{cm}.npz"
             if not f.exists():
                 continue
             z = np.load(f)
@@ -361,6 +361,19 @@ def bootstrap(a):
     Path(a.res).write_text(json.dumps(res, indent=1)); print(json.dumps(res, indent=1))
 
 
+def exp2real(a):
+    """Real-match only version of the Exp 2 table (e.g. on the fixed-PathCRF outputs): mean/sd over mask seeds per half."""
+    import pandas as pd
+    df = pd.DataFrame(exp2_unit(("real", a.out)), columns=["unit", "mask", "cfg", "half", "ref", "stratum", "filtered", "spell_f1", "macro_f1"])
+    rr = df[(df["stratum"] == "all") & (df["filtered"])]
+    tab = rr.groupby(["cfg", "ref", "half"])[["spell_f1", "macro_f1"]].agg(["mean", "std"])
+    res = {f"{c}|{r}|half{h}": {"spell_mean": float(v[("spell_f1", "mean")]), "spell_sd": float(v[("spell_f1", "std")]), "macro_mean": float(v[("macro_f1", "mean")])}
+           for (c, r, h), v in tab.iterrows()}
+    Path(a.res).write_text(json.dumps(res, indent=1)); df.to_csv(Path(a.res).with_suffix(".csv"), index=False)
+    for c in ("a5c", "a14"):
+        print(c, {r: [round(res[f"{c}|{r}|half{h}"]["spell_mean"], 3) for h in (1, 2)] for r in ("rival", "own", "cons", "ball")})
+
+
 def repro(a):
     """Unmasked out-of-fold ctrl_Dfull / raw_Dfull spellF1 per base candidate (24 halves, seeds 100+101) vs the registered LOMO numbers."""
     from mtah.eval.scorer import score
@@ -377,11 +390,12 @@ def repro(a):
 
 
 def main():
-    ap = argparse.ArgumentParser(); ap.add_argument("cmd", choices=["exp1", "exp2", "boot", "repro"])
+    ap = argparse.ArgumentParser(); ap.add_argument("cmd", choices=["exp1", "exp2", "boot", "repro", "exp2real"])
     ap.add_argument("--out", default="runs/arb/out"); ap.add_argument("--res", default=None)
     ap.add_argument("--workers", type=int, default=8); ap.add_argument("--boot", type=int, default=200); ap.add_argument("--eval-s", type=float, default=3.0)
+    ap.add_argument("--real-out", default=None); ap.add_argument("--only-real", action="store_true")
     a = ap.parse_args(); a.res = a.res or f"runs/arb/{a.cmd}.json"
-    {"exp1": exp1, "exp2": exp2, "boot": bootstrap, "repro": repro}[a.cmd](a)
+    {"exp1": exp1, "exp2": exp2, "boot": bootstrap, "repro": repro, "exp2real": exp2real}[a.cmd](a)
 
 
 if __name__ == "__main__":
