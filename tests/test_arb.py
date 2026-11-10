@@ -62,7 +62,7 @@ def test_mask_only_in_visible_and_fraction():
     assert not (mk & ~m.ball_present).any()
     frac = mk.sum() / m.ball_present.sum()
     assert 0.28 <= frac <= 0.36
-    assert all((e - s) / FPS >= 5.0 for s, e in ac.runs_of(mk) if True)   # no window under 5 s (merges only lengthen)
+    assert all((e - s) / FPS >= 5.0 for s, e in ac.runs_of(mk))   # no window under 5 s (merges only lengthen)
     mk2 = ac.sample_mask(m, seed=3, pool_s=pool, unit_id=1, target=0.3)
     assert (mk == mk2).all()                                              # deterministic
     assert (ac.sample_mask(m, seed=4, pool_s=pool, unit_id=1, target=0.3) != mk).any()
@@ -73,3 +73,13 @@ def test_apply_mask_hides_ball_and_recomputes_speed():
     m2 = ac.apply_mask(m, mk)
     assert np.isnan(m2.ball[100:200]).all() and m2.ball_present[:100].all()
     assert np.isnan(m2.ball_speed[100:200]).all()
+
+
+def test_entry_matched_mask_and_centered():
+    m = make_match(F=40000); m.ball[:, 0] = np.linspace(-50, 50, 40000)   # sweeps across the pitch: entries near/far lines
+    pool = np.array([10.0, 20.0, 40.0])
+    mk = ac.sample_mask(m, 1, pool, 0, entry=True)
+    assert not (mk & ~m.ball_present).any() and 0.25 < mk.mean() < 0.4
+    conf = np.full(40000, -1, np.int8); conf[::50] = 0
+    cm, ctr = ac.centered_mask(m, conf, 0)
+    assert len(ctr) > 3 and cm[ctr].all() and np.diff(ctr).min() >= 45 * 25

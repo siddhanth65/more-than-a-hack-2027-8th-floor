@@ -21,6 +21,7 @@ import numpy as np
 
 CODE = {"H": 0, "A": 1, "D": 2}
 MASK_SEEDS = (0, 1, 2, 3, 4)
+CTR_SEEDS = ("c0", "c1")
 POOL = ROOT / "runs" / "arb" / "blackout_pool.json"
 SIM_SEEDS_MASKED = (100,)
 SIM_SEEDS_UNMASKED = (101,)      # extra unmasked halves: reproduction check of the registered 6-fold numbers
@@ -62,6 +63,8 @@ def unit_id(u):
 
 
 def build_pool():
+    """Mask window lengths = the REAL blackout lengths (runs/real_blackout_lengths.json, >= 10 s runs of the real
+    match); the simulator's fitted distribution is kept alongside for reference."""
     import arb_common as ac
     sim = ROOT / "runs" / "sim"; ms = []
     for m in (9001, 9002, 9003, 9004, 9005, 9006):
@@ -71,11 +74,13 @@ def build_pool():
                 if p.exists():
                     with np.load(p) as z:
                         ms.append(z["blackout"].copy())
-    pool = ac.length_pool_from_blackouts(ms)
+    simpool = ac.length_pool_from_blackouts(ms)
+    real = json.loads((ROOT / "runs" / "real_blackout_lengths.json").read_text())
     POOL.parent.mkdir(parents=True, exist_ok=True)
-    POOL.write_text(json.dumps({"lengths_s": pool.tolist(), "n_halves": len(ms),
-                                "quantiles_s": {str(q): float(np.percentile(pool, q)) for q in (10, 25, 50, 75, 90, 99)}}))
-    print("pool", len(pool), "median", float(np.median(pool)), "n_halves", len(ms))
+    q = lambda x: {str(k): float(np.percentile(x, k)) for k in (10, 25, 50, 75, 90, 99)}
+    POOL.write_text(json.dumps({"lengths_s": real, "sim_lengths_s": simpool.tolist(), "quantiles_real_s": q(real),
+                                "quantiles_sim_s": q(simpool), "n_sim_halves": len(ms)}))
+    print("real pool", len(real), q(real)["50"], "sim pool", len(simpool), q(simpool)["50"])
 
 
 def _patch_pathcrf():
@@ -84,6 +89,34 @@ def _patch_pathcrf():
     def _no_run(*a, **k):
         raise RuntimeError("PathCRF cache miss: refusing to run PathCRF (read-only cache)")
     pcrf._run_half = _no_run
+
+
+def _variants(fam, mdl, m, tags, key, cfg, ev, ev2, strong, seq, streams):
+    """Pre-declared extra configurations (decode only; fixed before any run): learned-weight blends 0.25/0.5/0.75 and
+    seq d_offset shifts for a14/a16; dead-offset shifts for a5c/a13r; a5c without teamctrl; a13r with PathCRF x2."""
+    from mtah.pipeline import compute_evidence, predict
+    import mtah.evidence.seqstream as sq
+    out = {}
+    if seq is not None:
+        for w in (0.25, 0.5, 0.75):
+            sp = copy.deepcopy(seq); sp["weights"] = {k: v * w for k, v in seq["weights"].items()}
+            c3, e3 = sq.add_to_decoder(cfg, ev, {k: streams[k] for k in seq["weights"]}, sp)
+            out[f"lab_{fam}_w{int(w * 100)}"] = _vec(predict(m, tags, c3, mdl["dead"], evidence=e3, strong=strong, merge_model=mdl["merge"]))
+        for sd in ((-2.0, 0.0) if fam == "a14" else (-2.0, -4.0)):
+            sp = copy.deepcopy(seq); sp["d_offset"] = sd
+            c3, e3 = sq.add_to_decoder(cfg, ev, {k: streams[k] for k in seq["weights"]}, sp)
+            out[f"lab_{fam}_sd{int(sd)}"] = _vec(predict(m, tags, c3, mdl["dead"], evidence=e3, strong=strong, merge_model=mdl["merge"]))
+    else:
+        for do in (-1.0, -3.0):
+            c3 = copy.deepcopy(cfg); c3.dead_offset = do
+            e3 = compute_evidence(m, tags, c3, mdl["dead"], cache_key=key, team_model=mdl["team"])
+            out[f"lab_{fam}_do{int(do)}"] = _vec(predict(m, tags, c3, mdl["dead"], evidence=e3, strong=strong, merge_model=mdl["merge"]))
+        c3 = copy.deepcopy(cfg)
+        if fam == "a5c":
+            c3.decoder.weights["teamctrl"] = 0.0; out["lab_a5c_notc"] = _vec(predict(m, tags, c3, mdl["dead"], evidence=ev, strong=strong, merge_model=mdl["merge"]))
+        else:
+            c3.decoder.weights["pathcrf"] = 2.0; out["lab_a13r_pc2"] = _vec(predict(m, tags, c3, mdl["dead"], evidence=ev, strong=strong, merge_model=mdl["merge"]))
+    return out
 
 
 def run_family(fam, mdl, m, tags, key, ball_only):
@@ -108,6 +141,8 @@ def run_family(fam, mdl, m, tags, key, ball_only):
     out = {f"lab_{fam}": _vec(lab)}
     for k, v in streams.items():
         out[f"st_{fam}_{k}"] = np.asarray(v, np.float16)
+    if fam != "a10":
+        out.update(_variants(fam, mdl, m, tags, key, cfg, ev, ev2, strong, seq, streams))
     if ball_only:
         cb = copy.deepcopy(cfg); cb.decoder.weights["pathcrf"] = 0.0; cb.decoder.weights["teamctrl"] = 0.0
         cb.post.merge_theta = 1.0
@@ -120,6 +155,8 @@ def do_task(args):
     import arb_common as ac
     import arb_models as am
     outp = Path(outdir) / f"{unit_name(unit)}_m{'none' if mseed is None else mseed}.npz"
+    if mseed is not None and not isinstance(mseed, str):
+        mseed = int(mseed)
     if outp.exists():
         return str(outp), 0.0
     _patch_pathcrf()
@@ -146,11 +183,17 @@ def do_task(args):
                 s = load_half_sim(ROOT / "runs" / b, key_, seed); cache[b] = (s.match, s.tags)
             return cache[b]
         base = get("a13r")[0]
-    mask = None
+    mask = None; res = {}
     if mseed is not None:
-        pool = np.asarray(json.loads(POOL.read_text())["lengths_s"])
-        mask = ac.sample_mask(base, mseed, pool, unit_id=unit_id(unit))
-    res = {"mask": mask if mask is not None else np.zeros(base.n_frames, bool)}
+        if isinstance(mseed, str) and mseed.startswith("c"):      # Exp1: ball hidden +-10 s around confident frames
+            rule = ac.RuleParams(**json.loads((ROOT / "runs" / "arb" / "rule.json").read_text())["rule"])
+            conf = ac.confident_control(base, rule)
+            mask, centres = ac.centered_mask(base, conf, int(mseed[1:]), unit_id=unit_id(unit))
+            res["centres"] = centres
+        else:
+            pool = np.asarray(json.loads(POOL.read_text())["lengths_s"])
+            mask = ac.sample_mask(base, int(mseed), pool, unit_id=unit_id(unit))
+    res["mask"] = mask if mask is not None else np.zeros(base.n_frames, bool)
     for fam in fams:
         m, tags = get(fam)
         if mask is not None:
@@ -174,7 +217,7 @@ def main():
         build_pool(); return
     tasks = []
     for u in unit_list(a.what):
-        masks = [None] + ([] if (a.unmasked_only or u[2] in SIM_SEEDS_UNMASKED) else list(a.seeds))
+        masks = [None] + ([] if (a.unmasked_only or u[2] in SIM_SEEDS_UNMASKED) else list(a.seeds) + list(CTR_SEEDS))
         tasks += [(u, ms, a.out) for ms in masks]
     tasks.sort(key=lambda t: t[0][0] != "real")   # the big real-match tasks first
     if a.limit:

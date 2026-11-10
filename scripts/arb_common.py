@@ -104,38 +104,74 @@ def length_pool_from_blackouts(blackout_masks, fps=25.0, min_s=5.0):
     return np.asarray(out, float)
 
 
-def sample_mask(match, seed, pool_s, unit_id=0, target=0.30, min_s=5.0, max_tries=20000):
-    """(F,) bool pseudo-blackout mask: windows with lengths drawn (with replacement) from `pool_s`, placed ONLY inside
-    stretches where the ball is naturally visible (and the frame is graded, within one half), hiding about `target` of
-    the visible graded frames. A window drawn longer than the room left in its visible stretch is clipped to it; the
-    window is dropped (new draw) when what is left is shorter than min_s. Deterministic in (seed, unit_id)."""
+REAL_NEAR_LINE = 0.519      # share of real long-blackout entries with the last visible ball within 5 m of a line
+REAL_OUTWARD = 0.797        # ... and moving toward the line (measured on the real match: aggregates only)
+
+
+def _entry_classes(match):
+    """(near, outward) bool per frame from the ball at that frame and 5 frames earlier (NaN -> False)."""
+    from mtah.io.match import distance_to_line
+    d = distance_to_line(np.nan_to_num(match.ball, nan=0.0), match.pitch)
+    d = np.where(match.ball_present, d, np.inf)
+    prev = np.concatenate((np.full(5, np.inf), d[:-5]))
+    return d <= 5.0, d < prev
+
+
+def sample_mask(match, seed, pool_s, unit_id=0, target=0.30, min_s=5.0, max_tries=40000, entry=True,
+                p_near=REAL_NEAR_LINE, p_out=REAL_OUTWARD):
+    """(F,) bool pseudo-blackout mask: windows with lengths drawn (with replacement) from `pool_s` (the REAL blackout
+    lengths), placed ONLY inside stretches where the ball is naturally visible (graded, one half), hiding about `target`
+    of the visible graded frames. With entry=True the start frame is drawn so that the share of starts with the ball
+    within 5 m of a line is p_near and of those moving toward the line p_out (real blackout entries). A window longer
+    than the room left in its visible stretch is clipped; shorter than min_s: redrawn. Deterministic in (seed, unit_id)."""
     rng = np.random.default_rng([int(seed), int(unit_id), 4711])
     fps = match.fps; F = match.n_frames
     free = match.ball_present & match.graded
-    # a window must stay inside one half (graded halves can be adjacent only through ungraded frames: free is False there)
     mask = np.zeros(F, bool)
     total = int(free.sum()); goal = int(round(target * total)); hidden = 0
     if total == 0 or len(pool_s) == 0:
         return mask
     minf = int(round(min_s * fps))
-    # candidate start frames: free frames; we re-check the room at draw time
     cand = np.flatnonzero(free)
+    if entry:
+        near, out = _entry_classes(match)
+        classes = {(n, o): cand[(near[cand] == n) & (out[cand] == o)] for n in (True, False) for o in (True, False)}
+        probs = {(n, o): (p_near if n else 1 - p_near) * (p_out if o else 1 - p_out) for n in (True, False) for o in (True, False)}
+        keys = [k for k in classes if len(classes[k])]
+        pk = np.array([probs[k] for k in keys]); pk = pk / pk.sum()
     tries = 0
     while hidden < goal and tries < max_tries:
         tries += 1
-        s = int(cand[rng.integers(len(cand))])
+        if entry:
+            c = classes[keys[rng.choice(len(keys), p=pk)]]
+            s = int(c[rng.integers(len(c))])
+        else:
+            s = int(cand[rng.integers(len(cand))])
         if mask[s] or not free[s]:
             continue
         L = int(round(float(pool_s[rng.integers(len(pool_s))]) * fps))
-        # room: consecutive free & unmasked frames from s
-        e = s
-        lim = min(F, s + L)
+        e = s; lim = min(F, s + L)
         while e < lim and free[e] and not mask[e]:
             e += 1
         if e - s < minf:
             continue
         mask[s:e] = True; hidden += e - s
     return mask
+
+
+def centered_mask(match, conf, seed, unit_id=0, half_s=10.0, spacing_s=45.0, eval_s=3.0):
+    """Exp1 mask: the ball is hidden for +-half_s around chosen confident-control frames (centres, >= spacing_s apart,
+    drawn at random). Returns (mask, centres). Evaluated frames = confident frames within +-eval_s of a centre, i.e.
+    at least half_s - eval_s of hidden ball on either side (+ whatever the neighbours add)."""
+    rng = np.random.default_rng([int(seed), int(unit_id), 9157])
+    fps = match.fps; F = match.n_frames; h = int(half_s * fps); gap = int(spacing_s * fps)
+    cand = np.flatnonzero(conf >= 0); rng.shuffle(cand)
+    taken = []; mask = np.zeros(F, bool)
+    for c in cand:
+        if all(abs(c - t) >= gap for t in taken):
+            if match.graded[max(0, c - h)] and match.graded[min(F - 1, c + h)] and match.half[max(0, c - h)] == match.half[min(F - 1, c + h)]:
+                taken.append(int(c)); mask[max(0, c - h):min(F, c + h + 1)] = True
+    return mask, np.array(sorted(taken), np.int64)
 
 
 def apply_mask(match, mask):
