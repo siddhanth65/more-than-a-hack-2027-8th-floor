@@ -1,0 +1,209 @@
+{
+ "ball": {
+  "sigma_m": 1.0,
+  "c_flight": 3.0,
+  "c_contest": 3.0,
+  "r_contest_m": 2.0,
+  "tau_switch": 6.0,
+  "tau_flight": 1.0,
+  "w_vel": 0.15,
+  "cand_radius_m": 5.0,
+  "top_k": 4,
+  "alpha_loose": 0.5,
+  "min_seg": 3,
+  "eps": 0.001
+ },
+ "tag": {
+  "p_tag": 0.85,
+  "p_sp_team": 0.8,
+  "sp_team_after_s": 10.0,
+  "code_table": {
+   "BUILD UP": {
+    "sign": 1,
+    "p": 0.77
+   },
+   "PROGRESSION": {
+    "sign": 1,
+    "p": 0.69
+   },
+   "ATTACKING TRANSITION": {
+    "sign": 1,
+    "p": 0.63
+   },
+   "LONG BALL": {
+    "sign": 1,
+    "p": 0.62
+   },
+   "BALL IN FINAL THIRD": {
+    "sign": 1,
+    "p": 0.61
+   },
+   "DEFENDING IN ATTACKING THIRD": {
+    "sign": -1,
+    "p": 0.77
+   },
+   "DEFENDING IN MIDDLE THIRD": {
+    "sign": -1,
+    "p": 0.69
+   },
+   "DEFENSIVE TRANSITION": {
+    "sign": -1,
+    "p": 0.62
+   },
+   "DEFENDING IN DEFENSIVE THIRD": {
+    "sign": -1,
+    "p": 0.52
+   },
+   "BALL IN THE BOX": {
+    "sign": 0,
+    "p": 0.5
+   },
+   "CREATING CHANCES": {
+    "sign": 0,
+    "p": 0.5
+   },
+   "PLAYERS IN THE BOX": {
+    "sign": 0,
+    "p": 0.5
+   },
+   "GOALS": {
+    "sign": 0,
+    "p": 0.5
+   },
+   "SET PIECES": {
+    "sign": 1,
+    "p": 0.8
+   }
+  },
+  "sp_dead_bonus": 0.0,
+  "sp_dead_before_s": 2.0,
+  "sp_dead_after_s": 3.0,
+  "sp_dead_before_by_type": {
+   "goal": 25.0,
+   "corner": 20.0,
+   "free": 10.0,
+   "kick": 15.0,
+   "throw": 6.0
+  },
+  "sp_dead_ramp": true
+ },
+ "touch": {
+  "k": 3,
+  "theta_dv": 5.0,
+  "r_touch_m": 1.5,
+  "contest_ratio": 1.3,
+  "theta_hi": 6.0,
+  "mode": "rel",
+  "k_rel": 8,
+  "z_thr": 2.5,
+  "z_min": 1.5,
+  "min_rate_per_min": 6.0,
+  "dv_floor": 2.0,
+  "sigma_floor": 0.25,
+  "ang_deg": 45.0,
+  "v_dir_min": 2.0,
+  "z_lo": 1.5,
+  "r_rel_m": 1.5,
+  "gate_frames": 8,
+  "guard_frames": 10,
+  "min_gap_s": 0.3,
+  "max_rate_per_min": 24.0
+ },
+ "decoder": {
+  "weights": {
+   "ball": 1.0,
+   "tag": 1.0,
+   "dead": 4.0,
+   "pathcrf": 1.0,
+   "teamctrl": 2.0
+  },
+  "lengths": {
+   "ball": 1.0,
+   "tag": 1.0,
+   "dead": 1.0,
+   "pathcrf": 1.0,
+   "teamctrl": 1.0
+  },
+  "tau_HA": 30.0,
+  "tau_HD": 100.0,
+  "tau_DH": 100.0,
+  "w_switch": 0.0,
+  "tau_floor": 3.0
+ },
+ "post": {
+  "island_s": 0.4,
+  "d_fill_s": 0.0,
+  "aba_s": 1.0,
+  "snap_w": 50,
+  "snap_mode": "touch",
+  "merge_theta": 1.0
+ },
+ "dead_model_path": null,
+ "dead_offset": -3.0,
+ "dead_policy": "long_rel",
+ "use_pathcrf": true,
+ "pathcrf": {
+  "ckpt": 140,
+  "eps": 0.001,
+  "conf_alpha": 1.0,
+  "none_k": 0.0
+ },
+ "use_teamctrl": true,
+ "team_policy": "full",
+ "use_switch": false,
+ "switch_policy": "full",
+ "use_replay": false,
+ "replay_w": 0.0,
+ "lengths": {
+  "ball": 1.0,
+  "tag": 1.0,
+  "dead": 1.0,
+  "pathcrf": 1.0,
+  "teamctrl": 1.0
+ },
+ "seq_stream": {
+  "weights": {
+   "seqB": 12.0
+  },
+  "lengths": {
+   "seqB": 1.0
+  },
+  "d_offset": -3.0,
+  "modelB": "seq_modelB.pt",
+  "step_features": [
+   "ball_ha",
+   "ball_d",
+   "ball_miss",
+   "tag_ha",
+   "tag_d",
+   "tag_miss",
+   "dead_ha",
+   "dead_d",
+   "dead_miss",
+   "pathcrf_ha",
+   "pathcrf_d",
+   "pathcrf_miss",
+   "teamctrl_ha",
+   "teamctrl_d",
+   "teamctrl_miss",
+   "ball_present",
+   "blackout",
+   "ball_speed",
+   "ball_absx",
+   "ball_absy",
+   "touch_H",
+   "touch_A",
+   "touch_C",
+   "strong_H",
+   "strong_A",
+   "log_since_touch",
+   "log_until_touch",
+   "last_touch_team",
+   "next_touch_team",
+   "pcrf_phome",
+   "pcrf_imputed",
+   "pcrf_miss"
+  ],
+  "input_dead_offset": -2.0
+ }
+}

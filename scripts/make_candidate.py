@@ -73,7 +73,12 @@ def candidate_labels(m, tags, cfg, dead, team=None, merge=None, switch=None, cac
     ev = compute_evidence(m, tags, cfg, dead, cache_key=cache_key, team_model=team, switch_model=switch, replay_cue=cue)
     if seq is not None:
         import mtah.evidence.seqstream as sq
-        z = sq.feature_inputs(m, ev, compute_strong(m, cfg), cfg.pathcrf, cache_key)
+        ev_in = ev
+        if seq.get("input_dead_offset") is not None:   # model trained on streams at another dead cell (a16: a13r's -2.0)
+            import copy
+            cfg_in = copy.deepcopy(cfg); cfg_in.dead_offset = float(seq["input_dead_offset"])
+            ev_in = compute_evidence(m, tags, cfg_in, dead, cache_key=cache_key, team_model=team, switch_model=switch, replay_cue=cue)
+        z = sq.feature_inputs(m, ev_in, compute_strong(m, cfg), cfg.pathcrf, cache_key)
         cfg, ev = sq.add_to_decoder(cfg, ev, sq.compute_streams(z, seq, sel_dir), seq)
     return predict(m, tags, cfg, dead, evidence=ev, merge_model=merge)
 
