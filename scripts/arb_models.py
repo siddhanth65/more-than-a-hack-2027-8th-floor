@@ -24,7 +24,7 @@ FOLD_MATCHES = (9001, 9002, 9003, 9004, 9005, 9006)
 
 SPEC = {
     "a5c": dict(build="sim_prev_nosmooth", dead="exp_seq/lomo/models/dead_fold{F}.joblib", team="exp_seq/lomo/models/team_fold{F}.joblib",
-                merge="exp_seq/lomo/merge/f{F}_a5c.joblib", B=None),
+                merge="../arb/models/a5c_merge_f{F}.joblib", B=None),
     "a13r": dict(build="sim", dead="exp_seq2/lomo/models/dead_fold{F}.joblib", team="exp_seq2/lomo/models/team_fold{F}.joblib",
                  merge="exp_seq2/lomo/merge/f{F}_a13.joblib", B=None),
     "a14": dict(build="sim", dead="exp_seq2/lomo/models/dead_fold{F}.joblib", team="exp_seq2/lomo/models/team_fold{F}.joblib",
