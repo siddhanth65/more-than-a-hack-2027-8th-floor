@@ -5,7 +5,7 @@ import json, shutil
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-MAIN = Path(r"WORKDIR/possession")
+MAIN = Path(__file__).resolve().parents[1]
 BASE = MAIN / "runs" / "select" / "a13r"; E3 = MAIN / "runs" / "select" / "exp_seq3"; OUT = ROOT / "runs" / "select" / "a16"
 
 

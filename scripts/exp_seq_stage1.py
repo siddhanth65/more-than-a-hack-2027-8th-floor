@@ -27,7 +27,7 @@ from mtah.pipeline import PipelineConfig, compute_evidence, compute_strong, pred
 from mtah.sim.dataset import SEALED_MATCH, load_half_sim, list_sim_keys, match_id
 from mtah.spells.merge import MergeModel
 
-MAIN = Path(r"WORKDIR/possession")
+MAIN = Path(__file__).resolve().parents[1]
 SIM = MAIN / "runs" / "sim"
 OUT = MAIN / "runs" / "select" / "exp_seq"
 SEEDS = [100, 101]

@@ -1,7 +1,7 @@
 # spellF1 metric analysis: toy experiments (2026-10-23)
 
 Everything here uses synthetic label sequences only. Code (pure functions + toy scripts) lives in the scratchpad:
-`HOME/AppData\Local\Temp\assistant\c--Users-user-CloudDrive-Desktop-mth\1ac2fed6-2d83-45d7-9039-f41c3b0f054a\scratchpad\metric\`
+(scratch directory of the analysis session; not part of the repository)
 (`spellmetric.py` is the module proposal; `toys1.py` covers Q1-Q3, `toys2.py` timing, `toys3.py`/`toys4.py` the decoder sweeps, `synth.py` the posterior model).
 `spellmetric.match_tp` works on spell arrays and matched the official `spell_scores` exactly on 300 random cases (0 mismatches).
 

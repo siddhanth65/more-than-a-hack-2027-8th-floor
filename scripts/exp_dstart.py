@@ -193,7 +193,7 @@ def stage_real(cells):
     from mtah.io.tags import load_tags
     from mtah.pipeline import compute_evidence, compute_strong, predict
     from touch_common import load_real
-    data = os.environ.get("MTAH_DATA_DIR", r"HOME/mtah-data")
+    data = os.environ.get("MTAH_DATA_DIR", os.path.join(os.path.expanduser("~"), "mtah-data"))
     sel_dir = e.MAIN / "runs" / "select" / "a14"
     cfg, dead, lengths, team, merge, switch, seq = load_selection(sel_dir, with_seq=True)
     cfg.pathcrf.cache_dir = str(e.MAIN / "runs" / "cache" / "pathcrf")

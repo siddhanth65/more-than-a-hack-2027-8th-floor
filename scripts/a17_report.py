@@ -8,7 +8,7 @@ import numpy as np, pandas as pd
 from mtah.eval.drift import blackout_mask_from_match, drift_report
 from mtah.io.metrica_loader import load_tactical
 from mtah.io.tags import load_tags
-D = os.environ.get("MTAH_DATA_DIR", r"HOME/mtah-data")
+D = os.environ.get("MTAH_DATA_DIR", os.path.join(os.path.expanduser("~"), "mtah-data"))
 m = load_tactical(D); tags = load_tags(D); mask = blackout_mask_from_match(m); n = m.n_frames
 
 

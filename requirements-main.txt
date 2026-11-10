@@ -1,0 +1,11 @@
+# Main environment (Python 3.12.10). Same pins as pyproject.toml; pytest only for the unit suite.
+# Create:  py -3.12 -m venv <venv>;  <venv>\Scripts\python -m pip install -r requirements-main.txt;  <venv>\Scripts\python -m pip install -e . --no-deps
+numpy==2.5.4
+pandas==3.0.6
+scipy==1.18.1
+scikit-learn==1.9.1
+pyarrow==26.0.0
+joblib==1.6.0
+pytest==9.1.1
+# Only for the optional broadcast-video scripts (scripts/broadcast_cue.py), not needed for a17:
+# opencv-python-headless==5.0.0.93

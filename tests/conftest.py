@@ -3,8 +3,8 @@ from pathlib import Path
 
 import pytest
 
-DEFAULT_DATA = Path(r"HOME/mtah-data")
-DEFAULT_DFL = Path(r"E:\football-synthesizer\data\dfl_open\work\fp1d")
+DEFAULT_DATA = Path(os.path.join(os.path.expanduser("~"), "mtah-data"))
+DEFAULT_DFL = Path(os.environ.get("MTAH_DFL_DIR", os.path.join(os.path.expanduser("~"), "dfl-open", "work", "fp1d")))
 
 
 @pytest.fixture(scope="session")

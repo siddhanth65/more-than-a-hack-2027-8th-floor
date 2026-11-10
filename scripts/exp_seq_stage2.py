@@ -18,7 +18,7 @@ from sklearn.metrics import log_loss
 
 import exp_seq_feats as fx
 
-OUT = Path(r"WORKDIR/possession\runs\select\exp_seq")
+OUT = (Path(__file__).resolve().parents[1] / "runs" / "select" / "exp_seq")
 SEEDS = [100, 101]
 INNER_TRAIN = [9002, 9003, 9004, 9005]; INNER_VAL = [9006]; FINAL_TRAIN = [9002, 9003, 9004, 9005, 9006]; TEST = [9001]
 TRAIN_STRIDE = 2

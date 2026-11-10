@@ -9,7 +9,7 @@ import argparse, json, shutil, sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-MAIN = Path(r"WORKDIR/possession")
+MAIN = Path(__file__).resolve().parents[1]
 A5C = MAIN / "runs" / "select" / "a5c"
 EXP = MAIN / "runs" / "select" / "exp_seq"
 OUT = MAIN / "runs" / "select" / "a10"

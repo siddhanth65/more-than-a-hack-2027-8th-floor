@@ -36,7 +36,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--baseline", choices=["b0", "b4", "smooth50"], default="b4")
     ap.add_argument("--out", default="runs/submission.csv")
-    ap.add_argument("--data", default=os.environ.get("MTAH_DATA_DIR", r"HOME/mtah-data"))
+    ap.add_argument("--data", default=os.environ.get("MTAH_DATA_DIR", os.path.join(os.path.expanduser("~"), "mtah-data")))
     args = ap.parse_args()
     m = load_tactical(args.data)
     labels = {"b0": baselines.b0_nearest_hold, "b4": baselines.b4_blackout_dead,

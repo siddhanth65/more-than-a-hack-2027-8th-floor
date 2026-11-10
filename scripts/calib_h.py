@@ -40,7 +40,7 @@ if __name__ == "__main__":
     (OUT / "calib_B6.json").write_text(json.dumps({"bands": {"vis_dead": list(sel.REAL_D_SHARE_BAND), "rate": list(sel.REAL_SPELL_RATE_BAND)},
         "chosen": adm.iloc[0].to_dict() if len(adm) else None, "table": t.to_dict(orient="records")}, indent=1, default=float))
     # a14 (B12) cells from the registered calibration files, re-judged under the new bands (reference only)
-    P = Path(r"WORKDIR/possession\runs\select\exp_seq2\lomo")
+    P = (Path(__file__).resolve().parents[1] / "runs" / "select" / "exp_seq2" / "lomo")
     for name, tab, fo in (("B12", "calib_B12.csv", "calib_B12_folds.csv"), ("B12w", "calib_B12w.csv", "calib_B12w_folds.csv")):
         j = judge(pd.read_csv(P / tab), pd.read_csv(P / fo)); j.to_csv(OUT / f"rejudged_{name}.csv", index=False)
     print(adm.round(4).to_string(index=False) if len(adm) else "NO ADMISSIBLE CELL")

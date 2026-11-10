@@ -22,7 +22,7 @@ from mtah.evidence import seq_feats as fx
 from mtah.evidence.pathcrf import pathcrf_posterior
 
 WRAPPER = Path(__file__).resolve().parent / "seq_b_infer.py"
-DEFAULT_PY = r"HOME/mtah-ext\pathcrf-venv\Scripts\python.exe"
+DEFAULT_PY = os.environ.get("MTAH_PATHCRF_PY", os.path.join(os.path.expanduser("~"), "mtah-ext", "pathcrf-venv", "Scripts", "python.exe"))
 TORCH_PY = os.environ.get("MTAH_PATHCRF_PY", DEFAULT_PY)   # Model B runs in the PathCRF venv (torch)
 STREAMS = ("ball", "tag", "dead", "pathcrf", "teamctrl")
 LAST_INFO = {}

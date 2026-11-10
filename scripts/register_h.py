@@ -4,7 +4,7 @@ Inputs of the BiGRU stay at a13r's dead cell (input_dead_offset -2.0, the cell t
   python scripts/register_h.py [--name H]   (then: scripts/make_candidate.py --select runs/select/H --name H)"""
 import argparse, json, shutil
 from pathlib import Path
-MAIN = Path(r"WORKDIR/possession")
+MAIN = Path(__file__).resolve().parents[1]
 KH = Path(__file__).resolve().parents[1] / "runs" / "kh" / "H"
 ap = argparse.ArgumentParser(); ap.add_argument("--name", default="H"); a = ap.parse_args()
 ch = json.loads((KH / "calib_B6.json").read_text())["chosen"]

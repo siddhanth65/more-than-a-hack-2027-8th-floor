@@ -2,6 +2,7 @@
 
 The search sees FIT_SEEDS; the best parameters are then re-evaluated on the disjoint EVAL_SEEDS (held out).
 """
+import os
 import argparse, hashlib, json, subprocess
 from pathlib import Path
 
@@ -78,7 +79,7 @@ def git_short_sha():
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--dfl", default=r"E:\football-synthesizer\data\dfl_open\work\fp1d")
+    ap.add_argument("--dfl", default=os.environ.get("MTAH_DFL_DIR", os.path.join(os.path.expanduser("~"), "dfl-open", "work", "fp1d")))
     ap.add_argument("--draws", type=int, default=150)
     ap.add_argument("--seeds", type=int, default=2, help="number of FIT_SEEDS used by the search (<= len(FIT_SEEDS))")
     ap.add_argument("--refine", type=int, default=150)

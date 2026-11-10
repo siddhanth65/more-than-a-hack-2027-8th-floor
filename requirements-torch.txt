@@ -1,0 +1,15 @@
+# PathCRF / torch environment (Python 3.14.0). Runs the external PathCRF model and the BiGRU stream B (torch only).
+# Versions are those of the environment in which a17 (md5 afb9e7b4...) was generated and reproduced.
+# Install torch first from the CPU index:
+#   python -m pip install torch==2.11.0 --index-url https://download.pytorch.org/whl/cpu
+#   python -m pip install -r requirements-torch.txt
+# (The generating machine had the +cu128 build of torch 2.11.0; inference runs on the CPU with the thread count pinned to 4.)
+torch-geometric==2.8.0
+numpy==2.4.0
+pandas==3.0.0
+scipy==1.17.0
+tqdm==4.67.3
+scikit-learn==1.8.0
+matplotlib==3.10.8
+omegaconf==2.3.1
+pyyaml==6.0.3

@@ -1,5 +1,5 @@
 """Diagnostic 1: camera motion (from homography files only) as a cue. Label-free kill test.
-Never reads contest ground truth; aggregates only. See runs/diag/REPORT.md.
+Never reads contest ground truth; aggregates only. See docs/diag/REPORT.md.
 Usage: OMP_NUM_THREADS=2 python -I scripts/diag_camera.py [--stage all|tactical|broadcast]"""
 import argparse, json, os, sys, time
 from pathlib import Path
@@ -18,7 +18,7 @@ from sklearn.preprocessing import StandardScaler
 
 from mtah.io.metrica_loader import load_tactical
 
-D = Path(os.environ.get("MTAH_DATA_DIR", r"HOME/mtah-data"))
+D = Path(os.environ.get("MTAH_DATA_DIR", os.path.join(os.path.expanduser("~"), "mtah-data")))
 OUT = ROOT / "runs" / "diag"
 CAND = ROOT / "runs" / "candidates"
 FPS = 25

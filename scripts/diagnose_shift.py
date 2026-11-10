@@ -1,4 +1,5 @@
 """Aggregate-only diagnosis of real-vs-sim shift for the selected dead model."""
+import os
 import json, sys
 from pathlib import Path
 import numpy as np
@@ -11,7 +12,7 @@ from mtah.sim.blackout_sim import runs_of
 from mtah.eval.drift import blackout_mask_from_match
 
 ROOT = Path(__file__).resolve().parents[1]
-DATA = r"HOME/mtah-data"
+DATA = os.path.join(os.path.expanduser("~"), "mtah-data")
 model = DeadModel.load(ROOT / "runs/select/a1/dead_model.joblib")
 
 def q(x):

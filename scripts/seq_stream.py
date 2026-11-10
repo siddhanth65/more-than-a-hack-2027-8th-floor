@@ -22,7 +22,7 @@ import mtah.evidence.seqstream as sq
 from mtah.pipeline import compute_evidence, compute_strong
 from mtah.sim.dataset import SEALED_MATCH, load_half_sim
 
-MAIN = Path(r"WORKDIR/possession")
+MAIN = Path(__file__).resolve().parents[1]
 
 
 def _no_run(*a, **k):

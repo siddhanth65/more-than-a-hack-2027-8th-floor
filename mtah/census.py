@@ -49,7 +49,7 @@ def real_blackout_lengths(match, long_s=10.0):
 def main():
     from mtah.io.metrica_loader import load_tactical
     from mtah.io.tags import load_tags
-    data = Path(os.environ.get("MTAH_DATA_DIR", r"HOME/mtah-data"))
+    data = Path(os.environ.get("MTAH_DATA_DIR", os.path.join(os.path.expanduser("~"), "mtah-data")))
     tactical = load_tactical(data)
     c = real_match_census(tactical, load_tags(data))
     runs_dir = Path(__file__).resolve().parents[1] / "runs"

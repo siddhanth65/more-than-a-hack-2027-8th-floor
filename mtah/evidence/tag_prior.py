@@ -28,6 +28,10 @@ class TagPriorParams:
     sp_dead_bonus: float = 0.0
     sp_dead_before_s: float = 2.0    # pre-start window of a set-piece type missing from sp_dead_before_by_type
     sp_dead_after_s: float = 3.0
+    # NOT USED BY THE SUBMITTED CANDIDATE (a17 and a5c_fx2 have sp_dead_bonus = 0, so none of the following has any effect).
+    # The default windows below were designed in Plan 2f from the contest's public 5-minute window (two visible-ball dead
+    # runs before goal kicks) and the variant built on them was not shipped; they are kept only because the mechanism is
+    # reused by scripts/r_run.py with windows fitted on SkillCorner matches (other-game data, not accepted either).
     # Plan 2f: type-specific pre-restart window (seconds before the tag start; key = lower-case type prefix as in
     # mtah.evidence.dead._sp_code). The tag marks the kick itself; the dead time before a goal kick / corner runs
     # 15-30 s (ball visible and moving), so the window must start well before the tag.

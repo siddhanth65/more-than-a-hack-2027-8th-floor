@@ -18,7 +18,7 @@ import numpy as np
 os.environ["TQDM_DISABLE"] = "1"
 POSS = Path(__file__).resolve().parents[1]
 OUT = POSS / "runs/dfl_extra"
-REPO = os.environ.get("MTAH_PATHCRF_REPO", "HOME/mtah-ext/pathcrf")
+REPO = os.environ.get("MTAH_PATHCRF_REPO", os.path.join(os.path.expanduser("~"), "mtah-ext", "pathcrf"))
 CHUNK = 250
 SEED = 100
 

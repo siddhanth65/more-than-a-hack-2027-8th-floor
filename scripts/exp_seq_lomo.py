@@ -52,7 +52,7 @@ from mtah.sim.dataset import SEALED_MATCH, list_sim_keys, load_half_sim, match_i
 from mtah.spells.merge import MergeModel, apply_merge_model, match_spell_table, merge_labels
 from mtah.spells.postprocess import postprocess
 
-MAIN = Path(r"WORKDIR/possession")
+MAIN = Path(__file__).resolve().parents[1]
 SIM = MAIN / "runs" / "sim"
 P = MAIN / "runs" / "select" / "exp_seq2"   # fresh dir: exp_seq's caches were built on the pre-smoothing sim
 L = P / "lomo"
@@ -570,7 +570,7 @@ def stage_calib(decoder="AB4_12"):
     # ---- real match: label-free drift per cell -------------------------------------------------------------------
     from touch_candidates import agreement
     from touch_common import load_real
-    data = os.environ.get("MTAH_DATA_DIR", r"HOME/mtah-data")
+    data = os.environ.get("MTAH_DATA_DIR", os.path.join(os.path.expanduser("~"), "mtah-data"))
     cfg0, dead, lengths, team, _, _, _ = load_selection(MAIN / "runs" / "select" / "a13r", with_seq=True)
     cfg0.pathcrf.cache_dir = str(MAIN / "runs" / "cache" / "pathcrf"); cfg0.post.merge_theta = 1.0
     m = load_real(); tags = load_tags(data)

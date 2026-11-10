@@ -4,7 +4,7 @@ by calib_a17.py / calib_fx2.py. Writes runs/select/<name> (config.json, models) 
   python scripts/register_a17.py --name a5c_fx2 --base-dir models/a5c --calib runs/kh/a5c_fx2/calib.json"""
 import argparse, json, shutil
 from pathlib import Path
-MAIN = Path(r"WORKDIR/possession")
+MAIN = Path(__file__).resolve().parents[1]
 ap = argparse.ArgumentParser()
 ap.add_argument("--name", required=True); ap.add_argument("--base", default=None); ap.add_argument("--base-dir", default=None)
 ap.add_argument("--calib", required=True); ap.add_argument("--smooth", type=float, default=1.0)

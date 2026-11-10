@@ -1,5 +1,6 @@
 """Exploratory: align broadcast tracking to tactical timeline; census of blackout frames fillable by broadcast ball.
 Prints/writes aggregates only."""
+import os
 import json, time
 from pathlib import Path
 import numpy as np, pandas as pd
@@ -9,7 +10,7 @@ from scipy.spatial.distance import pdist, cdist
 from mtah.io.metrica_loader import load_tactical, load_broadcast
 from mtah.eval.drift import blackout_mask_from_match
 
-D = r"HOME/mtah-data"
+D = os.path.join(os.path.expanduser("~"), "mtah-data")
 OUT = Path(__file__).resolve().parents[1] / "runs" / "broadcast" / "census.json"
 FPS = 25; DS = 5  # 5 Hz
 H_THR = 0.05; MIN_PL = 8; MIN_RUN_S = 5; NCC_MIN = 0.6; NCC_RATIO = 1.2; COST_MAX = 2.5

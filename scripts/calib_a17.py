@@ -20,7 +20,7 @@ from mtah.eval.drift import blackout_mask_from_match, drift_report
 from mtah.io.metrica_loader import load_tactical
 from mtah.io.tags import load_tags
 
-MAIN = Path(r"WORKDIR/possession")
+MAIN = Path(__file__).resolve().parents[1]
 LOMO = MAIN / "runs" / "select" / "exp_seq2" / "lomo"
 VARS = ("ctrl_Dfull", "raw_Dfull", "ctrl_Dnarrow", "raw_Dnarrow")
 
@@ -37,7 +37,7 @@ def lomo_table():
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--base", default=str(MAIN / "runs" / "select" / "a14f")); ap.add_argument("--smooth", type=float, default=1.0)
-    ap.add_argument("--data", default=os.environ.get("MTAH_DATA_DIR", r"HOME/mtah-data"))
+    ap.add_argument("--data", default=os.environ.get("MTAH_DATA_DIR", os.path.join(os.path.expanduser("~"), "mtah-data")))
     ap.add_argument("--out", default=str(ROOT / "runs" / "kh" / "a17"))
     a = ap.parse_args()
     out = Path(a.out); out.mkdir(parents=True, exist_ok=True)

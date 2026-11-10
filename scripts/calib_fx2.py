@@ -14,8 +14,8 @@ from mtah.eval.drift import blackout_mask_from_match, drift_report
 from mtah.io.metrica_loader import load_tactical
 from mtah.io.tags import load_tags
 
-MAIN = Path(r"WORKDIR/possession")
-data = os.environ.get("MTAH_DATA_DIR", r"HOME/mtah-data")
+MAIN = Path(__file__).resolve().parents[1]
+data = os.environ.get("MTAH_DATA_DIR", os.path.join(os.path.expanduser("~"), "mtah-data"))
 base = ROOT / "models" / "a5c"; out = ROOT / "runs" / "kh" / "a5c_fx2"; out.mkdir(parents=True, exist_ok=True)
 cfg0, dead, lengths, team, merge, switch = load_selection(base)
 cfg0.pathcrf.smooth_s = 1.0; cfg0.pathcrf.cache_dir = str(MAIN / "runs" / "cache" / "pathcrf_fx")

@@ -1,4 +1,5 @@
 """Build the simulated DFL dataset for all halves and seeds; print aggregates only."""
+import os
 import argparse, json
 from pathlib import Path
 
@@ -22,7 +23,7 @@ def load_or_write(path, cls):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--dfl", default=r"E:\football-synthesizer\data\dfl_open\work\fp1d")
+    ap.add_argument("--dfl", default=os.environ.get("MTAH_DFL_DIR", os.path.join(os.path.expanduser("~"), "dfl-open", "work", "fp1d")))
     ap.add_argument("--extra-dir", default=None, help="directory with extra game_*.npz halves + its own fp1d_census.json")
     ap.add_argument("--only", type=int, nargs="+", default=None, help="build only these match ids (e.g. 9101 9201)")
     ap.add_argument("--keys", nargs="+", default=None, help="build only these half keys (e.g. game_9101_H1)")

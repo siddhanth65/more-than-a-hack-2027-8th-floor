@@ -3,6 +3,7 @@ Metrica sample (92xx). Raw labels and the ctrl_Dfull truth variant (event-confir
 
 Usage: OMP_NUM_THREADS=2 python -I scripts/extra_data_report.py --extra-dir runs/extra [--dfl DIR] [--out JSON]
 """
+import os
 import site
 import sys
 from pathlib import Path
@@ -26,7 +27,7 @@ SOURCES = {"dfl": range(9001, 9100), "skillcorner": range(9101, 9200), "metrica_
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--extra-dir", required=True)
-    ap.add_argument("--dfl", default=r"E:\football-synthesizer\data\dfl_open\work\fp1d")
+    ap.add_argument("--dfl", default=os.environ.get("MTAH_DFL_DIR", os.path.join(os.path.expanduser("~"), "dfl-open", "work", "fp1d")))
     ap.add_argument("--out", default=None)
     args = ap.parse_args()
     items = []

@@ -24,7 +24,7 @@ import exp_seq_gru as g   # Net, batches, loss_fn, infer, constants (prototype; 
 
 torch.set_num_threads(4)
 torch.use_deterministic_algorithms(True)
-P = Path(r"WORKDIR/possession\runs\select\exp_seq2")
+P = (Path(__file__).resolve().parents[1] / "runs" / "select" / "exp_seq2")
 L = P / "lomo"; FINAL = P / "final"
 CK = L / "gru"; CK.mkdir(parents=True, exist_ok=True)
 MATCHES = [9001, 9002, 9003, 9004, 9005, 9006]

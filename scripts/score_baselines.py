@@ -15,9 +15,9 @@ from mtah.sim import EVAL_SEEDS, half_rng
 from mtah.sim.blackout_sim import BlackoutParams, apply_blackouts, blackout_mask
 
 ROOT = Path(__file__).resolve().parents[1]
-DFL = Path(os.environ.get("MTAH_DFL_DIR", r"E:\football-synthesizer\data\dfl_open\work\fp1d"))
-DATA = Path(os.environ.get("MTAH_DATA_DIR", r"HOME/mtah-data"))
-GT = Path(r"WORKDIR/repo\evaluation\gt\BAR-ATH_possession_gt_public.csv")
+DFL = Path(os.environ.get("MTAH_DFL_DIR", os.environ.get("MTAH_DFL_DIR", os.path.join(os.path.expanduser("~"), "dfl-open", "work", "fp1d"))))
+DATA = Path(os.environ.get("MTAH_DATA_DIR", os.path.join(os.path.expanduser("~"), "mtah-data")))
+GT = Path(os.environ.get("MTAH_PUBLIC_GT", "BAR-ATH_possession_gt_public.csv"))
 BASELINES = {"b0": baselines.b0_nearest_hold, "b4": baselines.b4_blackout_dead,
              "smooth50": lambda m: baselines.smooth_vote(m, 50)}
 

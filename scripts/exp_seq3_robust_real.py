@@ -28,7 +28,7 @@ DEAD_OFF, SEQ_D, W = -3.0, -1.0, 12.0
 def main():
     names = sys.argv[1:] or ["base", "v1", "touch", "v1touch"]
     from mtah.evidence.dead import dead_table
-    data = os.environ.get("MTAH_DATA_DIR", r"HOME/mtah-data")
+    data = os.environ.get("MTAH_DATA_DIR", os.path.join(os.path.expanduser("~"), "mtah-data"))
     cfg0, dead, lengths, team, _, _, _ = load_selection(e.MAIN / "runs" / "select" / "a13r", with_seq=True)
     cfg0.pathcrf.cache_dir = str(e.MAIN / "runs" / "cache" / "pathcrf"); cfg0.post.merge_theta = 1.0
     m = load_real(); tags = load_tags(data)

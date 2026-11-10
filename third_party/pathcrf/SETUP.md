@@ -13,34 +13,36 @@ owns the ball. We use it as an evidence stream (`mtah/evidence/pathcrf.py`, stre
 
 ## Install
 
-PathCRF needs torch, which the mtah venv (Python 3.12) does not have. It runs in a separate venv:
+PathCRF needs torch, which the main venv (Python 3.12) does not have. It runs in a separate venv (Python 3.14.0).
+`$PC` below is any directory you choose (the scripts default to `~/mtah-ext`; override with `MTAH_PATHCRF_REPO` and `MTAH_PATHCRF_PY`).
 
 ```
-git clone https://github.com/hyunsungkim-ds/pathcrf HOME/mtah-ext\pathcrf
-git -C HOME/mtah-ext\pathcrf checkout 1b7c6f85a6b78c92e4543fde72ca2b86a933f997
-py -3.14 -m venv HOME/mtah-ext\pathcrf-venv
-HOME/mtah-ext\pathcrf-venv\Scripts\python.exe -m pip install torch==2.11.0 --index-url https://download.pytorch.org/whl/cpu
-HOME/mtah-ext\pathcrf-venv\Scripts\python.exe -m pip install torch-geometric==2.8.0 pandas==3.0.0 numpy==2.4.0 scipy==1.17.0 tqdm==4.67.3
+git clone https://github.com/hyunsungkim-ds/pathcrf $PC/pathcrf
+git -C $PC/pathcrf checkout 1b7c6f85a6b78c92e4543fde72ca2b86a933f997
+py -3.14 -m venv $PC/pathcrf-venv
+$PC/pathcrf-venv/Scripts/python.exe -m pip install torch==2.11.0 --index-url https://download.pytorch.org/whl/cpu
+$PC/pathcrf-venv/Scripts/python.exe -m pip install -r requirements-torch.txt        # from the root of this repository
 ```
 
-Versions verified working (Python 3.14.0): torch 2.11.0 (the machine has the +cu128 build; inference runs on
-CPU), torch-geometric 2.8.0, pandas 3.0.0, numpy 2.4.0, scipy 1.17.0, tqdm 4.67.3. Note: the existing venv on this
-machine was created with `--system-site-packages` over `C:\Python314`, so these packages live in the system
-interpreter; the commands above give an equivalent self-contained venv. The checkpoint ships with the repo.
+Versions verified working (Python 3.14.0): torch 2.11.0 (the generating machine had the +cu128 build; inference runs on
+the CPU), torch-geometric 2.8.0, pandas 3.0.0, numpy 2.4.0, scipy 1.17.0, tqdm 4.67.3, all pinned in
+`requirements-torch.txt`. The environment that generated the submission was created with `--system-site-packages` over a
+system Python 3.14.0, so the pins list the packages that matter rather than a full freeze; the minimal set was not
+bisected. The checkpoint (`saved/140`, 37 MB) ships inside the upstream repository; no separate weights download is needed.
 
 ## Use
 
 - Wrapper: `third_party/pathcrf/run_infer.py --in <npz> --out <npz> [--ckpt 140] [--repo <dir>] [--threads N]`,
   run under the PathCRF venv with `TQDM_DISABLE=1`. One half per call. The in-repo file is the source of
-  truth; a copy lives at `HOME/mtah-ext\pathcrf-eval\run_infer.py` (re-copy after edits).
+  truth; the wrapper is run in place and its sha256 is part of the cache key.
 - `mtah.evidence.pathcrf.pathcrf_posterior(match, cache_key, params)` calls it per half and caches the merged
   result in `runs/cache/pathcrf/<cache_key>.npz` (`<sim.key>_s<seed>` for sims, `real_tactical` for the
   real match). Hand-off npz files go to a temporary directory that is deleted after the run. The cache is keyed on the input hash,
   the wrapper hash, checkpoint and threads. The wrapper also writes `n_chunks` and `n_ok` (windows with a prediction);
   `pathcrf_posterior` raises `RuntimeError` when `n_ok / n_chunks < 0.5` for a half.
 - Environment overrides of the defaults in `PathCRFParams`:
-  - `MTAH_PATHCRF_REPO` - PathCRF checkout (default `HOME/mtah-ext\pathcrf`)
-  - `MTAH_PATHCRF_PY` - PathCRF venv python (default `HOME/mtah-ext\pathcrf-venv\Scripts\python.exe`)
+  - `MTAH_PATHCRF_REPO` - PathCRF checkout (default `~/mtah-ext/pathcrf`)
+  - `MTAH_PATHCRF_PY` - PathCRF venv python (default `~/mtah-ext/pathcrf-venv/Scripts/python.exe`)
 - Enable with `PipelineConfig.use_pathcrf = True` (or a grid cell with `w_pathcrf > 0`).
 - Runtime: about 3.5 min per 45-min half (68 354 frames at 25 fps: 190-205 s measured) at the pinned 4 CPU threads (the code pins 4, see below; about 4 min per simulated half measured), of which ~20 s is
   importing torch/torch_geometric and loading the model.
@@ -75,3 +77,14 @@ robustness experiment (table above), the choice of the PathCRF output head (`run
 corrupted sim half game_9007_H1 s100 it beat the other soft outputs against the ball-owning team", emission marginal
 chosen), and the ctrl-truth diagnostic (66 % disagreement on 9007 H1). Any sealed a2 result on 9007 must be reported
 with this caveat. The PathCRF integration tests use the label-free nearest-player proxy, not 9007 truth.
+
+## Training-data overlap and the real-feed smoothing (added for the final submission)
+
+- PathCRF was trained by its authors on DFL open-data matches. Our simulator matches 9001-9005 are PathCRF's training matches
+  and 9006 its validation match (9007 is the clean test match). PathCRF's accuracy on the simulator folds is therefore optimistic.
+- On the real tactical feed PathCRF is run on player positions smoothed with a 1 s centred moving average
+  (`PathCRFParams.smooth_s = 1.0`, `make_candidate.py --pathcrf-smooth 1.0`, own cache `runs/cache/pathcrf_fx`). Without it the
+  second half is near chance; see `docs/arb/FIX_NOTES.md`. The simulator inputs are not smoothed.
+- `third_party/pathcrf/run_infer.py` still contains a user-specific default for `--repo`; the caller always overrides it
+  (`mtah/evidence/pathcrf.py` passes `--repo`). The line was left untouched on purpose: the sha256 of this file is part of the
+  PathCRF cache key, so editing it would invalidate the cached posteriors.

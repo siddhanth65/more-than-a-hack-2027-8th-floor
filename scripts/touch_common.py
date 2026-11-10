@@ -6,10 +6,10 @@ from pathlib import Path
 import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
-MAIN = Path(r"WORKDIR/possession")
+MAIN = Path(__file__).resolve().parents[1]
 SIM = MAIN / "runs" / "sim"
 OUT = ROOT / "runs" / "touch"
-DATA = Path(os.environ.get("MTAH_DATA_DIR", r"HOME/mtah-data"))
+DATA = Path(os.environ.get("MTAH_DATA_DIR", os.path.join(os.path.expanduser("~"), "mtah-data")))
 MATCHES = [9001, 9002, 9003, 9004, 9005, 9006]
 SEED = 100
 

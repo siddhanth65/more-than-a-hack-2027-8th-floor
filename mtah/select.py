@@ -61,13 +61,6 @@ GRID7 = [{**GRID5[0], "dead_policy": pol, "w_dead": w, "dead_offset": o}
 # grid8: registration grid for the long_rel dead policy with the real-band offsets found by the a5b sweep
 # (real visible-dead share 0.178 / 0.161 / 0.142 at -2.0 / -2.5 / -3.0; see runs/select/a5b/offset_sweep_real.json)
 GRID8 = [{**GRID5[0], "dead_policy": "long_rel", "w_dead": 4.0, "dead_offset": o} for o in (-2.0, -2.5, -3.0)]
-# grid9 (Plan 2f T1): a5c's registered cell (GRID8[0]) x the type-specific, ramped pre-restart set-piece dead prior
-# (mtah.evidence.tag_prior: TagPriorParams.sp_dead_before_by_type / sp_dead_ramp) bonus {0, 2, 4, 6}. 4 cells; bonus 0 is
-# a5c itself. The bonus is part of evidence_key, so each cell gets its own evidence.
-GRID9 = [{**GRID8[0], "sp_dead_bonus": b} for b in (0.0, 2.0, 4.0, 6.0)]
-# grid10: stronger tag-anchored pre-restart prior paired with a lower global dead offset (Plan 2f)
-GRID10 = [{**GRID8[0], "sp_dead_bonus": b, "dead_offset": o}
-          for b, o in itertools.product((4.0, 6.0, 8.0), (-2.0, -2.5, -3.0))]
 # grid11 (Plan 2g T-A): a5c's registered cell (GRID8[0]: long_rel, w_dead 4, dead_offset -2.0, w_teamctrl 2 full, merge 0.7,
 # w_pathcrf 1, bonus 0) x the PathCRF out-of-pitch confidence exponent pathcrf_none_k {0, 1, 2}
 # (PathCRFParams.none_k: conf *= (1 - p_none) ** none_k). 3 cells; none_k 0 is a5c itself. none_k is part of evidence_key.
@@ -78,7 +71,7 @@ GRID11 = [{**GRID8[0], "pathcrf_none_k": k} for k in (0.0, 1.0, 2.0)]
 GRID13 = [{**GRID8[0], "extra_weight": w, "dead_offset": o}
           for w, o in itertools.product((0.0, 0.5, 1.0), (-2.0, -1.0, 0.0))]
 GRIDS = {"grid1": GRID, "grid2": GRID2, "grid3": GRID3, "grid4": GRID4, "grid5": GRID5, "grid6": GRID6, "grid7": GRID7,
-         "grid8": GRID8, "grid9": GRID9, "grid10": GRID10,
+         "grid8": GRID8,
          "grid11": GRID11, "grid13": GRID13}
 
 # label-free real-match plausibility, anchored on OTHER games only (plan9-preregistration.md; the earlier bands

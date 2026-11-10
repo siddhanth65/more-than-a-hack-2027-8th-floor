@@ -1,6 +1,6 @@
 {
  "candidate": "a17",
- "base": "WORKDIR/possession\\runs\\select\\a14f",
+ "base": "runs\\select\\a14f",
  "pathcrf_smooth_s": 1.0,
  "note": "simulator inputs unchanged (smooth_s 0 in the simulator caches); smoothing is a property of the real feed (runs/arb/FIX_NOTES.md)",
  "calibration": {

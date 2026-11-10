@@ -16,7 +16,7 @@ import torch.nn as nn
 import torch.nn.functional as Fn
 
 torch.set_num_threads(4)
-OUT = Path(r"WORKDIR/possession\runs\select\exp_seq")
+OUT = (Path(__file__).resolve().parents[1] / "runs" / "select" / "exp_seq")
 G = OUT / "gru"; G.mkdir(exist_ok=True)
 SEEDS = [100, 101]
 WIN, STRIDE, BATCH = 600, 300, 64

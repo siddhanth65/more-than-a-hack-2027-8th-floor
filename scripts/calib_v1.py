@@ -74,7 +74,7 @@ def real():
     from mtah.pipeline import compute_evidence, compute_strong, predict
     from touch_candidates import agreement
     from touch_common import load_real
-    data = os.environ.get("MTAH_DATA_DIR", r"HOME/mtah-data")
+    data = os.environ.get("MTAH_DATA_DIR", os.path.join(os.path.expanduser("~"), "mtah-data"))
     cfg0, dead, lengths, team, _, _, _ = load_selection(e.MAIN / "runs" / "select" / "a13r", with_seq=True)
     cfg0.pathcrf.cache_dir = str(e.MAIN / "runs" / "cache" / "pathcrf"); cfg0.post.merge_theta = 1.0
     m = load_real(); tags = load_tags(data)

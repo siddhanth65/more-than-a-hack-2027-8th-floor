@@ -1,3 +1,5 @@
+import os
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -51,7 +53,11 @@ def test_smooth50_parity(data_dir):
     from mtah.io.metrica_loader import load_tactical
     m = load_tactical(data_dir)
     ours = smooth_vote(m, 50)
-    ref = pd.read_csv(r"WORKDIR/repo\evaluation\results\baseline_smooth50.csv")["label"].to_numpy()
+    ref_path = os.environ.get("MTAH_CONTEST_REPO", "")
+    ref_path = os.path.join(ref_path, "evaluation", "results", "baseline_smooth50.csv")
+    if not os.path.exists(ref_path):
+        pytest.skip("organisers' baseline_smooth50.csv not available (set MTAH_CONTEST_REPO to the organisers' repository checkout)")
+    ref = pd.read_csv(ref_path)["label"].to_numpy()
     agree = float((ours == ref).mean())
     assert agree == 1.0
 

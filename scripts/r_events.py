@@ -1,11 +1,12 @@
 """Task R: typed SkillCorner restart events per K half (25 fps half-relative frame, type, taking team H/A), plus the
 SkillCorner dead time before each restart (s, 10 fps events, as diag_prerestart.skillcorner). SkillCorner data only.
   python scripts/r_events.py  -> runs/kh/R/restarts.csv  (key, frame, type, team, dead_s)"""
+import os
 import json, sys
 from pathlib import Path
 import numpy as np, pandas as pd
 ROOT = Path(__file__).resolve().parents[1]
-SC = Path(r"HOME/analytics-cup-2\data\raw\opendata\data\matches")
+SC = Path(os.environ.get("MTAH_SKILLCORNER_DIR", os.path.join(os.path.expanduser("~"), "skillcorner-opendata", "data", "matches")))
 TYPES = ("throw_in", "free_kick", "goal_kick", "corner", "goal")
 rows = []
 for i, md in enumerate(sorted((p for p in SC.iterdir() if p.is_dir()), key=lambda d: int(d.name))):

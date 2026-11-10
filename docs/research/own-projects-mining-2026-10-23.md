@@ -1,6 +1,6 @@
 # Own-projects mining for possession labelling (2026-10-23)
 
-Sources read (code + notes only): `HOME/football-synthesizer` (generator/retrieval/spells_s3.py, spells.py, fp1_shape_poss.py, fp1_kin_touch.py, possession_learned.py, ball.py, docs/tactical/T1_3_DESIGN_2026-10-18.md, results/tactical_l1_poss_e1.json, STATUS.md) and `HOME/analytics-cup-2` (src/runmark/possession.py is only a label builder from SkillCorner events; nothing transferable). Caveat: those metrics are vs SkillCorner truth (starts at the touch), F1 at 7 frames, not Metrica spellF1. Directions transfer; numbers do not.
+Sources read (code + notes only): `~\football-synthesizer` (generator/retrieval/spells_s3.py, spells.py, fp1_shape_poss.py, fp1_kin_touch.py, possession_learned.py, ball.py, docs/tactical/T1_3_DESIGN_2026-10-18.md, results/tactical_l1_poss_e1.json, STATUS.md) and `~\analytics-cup-2` (src/runmark/possession.py is only a label builder from SkillCorner events; nothing transferable). Caveat: those metrics are vs SkillCorner truth (starts at the touch), F1 at 7 frames, not Metrica spellF1. Directions transfer; numbers do not.
 
 mtah already ports the touch detector (`mtah/evidence/touches.py` from spells_s3), touch snapping (`mtah/spells/postprocess.py snap_team_boundaries`, snap_w=50), and kink features in `switch.py`/`team_ctrl.py`.
 

@@ -13,8 +13,8 @@ import pandas as pd
 from mtah.io.metrica_loader import load_tactical
 from mtah.io.tags import load_tags
 
-D = Path(os.environ.get("MTAH_DATA_DIR", r"HOME/mtah-data"))
-SC = Path(r"HOME/analytics-cup-2\data\raw\opendata\data\matches")
+D = Path(os.environ.get("MTAH_DATA_DIR", os.path.join(os.path.expanduser("~"), "mtah-data")))
+SC = Path(os.environ.get("MTAH_SKILLCORNER_DIR", os.path.join(os.path.expanduser("~"), "skillcorner-opendata", "data", "matches")))
 OUT = Path(os.environ.get("DIAG_OUT", str(ROOT / "runs" / "diag")))
 FPS = 25
 TOL = 3 * FPS

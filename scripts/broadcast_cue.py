@@ -17,9 +17,9 @@ from mtah.io.metrica_loader import load_broadcast, load_tactical
 from mtah.io.tags import load_tags
 from mtah.sim.blackout_sim import runs_of
 
-D = Path(os.environ.get("MTAH_DATA_DIR", r"HOME/mtah-data"))
+D = Path(os.environ.get("MTAH_DATA_DIR", os.path.join(os.path.expanduser("~"), "mtah-data")))
 OUT = Path(__file__).resolve().parents[1] / "runs" / "broadcast"
-GT = Path(r"WORKDIR/repo\evaluation\gt\BAR-ATH_possession_gt_public.csv")
+GT = Path(os.environ.get("MTAH_PUBLIC_GT", "BAR-ATH_possession_gt_public.csv"))
 CAND = Path(__file__).resolve().parents[1] / "runs" / "candidates" / "a5c.csv"
 PUB = (11185, 18685)
 SP_TYPES = {"goal_kick": "Goal Kick", "corner": "Corner Kick", "throw_in": "Throw-in", "free_kick": "Free Kick",

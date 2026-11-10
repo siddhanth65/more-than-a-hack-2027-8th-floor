@@ -7,7 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]; sys.path.insert(0, str(ROOT))
 import numpy as np, pandas as pd
 from mtah.io.metrica_loader import load_tactical
 from mtah.io.tags import load_tags
-D = Path(os.environ.get("MTAH_DATA_DIR", r"HOME/mtah-data")); FPS = 25
+D = Path(os.environ.get("MTAH_DATA_DIR", os.path.join(os.path.expanduser("~"), "mtah-data"))); FPS = 25
 TAG2TYPE = {"Throw-in": "throw_in", "Free Kick": "free_kick", "Goal Kick": "goal_kick", "Corner Kick": "corner", "Kick Off (After Goal)": "goal"}
 t = load_tactical(D); tags = load_tags(D); n = t.n_frames
 sp = tags[tags.code == "SET PIECES"].copy(); sp["ty"] = sp["type"].map(TAG2TYPE)

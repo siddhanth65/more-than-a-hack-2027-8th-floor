@@ -1,8 +1,8 @@
 #!/bin/bash
 # Plan 8 T2 driver (laptop, one heavy process at a time, OMP_NUM_THREADS=4, every step skipped when its output exists).
-cd WORKDIR/possession-seq2
-PY=HOME/mtah-venv/Scripts/python.exe; PCPY=HOME/mtah-ext/pathcrf-venv/Scripts/python.exe
-E=WORKDIR/possession/runs/select/exp_seq3
+cd "$(dirname "$0")/.."
+PY="${MTAH_PY:-python}"; PCPY="${MTAH_PATHCRF_PY:-python}"
+E=runs/select/exp_seq3
 export OMP_NUM_THREADS=4
 declare -A NORM=([base]=none [v1]=v1 [touch]=none [v1touch]=v1); declare -A TGT=([base]=ctrl [v1]=ctrl [touch]=touch12 [v1touch]=touch12)
 for v in base v1 touch v1touch; do   # final models: all six matches, epochs = median fold choice (reuses fold logs)

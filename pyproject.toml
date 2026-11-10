@@ -26,5 +26,5 @@ include = ["mtah*"]
 testpaths = ["tests"]
 markers = [
   "real: needs the competition data in MTAH_DATA_DIR",
-  "dfl: needs the DFL proxy data on E:",
+  "dfl: needs the parsed DFL proxy data (MTAH_DFL_DIR)",
 ]

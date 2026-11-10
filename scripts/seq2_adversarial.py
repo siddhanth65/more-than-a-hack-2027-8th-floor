@@ -37,7 +37,7 @@ pcrf._run_half = _no_run
 def real_steps():
     cfg, dead, lengths, team, merge, switch, seq = load_selection(Path(__file__).resolve().parents[1] / "runs" / "select" / "a13r", with_seq=True)
     cfg.pathcrf.cache_dir = str(MAIN / "runs" / "cache" / "pathcrf")
-    m = load_real(); tags = load_tags(os.environ.get("MTAH_DATA_DIR", r"HOME/mtah-data"))
+    m = load_real(); tags = load_tags(os.environ.get("MTAH_DATA_DIR", os.path.join(os.path.expanduser("~"), "mtah-data")))
     ev = compute_evidence(m, tags, cfg, dead, cache_key="real_tactical", team_model=team)
     z = sq.feature_inputs(m, ev, compute_strong(m, cfg), cfg.pathcrf, "real_tactical")
     X, names = fx.frame_features(z); Xs, _, seg = fx.to_steps(X, names, m.half)

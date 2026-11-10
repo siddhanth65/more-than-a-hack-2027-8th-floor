@@ -16,8 +16,8 @@ import numpy as np
 from mtah.io.match import half_runs
 
 WRAPPER = Path(__file__).resolve().parents[2] / "third_party" / "pathcrf" / "run_infer.py"
-DEFAULT_REPO = r"HOME/mtah-ext\pathcrf"
-DEFAULT_PY = r"HOME/mtah-ext\pathcrf-venv\Scripts\python.exe"
+DEFAULT_REPO = os.environ.get("MTAH_PATHCRF_REPO", os.path.join(os.path.expanduser("~"), "mtah-ext", "pathcrf"))
+DEFAULT_PY = os.environ.get("MTAH_PATHCRF_PY", os.path.join(os.path.expanduser("~"), "mtah-ext", "pathcrf-venv", "Scripts", "python.exe"))
 
 DEFAULT_CACHE = str(Path(__file__).resolve().parents[2] / "runs/cache/pathcrf")
 TIMEOUT_S = 30 * 60

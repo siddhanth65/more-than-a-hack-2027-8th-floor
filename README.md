@@ -1,14 +1,115 @@
-# mtah — MTAH 2027 possession pipeline
+# mtah: frame-level possession labelling (More Than A Hack 2027)
 
-Install: `python -m pip install -e ".[dev]"` (Python 3.12). Data: set `MTAH_DATA_DIR` to the unpacked bundle (`tactical/`, `broadcast/`). Tests: `python -m pytest -q`.
-Regenerate the submission: `python -m mtah.submission --out runs/submission.csv` (Plan 2 wires the model; Plan 1 writes baselines).
+Code that turns the provided tactical tracking and Smart Tagging of one match into a per-frame possession file
+(`frame,label`, labels H / A / D, 199,319 rows). The submitted file is candidate **a17**.
+The method is described in [`docs/technical-document.md`](docs/technical-document.md) (PDF: `docs/technical-document.pdf` if present).
 
-## Reproduce the submission
+**This repository contains no match data**: no tracking, tags, video, ground truth, or frame-level exports. Everything the
+pipeline reads from the competition bundle is read from a directory you point to with `MTAH_DATA_DIR`.
 
-`scripts\reproduce.ps1` (Windows PowerShell 5.1) regenerates the candidate CSV and prints its md5.
+## What is committed
 
-- `scripts\reproduce.ps1 -CandidateOnly` rebuilds `runs/candidates/a2.csv` from the committed `models/a2/` (config + dead model); `-Name` selects another candidate. Without `-CandidateOnly` it runs the full chain (simulator, PathCRF cache, leave-one-match-out selection, candidate).
-- Environment: `MTAH_DATA_DIR` (unpacked competition bundle, required), `MTAH_VENV` (Python 3.12 venv, default `HOME/mtah-venv`; dependencies are pinned in `pyproject.toml`).
-- PathCRF (external, MPL-2.0, separate Python 3.14 venv) is set up per `third_party/pathcrf/SETUP.md`; override locations with `MTAH_PATHCRF_REPO` and `MTAH_PATHCRF_PY`.
-- Dependencies are pinned to exact versions in `pyproject.toml` (numpy 2.5.4, pandas 3.0.6, scipy 1.18.1, scikit-learn 1.9.1, pyarrow 26.0.0, joblib 1.6.0); the committed dead model is a pickle, so scikit-learn must match. Byte-for-byte regeneration of the submission is verified on the same machine, Python and pinned packages with the PathCRF threads pinned to 4; cross-machine identity is not yet shown.
-- The technical document is `docs/technical-document.md`.
+- `mtah/`: the pipeline (evidence streams, decoder, post-processing, simulator, scoring wrapper).
+- `models/<candidate>/`: the trained artefacts and configuration of every registered candidate (dead-ball model, team-control model,
+  BiGRU stream B; 0.5 to 1.7 MB each). They were trained on DFL open data only (see the technical document, section 3).
+  The submitted candidate is `models/a17`; `models/a5c_fx2` is the tracking-only fallback.
+- `third_party/pathcrf/`: our wrapper around the external PathCRF model (MPL-2.0) and setup notes. PathCRF itself is not copied here.
+- `scripts/`: candidate generation (`make_candidate.py`), reproduction (`reproduce.ps1`), calibration, experiments and diagnostics.
+- `tests/`: unit tests. `docs/`: technical document, pre-registrations, read logs (`docs/reads/`), reports.
+
+## Reproduce the submission file
+
+Expected result: `runs/candidates/a17.csv`, **md5 `afb9e7b4ede118268fd0222fd5e11068`**, 199,319 data rows, passes the organisers'
+`validate_submission.py`.
+
+### 1. Environments
+
+Two Python environments are used. The pipeline process (numpy, pandas, scikit-learn) runs in the main one; PathCRF and the BiGRU
+stream B (torch) run as subprocesses in the second one.
+
+| | main environment | torch / PathCRF environment |
+|---|---|---|
+| Python | 3.12.10 | 3.14.0 |
+| pins | `requirements-main.txt` (same as `pyproject.toml`) | `requirements-torch.txt` (+ torch 2.11.0 from the PyTorch CPU index) |
+| env var | `MTAH_VENV` (venv directory; default `~/mtah-venv`) | `MTAH_PATHCRF_PY` (its `python.exe`; default `~/mtah-ext/pathcrf-venv/Scripts/python.exe`) |
+
+```
+py -3.12 -m venv mtah-venv
+mtah-venv\Scripts\python -m pip install -r requirements-main.txt
+mtah-venv\Scripts\python -m pip install -e . --no-deps
+```
+
+scikit-learn must be exactly 1.9.1 (the committed dead-ball and team-control models are pickles). The torch environment is set up in
+[`third_party/pathcrf/SETUP.md`](third_party/pathcrf/SETUP.md).
+
+### 2. External assets
+
+| asset | what for | where to get it | licence |
+|---|---|---|---|
+| competition data bundle (`tactical/`) | the input; not redistributable | organisers (see their repository) | competition terms |
+| PathCRF code + checkpoint `saved/140` (commit `1b7c6f85a6b78c92e4543fde72ca2b86a933f997`) | players-only team evidence | https://github.com/hyunsungkim-ds/pathcrf (checkpoint ships in the repository; set `MTAH_PATHCRF_REPO`) | MPL-2.0 (used unmodified) |
+
+Only these two are needed to regenerate the file. Everything below is needed **only to retrain or re-validate**, not to reproduce the CSV:
+
+| asset | what for | where | licence |
+|---|---|---|---|
+| DFL open data (Sportec, 7 matches) | training and selection proxy; one match sealed | the public DFL / Sportec open-data release (check the exact download page and citation before publishing; not verified here) | CC BY 4.0 |
+| SkillCorner open data (20 A-League 2024/25 matches) | other-game hold-out and band anchors, never training for a17 | https://github.com/SkillCorner/opendata | MIT |
+| Metrica Sports sample games 1 to 3 | other-game validation | https://github.com/metrica-sports/sample-data | see that repository |
+
+### 3. Run
+
+```
+set MTAH_DATA_DIR=<folder that contains tactical/>
+set MTAH_VENV=<main venv>                 (optional)
+set MTAH_PATHCRF_REPO=<pathcrf checkout>  (optional, default ~/mtah-ext/pathcrf)
+set MTAH_PATHCRF_PY=<torch venv python>   (optional)
+powershell -File scripts\reproduce.ps1            # candidate a17; prints the md5 and compares it with the expected one
+```
+
+`scripts\reproduce.ps1 -Name a5c_fx2` regenerates the fallback (md5 `107e7fc1157c05ad3ba8f893734606b7`). The script is a thin wrapper around
+
+```
+python scripts/make_candidate.py --select models/a17 --name a17 --pathcrf-smooth 1.0
+```
+
+which can be run directly on any platform (set `MTAH_PATHCRF_PY` to the torch venv interpreter). Then validate:
+
+```
+python <organisers>/evaluation/validate_submission.py runs/candidates/a17.csv
+```
+
+**Runtime** (8-core laptop, CPU only): about 6.5 min for PathCRF on the real match the first time (4 threads, cached afterwards in
+`runs/cache/pathcrf_fx`), plus 2 to 3 min for the rest.
+
+**Determinism.** The file was regenerated byte-identically twice and from a clean clone on the machine that defines the md5.
+The PathCRF posterior depends on the torch build and thread count (pinned to 4 in the code); on another machine PathCRF's output was
+seen to differ by about 6e-6, which did not change the labels in the one cross-machine comparison made, but byte identity across machines
+is not guaranteed.
+
+### 4. Tests
+
+```
+python -m pytest -m "not dfl and not real"        # unit suite; needs no data
+```
+
+Tests marked `real` need `MTAH_DATA_DIR`; tests marked `dfl` need the parsed DFL proxy (`MTAH_DFL_DIR`).
+
+## Data and scripts that are not needed to reproduce
+
+Retraining uses simulator halves built from DFL open data (`scripts/build_sim.py`, `scripts/select_lomo.py`). The six training matches
+were converted to the `fp1d` npz layout by an earlier private converter of the team; `scripts/parse_dfl_match.py` is a standalone copy
+of its tracking part and writes the same layout, but it has not been checked to reproduce those six files byte for byte.
+Many files in `scripts/` are one-off experiment drivers that were run on a layout of directories (`runs/...`) that is not committed;
+they are kept for transparency, not as a supported interface.
+
+## Public-window use
+
+The organisers' 5-minute public window was read 8 times in total (7 scoring reads, 1 boolean check). All reads are in
+`docs/reads/public.jsonl` and listed in the technical document (section 6). `scripts/public_read.py` is disabled; `scripts/final_check.py`
+needs the path of the public ground-truth file as an argument or in `MTAH_PUBLIC_GT`; the file is not in this repository.
+
+## Licence
+
+No licence file has been chosen yet; see the note in the technical document's reproduction section. PathCRF (MPL-2.0), the DFL data
+(CC BY 4.0) and the SkillCorner data (MIT) are third-party and keep their own terms.

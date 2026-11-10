@@ -186,15 +186,3 @@ def test_config_round_trip_by_type():
     old = PipelineConfig().to_dict(); old["tag"].pop("sp_dead_before_by_type"); old["tag"].pop("sp_dead_ramp")
     o = PipelineConfig.from_dict(old)
     assert o.tag.sp_dead_before_by_type == TagPriorParams().sp_dead_before_by_type and o.tag.sp_dead_ramp is True
-
-
-def test_grid9():
-    from mtah.pipeline import PipelineConfig
-    from mtah.select import GRID8, GRID9, GRIDS, apply_cell, evidence_key
-    assert GRIDS["grid9"] is GRID9 and len(GRID9) == 4
-    assert [c["sp_dead_bonus"] for c in GRID9] == [0.0, 2.0, 4.0, 6.0]
-    assert all({k: v for k, v in c.items() if k != "sp_dead_bonus"} == {k: v for k, v in GRID8[0].items() if k != "sp_dead_bonus"}
-               for c in GRID9)
-    assert GRID9[0]["dead_policy"] == "long_rel" and GRID9[0]["w_dead"] == 4.0 and GRID9[0]["dead_offset"] == -2.0
-    assert [apply_cell(PipelineConfig(), c).tag.sp_dead_bonus for c in GRID9] == [0.0, 2.0, 4.0, 6.0]
-    assert len({evidence_key(c) for c in GRID9}) == 4
