@@ -1,0 +1,1498 @@
+{
+ "skillcorner": {
+  "definition": "Dead time before a restart = (frame_start of the first player_possession after an interruption\n    [game_interruption_before = <type>_for/_against; type 'goal' = kick-off after a goal] - frame_end of the immediately\n    preceding player_possession event in the same period) / 10 fps. It therefore includes the last ball flight to the\n    touchline plus the stoppage up to the restart reception (the restart taker's ball contact).",
+  "n_matches": 20,
+  "by_type": {
+   "throw_in": {
+    "n": 834,
+    "p25": 10.325000000000001,
+    "median": 16.3,
+    "p75": 23.975,
+    "mean": 21.022661870503597
+   },
+   "free_kick": {
+    "n": 405,
+    "p25": 19.1,
+    "median": 29.3,
+    "p75": 49.8,
+    "mean": 39.946913580246914
+   },
+   "goal_kick": {
+    "n": 261,
+    "p25": 23.7,
+    "median": 33.3,
+    "p75": 42.4,
+    "mean": 35.99808429118774
+   },
+   "corner": {
+    "n": 141,
+    "p25": 31.2,
+    "median": 36.7,
+    "p75": 43.0,
+    "mean": 38.54751773049645
+   },
+   "goal": {
+    "n": 44,
+    "p25": 63.55,
+    "median": 72.35,
+    "p75": 80.35,
+    "mean": 74.12272727272727
+   }
+  },
+  "other_types_seen": {
+   "penalty": 1
+  }
+ },
+ "contest": {
+  "a5c": {
+   "throw_in": {
+    "n": 26,
+    "share_with_D_edge": 0.038461538461538464,
+    "share_D_through": 0.8461538461538461,
+    "share_no_D": 0.11538461538461539,
+    "run_len_s_all": {
+     "n": 26,
+     "p25": 1.82,
+     "median": 5.359999999999999,
+     "p75": 14.97,
+     "mean": 8.301538461538462
+    },
+    "run_len_s_edge_only": {
+     "n": 1,
+     "p25": 19.4,
+     "median": 19.4,
+     "p75": 19.4,
+     "mean": 19.4
+    },
+    "share_pre_tag_live_labelled": 0.23076923076923078,
+    "blackout_before": {
+     "n": 17,
+     "share_with_D_edge": 0.058823529411764705,
+     "share_D_through": 0.9411764705882353,
+     "share_no_D": 0.0,
+     "run_len_s_all": {
+      "n": 17,
+      "p25": 5.0,
+      "median": 12.76,
+      "p75": 16.4,
+      "mean": 11.743529411764705
+     },
+     "run_len_s_edge_only": {
+      "n": 1,
+      "p25": 19.4,
+      "median": 19.4,
+      "p75": 19.4,
+      "mean": 19.4
+     },
+     "share_pre_tag_live_labelled": 0.058823529411764705
+    },
+    "ball_visible_before": {
+     "n": 9,
+     "share_with_D_edge": 0.0,
+     "share_D_through": 0.6666666666666666,
+     "share_no_D": 0.3333333333333333,
+     "run_len_s_all": {
+      "n": 9,
+      "p25": 0.0,
+      "median": 0.0,
+      "p75": 3.8,
+      "mean": 1.7999999999999998
+     },
+     "run_len_s_edge_only": {
+      "n": 0
+     },
+     "share_pre_tag_live_labelled": 0.5555555555555556
+    },
+    "skillcorner_ref": {
+     "n": 834,
+     "p25": 10.325000000000001,
+     "median": 16.3,
+     "p75": 23.975,
+     "mean": 21.022661870503597
+    },
+    "deficit_to_sc_p25_s_total": 117.12500000000001,
+    "deficit_to_sc_median_s_total": 225.54000000000002,
+    "share_below_sc_p25": 0.6538461538461539,
+    "share_below_sc_median": 0.8076923076923077
+   },
+   "free_kick": {
+    "n": 5,
+    "share_with_D_edge": 0.0,
+    "share_D_through": 1.0,
+    "share_no_D": 0.0,
+    "run_len_s_all": {
+     "n": 5,
+     "p25": 15.28,
+     "median": 20.28,
+     "p75": 27.0,
+     "mean": 20.984
+    },
+    "run_len_s_edge_only": {
+     "n": 0
+    },
+    "share_pre_tag_live_labelled": 0.0,
+    "blackout_before": {
+     "n": 5,
+     "share_with_D_edge": 0.0,
+     "share_D_through": 1.0,
+     "share_no_D": 0.0,
+     "run_len_s_all": {
+      "n": 5,
+      "p25": 15.28,
+      "median": 20.28,
+      "p75": 27.0,
+      "mean": 20.984
+     },
+     "run_len_s_edge_only": {
+      "n": 0
+     },
+     "share_pre_tag_live_labelled": 0.0
+    },
+    "ball_visible_before": {
+     "n": 0
+    },
+    "skillcorner_ref": {
+     "n": 405,
+     "p25": 19.1,
+     "median": 29.3,
+     "p75": 49.8,
+     "mean": 39.946913580246914
+    },
+    "deficit_to_sc_p25_s_total": 19.560000000000002,
+    "deficit_to_sc_median_s_total": 51.28,
+    "share_below_sc_p25": 0.4,
+    "share_below_sc_median": 0.8
+   },
+   "goal_kick": {
+    "n": 10,
+    "share_with_D_edge": 0.1,
+    "share_D_through": 0.7,
+    "share_no_D": 0.2,
+    "run_len_s_all": {
+     "n": 10,
+     "p25": 0.5,
+     "median": 4.359999999999999,
+     "p75": 27.939999999999998,
+     "mean": 18.4
+    },
+    "run_len_s_edge_only": {
+     "n": 1,
+     "p25": 28.04,
+     "median": 28.04,
+     "p75": 28.04,
+     "mean": 28.04
+    },
+    "share_pre_tag_live_labelled": 0.3,
+    "blackout_before": {
+     "n": 5,
+     "share_with_D_edge": 0.2,
+     "share_D_through": 0.8,
+     "share_no_D": 0.0,
+     "run_len_s_all": {
+      "n": 5,
+      "p25": 27.64,
+      "median": 28.04,
+      "p75": 57.8,
+      "mean": 35.056
+     },
+     "run_len_s_edge_only": {
+      "n": 1,
+      "p25": 28.04,
+      "median": 28.04,
+      "p75": 28.04,
+      "mean": 28.04
+     },
+     "share_pre_tag_live_labelled": 0.0
+    },
+    "ball_visible_before": {
+     "n": 5,
+     "share_with_D_edge": 0.0,
+     "share_D_through": 0.6,
+     "share_no_D": 0.4,
+     "run_len_s_all": {
+      "n": 5,
+      "p25": 0.0,
+      "median": 0.0,
+      "p75": 4.12,
+      "mean": 1.7439999999999998
+     },
+     "run_len_s_edge_only": {
+      "n": 0
+     },
+     "share_pre_tag_live_labelled": 0.6
+    },
+    "skillcorner_ref": {
+     "n": 261,
+     "p25": 23.7,
+     "median": 33.3,
+     "p75": 42.4,
+     "mean": 35.99808429118774
+    },
+    "deficit_to_sc_p25_s_total": 131.48000000000002,
+    "deficit_to_sc_median_s_total": 199.99999999999994,
+    "share_below_sc_p25": 0.6,
+    "share_below_sc_median": 0.8
+   },
+   "corner": {
+    "n": 12,
+    "share_with_D_edge": 0.16666666666666666,
+    "share_D_through": 0.8333333333333334,
+    "share_no_D": 0.0,
+    "run_len_s_all": {
+     "n": 12,
+     "p25": 18.689999999999998,
+     "median": 22.28,
+     "p75": 26.21,
+     "mean": 22.799999999999997
+    },
+    "run_len_s_edge_only": {
+     "n": 2,
+     "p25": 28.349999999999998,
+     "median": 30.46,
+     "p75": 32.57,
+     "mean": 30.46
+    },
+    "share_pre_tag_live_labelled": 0.0,
+    "blackout_before": {
+     "n": 12,
+     "share_with_D_edge": 0.16666666666666666,
+     "share_D_through": 0.8333333333333334,
+     "share_no_D": 0.0,
+     "run_len_s_all": {
+      "n": 12,
+      "p25": 18.689999999999998,
+      "median": 22.28,
+      "p75": 26.21,
+      "mean": 22.799999999999997
+     },
+     "run_len_s_edge_only": {
+      "n": 2,
+      "p25": 28.349999999999998,
+      "median": 30.46,
+      "p75": 32.57,
+      "mean": 30.46
+     },
+     "share_pre_tag_live_labelled": 0.0
+    },
+    "ball_visible_before": {
+     "n": 0
+    },
+    "skillcorner_ref": {
+     "n": 141,
+     "p25": 31.2,
+     "median": 36.7,
+     "p75": 43.0,
+     "mean": 38.54751773049645
+    },
+    "deficit_to_sc_p25_s_total": 104.28000000000002,
+    "deficit_to_sc_median_s_total": 166.80000000000007,
+    "share_below_sc_p25": 0.9166666666666666,
+    "share_below_sc_median": 1.0
+   },
+   "goal": {
+    "n": 4,
+    "share_with_D_edge": 0.0,
+    "share_D_through": 1.0,
+    "share_no_D": 0.0,
+    "run_len_s_all": {
+     "n": 4,
+     "p25": 40.56,
+     "median": 56.17999999999999,
+     "p75": 87.39999999999999,
+     "mean": 71.78
+    },
+    "run_len_s_edge_only": {
+     "n": 0
+    },
+    "share_pre_tag_live_labelled": 0.0,
+    "blackout_before": {
+     "n": 4,
+     "share_with_D_edge": 0.0,
+     "share_D_through": 1.0,
+     "share_no_D": 0.0,
+     "run_len_s_all": {
+      "n": 4,
+      "p25": 40.56,
+      "median": 56.17999999999999,
+      "p75": 87.39999999999999,
+      "mean": 71.78
+     },
+     "run_len_s_edge_only": {
+      "n": 0
+     },
+     "share_pre_tag_live_labelled": 0.0
+    },
+    "ball_visible_before": {
+     "n": 0
+    },
+    "skillcorner_ref": {
+     "n": 44,
+     "p25": 63.55,
+     "median": 72.35,
+     "p75": 80.35,
+     "mean": 74.12272727272727
+    },
+    "deficit_to_sc_p25_s_total": 54.93999999999999,
+    "deficit_to_sc_median_s_total": 77.57,
+    "share_below_sc_p25": 0.5,
+    "share_below_sc_median": 0.75
+   },
+   "kickoff_start": {
+    "n": 1,
+    "share_with_D_edge": 1.0,
+    "share_D_through": 0.0,
+    "share_no_D": 0.0,
+    "run_len_s_all": {
+     "n": 1,
+     "p25": 8.16,
+     "median": 8.16,
+     "p75": 8.16,
+     "mean": 8.16
+    },
+    "run_len_s_edge_only": {
+     "n": 1,
+     "p25": 8.16,
+     "median": 8.16,
+     "p75": 8.16,
+     "mean": 8.16
+    },
+    "share_pre_tag_live_labelled": 0.0,
+    "blackout_before": {
+     "n": 0
+    },
+    "ball_visible_before": {
+     "n": 1,
+     "share_with_D_edge": 1.0,
+     "share_D_through": 0.0,
+     "share_no_D": 0.0,
+     "run_len_s_all": {
+      "n": 1,
+      "p25": 8.16,
+      "median": 8.16,
+      "p75": 8.16,
+      "mean": 8.16
+     },
+     "run_len_s_edge_only": {
+      "n": 1,
+      "p25": 8.16,
+      "median": 8.16,
+      "p75": 8.16,
+      "mean": 8.16
+     },
+     "share_pre_tag_live_labelled": 0.0
+    }
+   },
+   "total": {
+    "n_tags_used": 58,
+    "deficit_to_sc_p25_frames": 10684.625000000002,
+    "deficit_to_sc_median_frames": 18029.75,
+    "graded_frames": 158857,
+    "deficit_p25_share_of_graded": 0.06725939052103465,
+    "deficit_median_share_of_graded": 0.11349672976324619,
+    "cand_D_share_graded": 0.4057548612903429
+   }
+  },
+  "a14": {
+   "throw_in": {
+    "n": 26,
+    "share_with_D_edge": 0.038461538461538464,
+    "share_D_through": 0.9230769230769231,
+    "share_no_D": 0.038461538461538464,
+    "run_len_s_all": {
+     "n": 26,
+     "p25": 1.72,
+     "median": 4.359999999999999,
+     "p75": 13.54,
+     "mean": 7.453846153846153
+    },
+    "run_len_s_edge_only": {
+     "n": 1,
+     "p25": 20.0,
+     "median": 20.0,
+     "p75": 20.0,
+     "mean": 20.0
+    },
+    "share_pre_tag_live_labelled": 0.19230769230769232,
+    "blackout_before": {
+     "n": 17,
+     "share_with_D_edge": 0.058823529411764705,
+     "share_D_through": 0.9411764705882353,
+     "share_no_D": 0.0,
+     "run_len_s_all": {
+      "n": 17,
+      "p25": 4.08,
+      "median": 10.56,
+      "p75": 15.04,
+      "mean": 10.512941176470589
+     },
+     "run_len_s_edge_only": {
+      "n": 1,
+      "p25": 20.0,
+      "median": 20.0,
+      "p75": 20.0,
+      "mean": 20.0
+     },
+     "share_pre_tag_live_labelled": 0.058823529411764705
+    },
+    "ball_visible_before": {
+     "n": 9,
+     "share_with_D_edge": 0.0,
+     "share_D_through": 0.8888888888888888,
+     "share_no_D": 0.1111111111111111,
+     "run_len_s_all": {
+      "n": 9,
+      "p25": 0.0,
+      "median": 1.56,
+      "p75": 2.04,
+      "mean": 1.6755555555555555
+     },
+     "run_len_s_edge_only": {
+      "n": 0
+     },
+     "share_pre_tag_live_labelled": 0.4444444444444444
+    },
+    "skillcorner_ref": {
+     "n": 834,
+     "p25": 10.325000000000001,
+     "median": 16.3,
+     "p75": 23.975,
+     "mean": 21.022661870503597
+    },
+    "deficit_to_sc_p25_s_total": 127.56500000000001,
+    "deficit_to_sc_median_s_total": 246.32000000000008,
+    "share_below_sc_p25": 0.6538461538461539,
+    "share_below_sc_median": 0.9230769230769231
+   },
+   "free_kick": {
+    "n": 5,
+    "share_with_D_edge": 0.0,
+    "share_D_through": 1.0,
+    "share_no_D": 0.0,
+    "run_len_s_all": {
+     "n": 5,
+     "p25": 16.12,
+     "median": 20.4,
+     "p75": 28.32,
+     "mean": 20.944
+    },
+    "run_len_s_edge_only": {
+     "n": 0
+    },
+    "share_pre_tag_live_labelled": 0.0,
+    "blackout_before": {
+     "n": 5,
+     "share_with_D_edge": 0.0,
+     "share_D_through": 1.0,
+     "share_no_D": 0.0,
+     "run_len_s_all": {
+      "n": 5,
+      "p25": 16.12,
+      "median": 20.4,
+      "p75": 28.32,
+      "mean": 20.944
+     },
+     "run_len_s_edge_only": {
+      "n": 0
+     },
+     "share_pre_tag_live_labelled": 0.0
+    },
+    "ball_visible_before": {
+     "n": 0
+    },
+    "skillcorner_ref": {
+     "n": 405,
+     "p25": 19.1,
+     "median": 29.3,
+     "p75": 49.8,
+     "mean": 39.946913580246914
+    },
+    "deficit_to_sc_p25_s_total": 20.880000000000003,
+    "deficit_to_sc_median_s_total": 51.16000000000001,
+    "share_below_sc_p25": 0.4,
+    "share_below_sc_median": 0.8
+   },
+   "goal_kick": {
+    "n": 10,
+    "share_with_D_edge": 0.1,
+    "share_D_through": 0.7,
+    "share_no_D": 0.2,
+    "run_len_s_all": {
+     "n": 10,
+     "p25": 1.65,
+     "median": 5.04,
+     "p75": 27.16,
+     "mean": 18.636
+    },
+    "run_len_s_edge_only": {
+     "n": 1,
+     "p25": 5.44,
+     "median": 5.44,
+     "p75": 5.44,
+     "mean": 5.44
+    },
+    "share_pre_tag_live_labelled": 0.3,
+    "blackout_before": {
+     "n": 5,
+     "share_with_D_edge": 0.2,
+     "share_D_through": 0.8,
+     "share_no_D": 0.0,
+     "run_len_s_all": {
+      "n": 5,
+      "p25": 26.56,
+      "median": 27.36,
+      "p75": 57.6,
+      "mean": 35.36
+     },
+     "run_len_s_edge_only": {
+      "n": 1,
+      "p25": 5.44,
+      "median": 5.44,
+      "p75": 5.44,
+      "mean": 5.44
+     },
+     "share_pre_tag_live_labelled": 0.0
+    },
+    "ball_visible_before": {
+     "n": 5,
+     "share_with_D_edge": 0.0,
+     "share_D_through": 0.6,
+     "share_no_D": 0.4,
+     "run_len_s_all": {
+      "n": 5,
+      "p25": 0.0,
+      "median": 0.84,
+      "p75": 4.08,
+      "mean": 1.9119999999999997
+     },
+     "run_len_s_edge_only": {
+      "n": 0
+     },
+     "share_pre_tag_live_labelled": 0.6
+    },
+    "skillcorner_ref": {
+     "n": 261,
+     "p25": 23.7,
+     "median": 33.3,
+     "p75": 42.4,
+     "mean": 35.99808429118774
+    },
+    "deficit_to_sc_p25_s_total": 127.19999999999999,
+    "deficit_to_sc_median_s_total": 197.47999999999996,
+    "share_below_sc_p25": 0.6,
+    "share_below_sc_median": 0.8
+   },
+   "corner": {
+    "n": 12,
+    "share_with_D_edge": 0.16666666666666666,
+    "share_D_through": 0.8333333333333334,
+    "share_no_D": 0.0,
+    "run_len_s_all": {
+     "n": 12,
+     "p25": 18.58,
+     "median": 23.52,
+     "p75": 30.39,
+     "mean": 24.983333333333334
+    },
+    "run_len_s_edge_only": {
+     "n": 2,
+     "p25": 34.25,
+     "median": 37.900000000000006,
+     "p75": 41.550000000000004,
+     "mean": 37.900000000000006
+    },
+    "share_pre_tag_live_labelled": 0.0,
+    "blackout_before": {
+     "n": 12,
+     "share_with_D_edge": 0.16666666666666666,
+     "share_D_through": 0.8333333333333334,
+     "share_no_D": 0.0,
+     "run_len_s_all": {
+      "n": 12,
+      "p25": 18.58,
+      "median": 23.52,
+      "p75": 30.39,
+      "mean": 24.983333333333334
+     },
+     "run_len_s_edge_only": {
+      "n": 2,
+      "p25": 34.25,
+      "median": 37.900000000000006,
+      "p75": 41.550000000000004,
+      "mean": 37.900000000000006
+     },
+     "share_pre_tag_live_labelled": 0.0
+    },
+    "ball_visible_before": {
+     "n": 0
+    },
+    "skillcorner_ref": {
+     "n": 141,
+     "p25": 31.2,
+     "median": 36.7,
+     "p75": 43.0,
+     "mean": 38.54751773049645
+    },
+    "deficit_to_sc_p25_s_total": 93.03999999999999,
+    "deficit_to_sc_median_s_total": 149.10000000000005,
+    "share_below_sc_p25": 0.8333333333333334,
+    "share_below_sc_median": 0.9166666666666666
+   },
+   "goal": {
+    "n": 4,
+    "share_with_D_edge": 0.25,
+    "share_D_through": 0.75,
+    "share_no_D": 0.0,
+    "run_len_s_all": {
+     "n": 4,
+     "p25": 16.189999999999998,
+     "median": 42.980000000000004,
+     "p75": 73.43,
+     "mean": 46.64
+    },
+    "run_len_s_edge_only": {
+     "n": 1,
+     "p25": 18.56,
+     "median": 18.56,
+     "p75": 18.56,
+     "mean": 18.56
+    },
+    "share_pre_tag_live_labelled": 0.0,
+    "blackout_before": {
+     "n": 4,
+     "share_with_D_edge": 0.25,
+     "share_D_through": 0.75,
+     "share_no_D": 0.0,
+     "run_len_s_all": {
+      "n": 4,
+      "p25": 16.189999999999998,
+      "median": 42.980000000000004,
+      "p75": 73.43,
+      "mean": 46.64
+     },
+     "run_len_s_edge_only": {
+      "n": 1,
+      "p25": 18.56,
+      "median": 18.56,
+      "p75": 18.56,
+      "mean": 18.56
+     },
+     "share_pre_tag_live_labelled": 0.0
+    },
+    "ball_visible_before": {
+     "n": 0
+    },
+    "skillcorner_ref": {
+     "n": 44,
+     "p25": 63.55,
+     "median": 72.35,
+     "p75": 80.35,
+     "mean": 74.12272727272727
+    },
+    "deficit_to_sc_p25_s_total": 99.46,
+    "deficit_to_sc_median_s_total": 122.00999999999998,
+    "share_below_sc_p25": 0.5,
+    "share_below_sc_median": 0.75
+   },
+   "kickoff_start": {
+    "n": 1,
+    "share_with_D_edge": 1.0,
+    "share_D_through": 0.0,
+    "share_no_D": 0.0,
+    "run_len_s_all": {
+     "n": 1,
+     "p25": 6.48,
+     "median": 6.48,
+     "p75": 6.48,
+     "mean": 6.48
+    },
+    "run_len_s_edge_only": {
+     "n": 1,
+     "p25": 6.48,
+     "median": 6.48,
+     "p75": 6.48,
+     "mean": 6.48
+    },
+    "share_pre_tag_live_labelled": 0.0,
+    "blackout_before": {
+     "n": 0
+    },
+    "ball_visible_before": {
+     "n": 1,
+     "share_with_D_edge": 1.0,
+     "share_D_through": 0.0,
+     "share_no_D": 0.0,
+     "run_len_s_all": {
+      "n": 1,
+      "p25": 6.48,
+      "median": 6.48,
+      "p75": 6.48,
+      "mean": 6.48
+     },
+     "run_len_s_edge_only": {
+      "n": 1,
+      "p25": 6.48,
+      "median": 6.48,
+      "p75": 6.48,
+      "mean": 6.48
+     },
+     "share_pre_tag_live_labelled": 0.0
+    }
+   },
+   "total": {
+    "n_tags_used": 58,
+    "deficit_to_sc_p25_frames": 11703.624999999998,
+    "deficit_to_sc_median_frames": 19151.75,
+    "graded_frames": 158857,
+    "deficit_p25_share_of_graded": 0.07367396463486027,
+    "deficit_median_share_of_graded": 0.12055968575511308,
+    "cand_D_share_graded": 0.38525214501092175
+   }
+  }
+ },
+ "contest_after10s": {
+  "a5c": {
+   "throw_in": {
+    "n": 26,
+    "share_with_D_edge": 0.7692307692307693,
+    "share_D_through": 0.11538461538461539,
+    "share_no_D": 0.11538461538461539,
+    "run_len_s_all": {
+     "n": 26,
+     "p25": 5.31,
+     "median": 11.3,
+     "p75": 18.93,
+     "mean": 11.972307692307693
+    },
+    "run_len_s_edge_only": {
+     "n": 20,
+     "p25": 9.05,
+     "median": 11.76,
+     "p75": 19.1,
+     "mean": 13.479999999999999
+    },
+    "share_pre_tag_live_labelled": 0.23076923076923078,
+    "blackout_before": {
+     "n": 17,
+     "share_with_D_edge": 0.8823529411764706,
+     "share_D_through": 0.11764705882352941,
+     "share_no_D": 0.0,
+     "run_len_s_all": {
+      "n": 17,
+      "p25": 9.24,
+      "median": 17.04,
+      "p75": 19.84,
+      "mean": 15.602352941176472
+     },
+     "run_len_s_edge_only": {
+      "n": 15,
+      "p25": 9.379999999999999,
+      "median": 17.04,
+      "p75": 19.619999999999997,
+      "mean": 15.157333333333334
+     },
+     "share_pre_tag_live_labelled": 0.058823529411764705
+    },
+    "ball_visible_before": {
+     "n": 9,
+     "share_with_D_edge": 0.5555555555555556,
+     "share_D_through": 0.1111111111111111,
+     "share_no_D": 0.3333333333333333,
+     "run_len_s_all": {
+      "n": 9,
+      "p25": 0.0,
+      "median": 3.8,
+      "p75": 11.28,
+      "mean": 5.115555555555556
+     },
+     "run_len_s_edge_only": {
+      "n": 5,
+      "p25": 4.72,
+      "median": 11.28,
+      "p75": 11.32,
+      "mean": 8.447999999999999
+     },
+     "share_pre_tag_live_labelled": 0.5555555555555556
+    },
+    "skillcorner_ref": {
+     "n": 834,
+     "p25": 10.325000000000001,
+     "median": 16.3,
+     "p75": 23.975,
+     "mean": 21.022661870503597
+    },
+    "deficit_to_sc_p25_s_total": 63.780000000000015,
+    "deficit_to_sc_median_s_total": 154.56000000000003,
+    "share_below_sc_p25": 0.46153846153846156,
+    "share_below_sc_median": 0.6153846153846154
+   },
+   "free_kick": {
+    "n": 5,
+    "share_with_D_edge": 0.8,
+    "share_D_through": 0.2,
+    "share_no_D": 0.0,
+    "run_len_s_all": {
+     "n": 5,
+     "p25": 21.0,
+     "median": 24.16,
+     "p75": 36.2,
+     "mean": 26.136000000000003
+    },
+    "run_len_s_edge_only": {
+     "n": 4,
+     "p25": 18.33,
+     "median": 22.58,
+     "p75": 27.17,
+     "mean": 22.92
+    },
+    "share_pre_tag_live_labelled": 0.0,
+    "blackout_before": {
+     "n": 5,
+     "share_with_D_edge": 0.8,
+     "share_D_through": 0.2,
+     "share_no_D": 0.0,
+     "run_len_s_all": {
+      "n": 5,
+      "p25": 21.0,
+      "median": 24.16,
+      "p75": 36.2,
+      "mean": 26.136000000000003
+     },
+     "run_len_s_edge_only": {
+      "n": 4,
+      "p25": 18.33,
+      "median": 22.58,
+      "p75": 27.17,
+      "mean": 22.92
+     },
+     "share_pre_tag_live_labelled": 0.0
+    },
+    "ball_visible_before": {
+     "n": 0
+    },
+    "skillcorner_ref": {
+     "n": 405,
+     "p25": 19.1,
+     "median": 29.3,
+     "p75": 49.8,
+     "mean": 39.946913580246914
+    },
+    "deficit_to_sc_p25_s_total": 8.780000000000001,
+    "deficit_to_sc_median_s_total": 32.42,
+    "share_below_sc_p25": 0.2,
+    "share_below_sc_median": 0.6
+   },
+   "goal_kick": {
+    "n": 10,
+    "share_with_D_edge": 0.8,
+    "share_D_through": 0.0,
+    "share_no_D": 0.2,
+    "run_len_s_all": {
+     "n": 10,
+     "p25": 4.8500000000000005,
+     "median": 9.620000000000001,
+     "p75": 33.83,
+     "mean": 21.879999999999995
+    },
+    "run_len_s_edge_only": {
+     "n": 8,
+     "p25": 8.0,
+     "median": 19.34,
+     "p75": 42.18,
+     "mean": 27.35
+    },
+    "share_pre_tag_live_labelled": 0.3,
+    "blackout_before": {
+     "n": 5,
+     "share_with_D_edge": 1.0,
+     "share_D_through": 0.0,
+     "share_no_D": 0.0,
+     "run_len_s_all": {
+      "n": 5,
+      "p25": 28.04,
+      "median": 35.76,
+      "p75": 61.44,
+      "mean": 39.032
+     },
+     "run_len_s_edge_only": {
+      "n": 5,
+      "p25": 28.04,
+      "median": 35.76,
+      "p75": 61.44,
+      "mean": 39.032
+     },
+     "share_pre_tag_live_labelled": 0.0
+    },
+    "ball_visible_before": {
+     "n": 5,
+     "share_with_D_edge": 0.6,
+     "share_D_through": 0.0,
+     "share_no_D": 0.4,
+     "run_len_s_all": {
+      "n": 5,
+      "p25": 0.0,
+      "median": 4.4,
+      "p75": 8.6,
+      "mean": 4.728
+     },
+     "run_len_s_edge_only": {
+      "n": 3,
+      "p25": 6.5,
+      "median": 8.6,
+      "p75": 9.620000000000001,
+      "mean": 7.88
+     },
+     "share_pre_tag_live_labelled": 0.6
+    },
+    "skillcorner_ref": {
+     "n": 261,
+     "p25": 23.7,
+     "median": 33.3,
+     "p75": 42.4,
+     "mean": 35.99808429118774
+    },
+    "deficit_to_sc_p25_s_total": 112.36,
+    "deficit_to_sc_median_s_total": 175.21999999999997,
+    "share_below_sc_p25": 0.6,
+    "share_below_sc_median": 0.7
+   },
+   "corner": {
+    "n": 12,
+    "share_with_D_edge": 1.0,
+    "share_D_through": 0.0,
+    "share_no_D": 0.0,
+    "run_len_s_all": {
+     "n": 12,
+     "p25": 24.060000000000002,
+     "median": 26.56,
+     "p75": 29.09,
+     "mean": 27.23
+    },
+    "run_len_s_edge_only": {
+     "n": 12,
+     "p25": 24.060000000000002,
+     "median": 26.56,
+     "p75": 29.09,
+     "mean": 27.23
+    },
+    "share_pre_tag_live_labelled": 0.0,
+    "blackout_before": {
+     "n": 12,
+     "share_with_D_edge": 1.0,
+     "share_D_through": 0.0,
+     "share_no_D": 0.0,
+     "run_len_s_all": {
+      "n": 12,
+      "p25": 24.060000000000002,
+      "median": 26.56,
+      "p75": 29.09,
+      "mean": 27.23
+     },
+     "run_len_s_edge_only": {
+      "n": 12,
+      "p25": 24.060000000000002,
+      "median": 26.56,
+      "p75": 29.09,
+      "mean": 27.23
+     },
+     "share_pre_tag_live_labelled": 0.0
+    },
+    "ball_visible_before": {
+     "n": 0
+    },
+    "skillcorner_ref": {
+     "n": 141,
+     "p25": 31.2,
+     "median": 36.7,
+     "p75": 43.0,
+     "mean": 38.54751773049645
+    },
+    "deficit_to_sc_p25_s_total": 54.19999999999999,
+    "deficit_to_sc_median_s_total": 113.64000000000001,
+    "share_below_sc_p25": 0.8333333333333334,
+    "share_below_sc_median": 1.0
+   },
+   "goal": {
+    "n": 4,
+    "share_with_D_edge": 0.75,
+    "share_D_through": 0.25,
+    "share_no_D": 0.0,
+    "run_len_s_all": {
+     "n": 4,
+     "p25": 43.62,
+     "median": 59.94,
+     "p75": 91.01,
+     "mean": 74.69
+    },
+    "run_len_s_edge_only": {
+     "n": 3,
+     "p25": 59.94,
+     "median": 70.76,
+     "p75": 111.25999999999999,
+     "mean": 90.54666666666667
+    },
+    "share_pre_tag_live_labelled": 0.0,
+    "blackout_before": {
+     "n": 4,
+     "share_with_D_edge": 0.75,
+     "share_D_through": 0.25,
+     "share_no_D": 0.0,
+     "run_len_s_all": {
+      "n": 4,
+      "p25": 43.62,
+      "median": 59.94,
+      "p75": 91.01,
+      "mean": 74.69
+     },
+     "run_len_s_edge_only": {
+      "n": 3,
+      "p25": 59.94,
+      "median": 70.76,
+      "p75": 111.25999999999999,
+      "mean": 90.54666666666667
+     },
+     "share_pre_tag_live_labelled": 0.0
+    },
+    "ball_visible_before": {
+     "n": 0
+    },
+    "skillcorner_ref": {
+     "n": 44,
+     "p25": 63.55,
+     "median": 72.35,
+     "p75": 80.35,
+     "mean": 74.12272727272727
+    },
+    "deficit_to_sc_p25_s_total": 50.85999999999999,
+    "deficit_to_sc_median_s_total": 70.04999999999998,
+    "share_below_sc_p25": 0.5,
+    "share_below_sc_median": 0.75
+   },
+   "kickoff_start": {
+    "n": 1,
+    "share_with_D_edge": 1.0,
+    "share_D_through": 0.0,
+    "share_no_D": 0.0,
+    "run_len_s_all": {
+     "n": 1,
+     "p25": 8.16,
+     "median": 8.16,
+     "p75": 8.16,
+     "mean": 8.16
+    },
+    "run_len_s_edge_only": {
+     "n": 1,
+     "p25": 8.16,
+     "median": 8.16,
+     "p75": 8.16,
+     "mean": 8.16
+    },
+    "share_pre_tag_live_labelled": 0.0,
+    "blackout_before": {
+     "n": 0
+    },
+    "ball_visible_before": {
+     "n": 1,
+     "share_with_D_edge": 1.0,
+     "share_D_through": 0.0,
+     "share_no_D": 0.0,
+     "run_len_s_all": {
+      "n": 1,
+      "p25": 8.16,
+      "median": 8.16,
+      "p75": 8.16,
+      "mean": 8.16
+     },
+     "run_len_s_edge_only": {
+      "n": 1,
+      "p25": 8.16,
+      "median": 8.16,
+      "p75": 8.16,
+      "mean": 8.16
+     },
+     "share_pre_tag_live_labelled": 0.0
+    }
+   },
+   "total": {
+    "n_tags_used": 58,
+    "deficit_to_sc_p25_frames": 7249.5,
+    "deficit_to_sc_median_frames": 13647.25,
+    "graded_frames": 158857,
+    "deficit_p25_share_of_graded": 0.045635382765631984,
+    "deficit_median_share_of_graded": 0.08590902509804416,
+    "cand_D_share_graded": 0.4057548612903429
+   }
+  },
+  "a14": {
+   "throw_in": {
+    "n": 26,
+    "share_with_D_edge": 0.8461538461538461,
+    "share_D_through": 0.11538461538461539,
+    "share_no_D": 0.038461538461538464,
+    "run_len_s_all": {
+     "n": 26,
+     "p25": 6.2,
+     "median": 10.059999999999999,
+     "p75": 18.43,
+     "mean": 11.524615384615384
+    },
+    "run_len_s_edge_only": {
+     "n": 22,
+     "p25": 7.09,
+     "median": 10.92,
+     "p75": 18.43,
+     "mean": 11.818181818181818
+    },
+    "share_pre_tag_live_labelled": 0.19230769230769232,
+    "blackout_before": {
+     "n": 17,
+     "share_with_D_edge": 0.8823529411764706,
+     "share_D_through": 0.11764705882352941,
+     "share_no_D": 0.0,
+     "run_len_s_all": {
+      "n": 17,
+      "p25": 8.68,
+      "median": 14.48,
+      "p75": 19.0,
+      "mean": 14.454117647058823
+     },
+     "run_len_s_edge_only": {
+      "n": 15,
+      "p25": 8.7,
+      "median": 14.48,
+      "p75": 18.96,
+      "mean": 13.874666666666666
+     },
+     "share_pre_tag_live_labelled": 0.058823529411764705
+    },
+    "ball_visible_before": {
+     "n": 9,
+     "share_with_D_edge": 0.7777777777777778,
+     "share_D_through": 0.1111111111111111,
+     "share_no_D": 0.1111111111111111,
+     "run_len_s_all": {
+      "n": 9,
+      "p25": 4.2,
+      "median": 5.4,
+      "p75": 8.76,
+      "mean": 5.9911111111111115
+     },
+     "run_len_s_edge_only": {
+      "n": 7,
+      "p25": 5.380000000000001,
+      "median": 6.0,
+      "p75": 9.879999999999999,
+      "mean": 7.411428571428572
+     },
+     "share_pre_tag_live_labelled": 0.4444444444444444
+    },
+    "skillcorner_ref": {
+     "n": 834,
+     "p25": 10.325000000000001,
+     "median": 16.3,
+     "p75": 23.975,
+     "mean": 21.022661870503597
+    },
+    "deficit_to_sc_p25_s_total": 57.625000000000014,
+    "deficit_to_sc_median_s_total": 157.96,
+    "share_below_sc_p25": 0.5,
+    "share_below_sc_median": 0.6923076923076923
+   },
+   "free_kick": {
+    "n": 5,
+    "share_with_D_edge": 0.6,
+    "share_D_through": 0.4,
+    "share_no_D": 0.0,
+    "run_len_s_all": {
+     "n": 5,
+     "p25": 21.4,
+     "median": 24.2,
+     "p75": 28.32,
+     "mean": 23.864
+    },
+    "run_len_s_edge_only": {
+     "n": 3,
+     "p25": 14.059999999999999,
+     "median": 21.4,
+     "p75": 22.799999999999997,
+     "mean": 17.439999999999998
+    },
+    "share_pre_tag_live_labelled": 0.0,
+    "blackout_before": {
+     "n": 5,
+     "share_with_D_edge": 0.6,
+     "share_D_through": 0.4,
+     "share_no_D": 0.0,
+     "run_len_s_all": {
+      "n": 5,
+      "p25": 21.4,
+      "median": 24.2,
+      "p75": 28.32,
+      "mean": 23.864
+     },
+     "run_len_s_edge_only": {
+      "n": 3,
+      "p25": 14.059999999999999,
+      "median": 21.4,
+      "p75": 22.799999999999997,
+      "mean": 17.439999999999998
+     },
+     "share_pre_tag_live_labelled": 0.0
+    },
+    "ball_visible_before": {
+     "n": 0
+    },
+    "skillcorner_ref": {
+     "n": 405,
+     "p25": 19.1,
+     "median": 29.3,
+     "p75": 49.8,
+     "mean": 39.946913580246914
+    },
+    "deficit_to_sc_p25_s_total": 12.380000000000003,
+    "deficit_to_sc_median_s_total": 36.56,
+    "share_below_sc_p25": 0.2,
+    "share_below_sc_median": 0.8
+   },
+   "goal_kick": {
+    "n": 10,
+    "share_with_D_edge": 0.8,
+    "share_D_through": 0.0,
+    "share_no_D": 0.2,
+    "run_len_s_all": {
+     "n": 10,
+     "p25": 5.640000000000001,
+     "median": 9.04,
+     "p75": 33.410000000000004,
+     "mean": 22.916
+    },
+    "run_len_s_edge_only": {
+     "n": 8,
+     "p25": 7.17,
+     "median": 21.3,
+     "p75": 41.440000000000005,
+     "mean": 28.645
+    },
+    "share_pre_tag_live_labelled": 0.3,
+    "blackout_before": {
+     "n": 5,
+     "share_with_D_edge": 1.0,
+     "share_D_through": 0.0,
+     "share_no_D": 0.0,
+     "run_len_s_all": {
+      "n": 5,
+      "p25": 32.0,
+      "median": 33.88,
+      "p75": 64.12,
+      "mean": 40.968
+     },
+     "run_len_s_edge_only": {
+      "n": 5,
+      "p25": 32.0,
+      "median": 33.88,
+      "p75": 64.12,
+      "mean": 40.968
+     },
+     "share_pre_tag_live_labelled": 0.0
+    },
+    "ball_visible_before": {
+     "n": 5,
+     "share_with_D_edge": 0.6,
+     "share_D_through": 0.0,
+     "share_no_D": 0.4,
+     "run_len_s_all": {
+      "n": 5,
+      "p25": 0.0,
+      "median": 6.24,
+      "p75": 7.48,
+      "mean": 4.864
+     },
+     "run_len_s_edge_only": {
+      "n": 3,
+      "p25": 6.86,
+      "median": 7.48,
+      "p75": 9.04,
+      "mean": 8.106666666666667
+     },
+     "share_pre_tag_live_labelled": 0.6
+    },
+    "skillcorner_ref": {
+     "n": 261,
+     "p25": 23.7,
+     "median": 33.3,
+     "p75": 42.4,
+     "mean": 35.99808429118774
+    },
+    "deficit_to_sc_p25_s_total": 112.44,
+    "deficit_to_sc_median_s_total": 171.33999999999997,
+    "share_below_sc_p25": 0.6,
+    "share_below_sc_median": 0.7
+   },
+   "corner": {
+    "n": 12,
+    "share_with_D_edge": 1.0,
+    "share_D_through": 0.0,
+    "share_no_D": 0.0,
+    "run_len_s_all": {
+     "n": 12,
+     "p25": 24.009999999999998,
+     "median": 28.439999999999998,
+     "p75": 31.5,
+     "mean": 29.159999999999997
+    },
+    "run_len_s_edge_only": {
+     "n": 12,
+     "p25": 24.009999999999998,
+     "median": 28.439999999999998,
+     "p75": 31.5,
+     "mean": 29.159999999999997
+    },
+    "share_pre_tag_live_labelled": 0.0,
+    "blackout_before": {
+     "n": 12,
+     "share_with_D_edge": 1.0,
+     "share_D_through": 0.0,
+     "share_no_D": 0.0,
+     "run_len_s_all": {
+      "n": 12,
+      "p25": 24.009999999999998,
+      "median": 28.439999999999998,
+      "p75": 31.5,
+      "mean": 29.159999999999997
+     },
+     "run_len_s_edge_only": {
+      "n": 12,
+      "p25": 24.009999999999998,
+      "median": 28.439999999999998,
+      "p75": 31.5,
+      "mean": 29.159999999999997
+     },
+     "share_pre_tag_live_labelled": 0.0
+    },
+    "ball_visible_before": {
+     "n": 0
+    },
+    "skillcorner_ref": {
+     "n": 141,
+     "p25": 31.2,
+     "median": 36.7,
+     "p75": 43.0,
+     "mean": 38.54751773049645
+    },
+    "deficit_to_sc_p25_s_total": 50.35999999999999,
+    "deficit_to_sc_median_s_total": 102.36000000000004,
+    "share_below_sc_p25": 0.75,
+    "share_below_sc_median": 0.8333333333333334
+   },
+   "goal": {
+    "n": 4,
+    "share_with_D_edge": 0.75,
+    "share_D_through": 0.25,
+    "share_no_D": 0.0,
+    "run_len_s_all": {
+     "n": 4,
+     "p25": 16.189999999999998,
+     "median": 44.620000000000005,
+     "p75": 76.72,
+     "mean": 48.290000000000006
+    },
+    "run_len_s_edge_only": {
+     "n": 3,
+     "p25": 44.620000000000005,
+     "median": 70.68,
+     "p75": 82.76,
+     "mean": 61.36000000000001
+    },
+    "share_pre_tag_live_labelled": 0.0,
+    "blackout_before": {
+     "n": 4,
+     "share_with_D_edge": 0.75,
+     "share_D_through": 0.25,
+     "share_no_D": 0.0,
+     "run_len_s_all": {
+      "n": 4,
+      "p25": 16.189999999999998,
+      "median": 44.620000000000005,
+      "p75": 76.72,
+      "mean": 48.290000000000006
+     },
+     "run_len_s_edge_only": {
+      "n": 3,
+      "p25": 44.620000000000005,
+      "median": 70.68,
+      "p75": 82.76,
+      "mean": 61.36000000000001
+     },
+     "share_pre_tag_live_labelled": 0.0
+    },
+    "ball_visible_before": {
+     "n": 0
+    },
+    "skillcorner_ref": {
+     "n": 44,
+     "p25": 63.55,
+     "median": 72.35,
+     "p75": 80.35,
+     "mean": 74.12272727272727
+    },
+    "deficit_to_sc_p25_s_total": 99.46,
+    "deficit_to_sc_median_s_total": 118.72999999999998,
+    "share_below_sc_p25": 0.5,
+    "share_below_sc_median": 0.75
+   },
+   "kickoff_start": {
+    "n": 1,
+    "share_with_D_edge": 1.0,
+    "share_D_through": 0.0,
+    "share_no_D": 0.0,
+    "run_len_s_all": {
+     "n": 1,
+     "p25": 6.48,
+     "median": 6.48,
+     "p75": 6.48,
+     "mean": 6.48
+    },
+    "run_len_s_edge_only": {
+     "n": 1,
+     "p25": 6.48,
+     "median": 6.48,
+     "p75": 6.48,
+     "mean": 6.48
+    },
+    "share_pre_tag_live_labelled": 0.0,
+    "blackout_before": {
+     "n": 0
+    },
+    "ball_visible_before": {
+     "n": 1,
+     "share_with_D_edge": 1.0,
+     "share_D_through": 0.0,
+     "share_no_D": 0.0,
+     "run_len_s_all": {
+      "n": 1,
+      "p25": 6.48,
+      "median": 6.48,
+      "p75": 6.48,
+      "mean": 6.48
+     },
+     "run_len_s_edge_only": {
+      "n": 1,
+      "p25": 6.48,
+      "median": 6.48,
+      "p75": 6.48,
+      "mean": 6.48
+     },
+     "share_pre_tag_live_labelled": 0.0
+    }
+   },
+   "total": {
+    "n_tags_used": 58,
+    "deficit_to_sc_p25_frames": 8306.625,
+    "deficit_to_sc_median_frames": 14673.750000000002,
+    "graded_frames": 158857,
+    "deficit_p25_share_of_graded": 0.05228995259887824,
+    "deficit_median_share_of_graded": 0.09237081148454271,
+    "cand_D_share_graded": 0.38525214501092175
+   }
+  }
+ }
+}
