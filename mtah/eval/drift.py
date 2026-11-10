@@ -60,7 +60,7 @@ def drift_report(labels, match, tags, blackout_mask, code_table=None):
         "n_spells": len(spells),
         "spells_per_HA_min": len(spells) / max(1e-9, ha_frames / fps / 60),
         # spells are segmented inside the graded halves only, so every counted spell lies on graded frames; the real
-        # spell-rate band (select.REAL_SPELL_RATE_BAND, 17 truth spells / 5 graded min) is in this unit
+        # spell-rate band (select.REAL_SPELL_RATE_BAND = [2.28, 4.10], other-game ctrl truth rates, applied to R / rho) is in this unit
         "spells_per_graded_min": len(spells) / max(1e-9, int(g.sum()) / fps / 60),
         "pred_D_share": float((labels[g] == "D").mean()),
         "spell_len_median_s": float(np.median([(e - s) / fps for s, e in spells])) if spells else 0.0,

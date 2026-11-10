@@ -164,8 +164,8 @@ def test_run_selection_two_policies_pathcrf_and_real(tmp_path, monkeypatch):
     want = sel.choose_plausible(summ, {int(k): v for k, v in b["real_plausibility"].items()})
     assert b["cell"] == grid[want] == best
     for v in b["real_plausibility"].values():
-        assert v["real_plausible"] == sel.is_real_plausible(v["non_blackout_D_share"], v["spells_per_graded_min"])
-        assert v["spell_rate_ok"] == (sel.REAL_SPELL_RATE_BAND[0] <= v["spells_per_graded_min"] <= sel.REAL_SPELL_RATE_BAND[1])
+        assert v["real_plausible"] == sel.is_real_plausible(v["non_blackout_D_share"], v["spells_per_graded_min"], rho=v["rho"])
+        assert v["spell_rate_ok"] == (sel.REAL_SPELL_RATE_BAND[0] <= v["spells_per_graded_min"] / v["rho"] <= sel.REAL_SPELL_RATE_BAND[1])
         assert v["real_plausible"] == (v["d_share_ok"] and v["spell_rate_ok"])
     assert b["real_bands"] == {"non_blackout_D_share": list(sel.REAL_D_SHARE_BAND),
                                "spells_per_graded_min": list(sel.REAL_SPELL_RATE_BAND)}

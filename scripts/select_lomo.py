@@ -254,6 +254,8 @@ def real_plausibility(sim_dir, seeds, keys, base, grid, ranked, data_dir, out, t
     if shared is not None:
         shared.update(lengths=lengths, by_ew=by_ew)
     mr = dict(zip(ranked["cell"].astype(int), ranked["mean_rank"]))
+    # rho: each cell's simulator count ratio (n_pred / n_gt on ctrl truth); the rate band applies to R / rho
+    rho_of = (dict(zip(ranked["cell"].astype(int), ranked["ctrl_Dfull_ratio"])) if "ctrl_Dfull_ratio" in ranked.columns else {})
     rows, plaus = [], {}
     for rank, i in enumerate(top, 1):
         cfg = apply_cell(base, grid[i]); cfg.decoder.lengths = lengths
@@ -262,7 +264,8 @@ def real_plausibility(sim_dir, seeds, keys, base, grid, ranked, data_dir, out, t
                       merge_model=merge if uses_merge(grid[i]) else None)
         d = drift_report(lab, m, tags, mask, code_table=cfg.tag.code_table)
         rec = {"rank": rank, "mean_rank": float(mr[i]), **{k: float(d[k]) for k in REAL_KEYS}}
-        rec.update(real_band_checks(rec["non_blackout_D_share"], rec["spells_per_graded_min"]))
+        rho = float(rho_of.get(i, 1.0)); rec["rho"] = rho
+        rec.update(real_band_checks(rec["non_blackout_D_share"], rec["spells_per_graded_min"], rho=rho))
         plaus[i] = rec
         rows.append({"cell": i, **grid[i], **rec})
     tab = pd.DataFrame(rows); tab.to_csv(out / "summary_real.csv", index=False)

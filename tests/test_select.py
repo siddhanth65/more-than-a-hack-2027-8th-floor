@@ -116,16 +116,31 @@ def _ranked(cells):
 
 
 def test_is_real_plausible_bounds():
-    from mtah.select import REAL_SPELL_RATE_BAND, is_real_plausible, real_band_checks
-    assert REAL_SPELL_RATE_BAND == (2.7, 4.3)
-    assert is_real_plausible(0.10, 3.4) and is_real_plausible(0.18, 3.4) and is_real_plausible(0.14, 3.4)
-    assert not is_real_plausible(0.099, 3.4) and not is_real_plausible(0.181, 3.4) and not is_real_plausible(float("nan"), 3.4)
-    # both bands must hold: the spell rate gate (spells per GRADED minute; a3b real 5.2 fails, truth 17/5 = 3.4 passes)
-    assert is_real_plausible(0.14, 2.7) and is_real_plausible(0.14, 4.3)
-    assert not is_real_plausible(0.14, 2.69) and not is_real_plausible(0.14, 4.31) and not is_real_plausible(0.14, 5.2)
+    # bands anchored on other games (plan9-preregistration): visible-dead 0.145 x [0.8, 1.25], implied truth rate R / rho
+    from mtah.select import REAL_D_SHARE_BAND, REAL_SPELL_RATE_BAND, is_real_plausible, real_band_checks
+    assert REAL_D_SHARE_BAND == (0.116, 0.181) and REAL_SPELL_RATE_BAND == (2.28, 4.10)
+    assert is_real_plausible(0.116, 3.0) and is_real_plausible(0.181, 3.0) and is_real_plausible(0.14, 3.0)
+    assert not is_real_plausible(0.115, 3.0) and not is_real_plausible(0.182, 3.0) and not is_real_plausible(float("nan"), 3.0)
+    # both bands must hold: the spell-rate gate (spells per GRADED minute; a3b real 5.2 fails)
+    assert is_real_plausible(0.14, 2.28) and is_real_plausible(0.14, 4.10)
+    assert not is_real_plausible(0.14, 2.27) and not is_real_plausible(0.14, 4.11) and not is_real_plausible(0.14, 5.2)
     assert not is_real_plausible(0.14, float("nan")) and not is_real_plausible(0.05, 5.2)
-    assert real_band_checks(0.14, 5.2) == {"d_share_ok": True, "spell_rate_ok": False, "real_plausible": False}
-    assert real_band_checks(0.05, 3.0) == {"d_share_ok": False, "spell_rate_ok": True, "real_plausible": False}
+    assert real_band_checks(0.14, 5.2)["d_share_ok"] and not real_band_checks(0.14, 5.2)["spell_rate_ok"]
+    assert real_band_checks(0.05, 3.0)["spell_rate_ok"] and not real_band_checks(0.05, 3.0)["d_share_ok"]
+    assert not real_band_checks(0.05, 3.0)["real_plausible"] and not real_band_checks(0.14, 5.2)["real_plausible"]
+
+
+def test_is_real_plausible_divides_by_rho():
+    # R / rho in the band, not R: a configuration that over-counts on the simulator (rho 1.5) is judged on R / 1.5
+    from mtah.select import is_real_plausible, real_band_checks
+    assert not is_real_plausible(0.14, 4.5) and is_real_plausible(0.14, 4.5, rho=1.5)          # 4.5 / 1.5 = 3.0
+    assert is_real_plausible(0.14, 3.0) and not is_real_plausible(0.14, 3.0, rho=0.6)          # 3.0 / 0.6 = 5.0
+    assert is_real_plausible(0.14, 2.28 * 0.8, rho=0.8) and not is_real_plausible(0.14, 2.27 * 0.8, rho=0.8)
+    assert is_real_plausible(0.14, 4.10 * 1.2, rho=1.2) and not is_real_plausible(0.14, 4.11 * 1.2, rho=1.2)
+    c = real_band_checks(0.14, 3.6, rho=1.2)
+    assert abs(c["implied_truth_rate"] - 3.0) < 1e-12 and c["real_plausible"]
+    for bad in (0.0, -1.0, float("nan")):                                                     # unusable rho never passes
+        assert not is_real_plausible(0.14, 3.0, rho=bad)
 
 
 def test_choose_plausible_picks_highest_ranked_plausible():
