@@ -20,6 +20,8 @@ for h, a, b in half_runs(m.half):
             sl = np.flatnonzero((team == k) & (~np.isnan(pos[:, :, 0]).all(0)))
             cnt = (~miss[:, sl]).sum(0); sel = np.sort(sl[np.argsort(-cnt, kind="stable")[:11]])
             xs = np.array([np.nanmean(seg[:, s, 0]) for s in sel])
+            if np.isnan(xs).all():
+                gks[k] = False; continue
             g = sel[np.nanargmin(xs)] if k == left else sel[np.nanargmax(xs)]
             gx = np.nanmean(seg[:, g, 0]); gks[k] = abs(gx) > 30 and ((gx < 0) == (k == left))
             # how many selected nodes had presence < half of the chunk
