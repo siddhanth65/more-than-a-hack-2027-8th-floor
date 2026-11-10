@@ -122,7 +122,8 @@ def _variants(fam, mdl, m, tags, key, cfg, ev, ev2, strong, seq, streams):
 def run_family(fam, mdl, m, tags, key, ball_only):
     from mtah.pipeline import compute_evidence, compute_strong, predict
     import mtah.evidence.seqstream as sq
-    cfg = mdl["cfg"]; cfg.pathcrf.cache_dir = str(ROOT / "runs" / "cache" / "pathcrf")
+    cfg = mdl["cfg"]; cfg.pathcrf.cache_dir = os.environ.get("ARB_PCRF_CACHE", str(ROOT / "runs" / "cache" / "pathcrf"))
+    cfg.pathcrf.smooth_s = float(os.environ.get("ARB_PCRF_SMOOTH", "0"))   # FIX: real feed needs 1.0 (runs/arb/FIX_NOTES.md)
     ev = compute_evidence(m, tags, cfg, mdl["dead"], cache_key=key, team_model=mdl["team"])
     strong = compute_strong(m, cfg)
     streams = {"pathcrf": ev["pathcrf"], "teamctrl": ev["teamctrl"]}
