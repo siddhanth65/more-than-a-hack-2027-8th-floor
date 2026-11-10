@@ -1,0 +1,122 @@
+{
+ "candidate": {
+  "n_spells": 304,
+  "spells_per_HA_min": 4.819684606603814,
+  "spells_per_graded_min": 2.8705061785127506,
+  "pred_D_share": 0.4044203277161221,
+  "spell_len_median_s": 7.32,
+  "share_changes_in_blackout": 0.12299465240641712,
+  "D_starts_near_sp_share": 0.06837606837606838,
+  "tag_agreement": 0.5974995566403054,
+  "tag_agreement_implied": 0.8167392201600564,
+  "non_blackout_D_share": 0.17775700213967655,
+  "blackout_D_share": 0.8312070123223781
+ },
+ "reference": {
+  "D_starts_near_sp_share": {
+   "min": 0.0,
+   "median": 0.04124149659863945,
+   "max": 0.1
+  },
+  "blackout_D_share": {
+   "min": 0.274607748959334,
+   "median": 0.43675612160904553,
+   "max": 0.5908831334609829
+  },
+  "n_spells": {
+   "min": 125.0,
+   "median": 154.5,
+   "max": 169.0
+  },
+  "non_blackout_D_share": {
+   "min": 0.2157447376618753,
+   "median": 0.32347250938708516,
+   "max": 0.3664277234955712
+  },
+  "pred_D_share": {
+   "min": 0.26841793117414764,
+   "median": 0.35127814457142803,
+   "max": 0.43395474295433106
+  },
+  "share_changes_in_blackout": {
+   "min": 0.16822429906542055,
+   "median": 0.28014069264069263,
+   "max": 0.432
+  },
+  "spell_len_median_s": {
+   "min": 6.76,
+   "median": 8.39,
+   "max": 10.2
+  },
+  "spells_per_HA_min": {
+   "min": 3.8097366710013,
+   "median": 5.0397169584574195,
+   "max": 5.979901868277033
+  },
+  "spells_per_graded_min": {
+   "min": 2.712241975380076,
+   "median": 3.1849027815011093,
+   "max": 3.651474994238304
+  },
+  "tag_agreement": {
+   "min": 0.6621176245328425,
+   "median": 0.7516986207338823,
+   "max": 0.8057407734613172
+  },
+  "tag_agreement_implied": {
+   "min": 0.6621176245328425,
+   "median": 0.7516986207338823,
+   "max": 0.8057407734613172
+  }
+ },
+ "out_of_range": [
+  "share_changes_in_blackout",
+  "tag_agreement",
+  "tag_agreement_implied",
+  "non_blackout_D_share",
+  "blackout_D_share"
+ ],
+ "per_half": {
+  "H1": {
+   "tag_agreement_implied": 0.8406300621793369,
+   "HA_changes_in_blackout": 12
+  },
+  "H2": {
+   "tag_agreement_implied": 0.7936108518222427,
+   "HA_changes_in_blackout": 11
+  }
+ },
+ "bands": {
+  "new": {
+   "visible_dead": [
+    0.116,
+    0.181
+   ],
+   "implied_rate_R_over_rho": [
+    2.28,
+    4.1
+   ]
+  },
+  "old": {
+   "visible_dead": [
+    0.1,
+    0.18
+   ],
+   "spell_rate_R": [
+    2.7,
+    4.3
+   ]
+  },
+  "values": {
+   "visible_dead": 0.17775700213967655,
+   "R": 2.8705061785127506,
+   "rho": 0.8882602145029733,
+   "R_over_rho": 3.2316050315491665,
+   "admissible_new": true,
+   "admissible_old": true
+  },
+  "lomo_ctrl_Dfull": 0.5621591560970424,
+  "lomo_raw_Dfull": 0.5740187486500713,
+  "pathcrf_smooth_s": 1.0
+ }
+}

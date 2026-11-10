@@ -1,0 +1,25 @@
+{
+ "candidate": "a17",
+ "base": "WORKDIR/possession\\runs\\select\\a14f",
+ "pathcrf_smooth_s": 1.0,
+ "note": "simulator inputs unchanged (smooth_s 0 in the simulator caches); smoothing is a property of the real feed (runs/arb/FIX_NOTES.md)",
+ "calibration": {
+  "rule": "simulator-best (mean rank, 4 variants) admissible cell on the FIXED real evidence: visible-dead [0.116, 0.181], R/rho [2.28, 4.10]",
+  "chosen": {
+   "dead_offset": -3.0,
+   "seq_d_offset": -0.5,
+   "ctrl_Dfull": 0.5621591560970424,
+   "ctrl_Dnarrow": 0.5234802423339365,
+   "raw_Dfull": 0.5740187486500713,
+   "raw_Dnarrow": 0.5279949242363772,
+   "rho": 0.8882602145029733,
+   "real_vis_dead": 0.17775700213967655,
+   "R": 2.8705061785127506,
+   "real_tag_implied": 0.8167392201600564,
+   "real_pred_D": 0.4044203277161221,
+   "R_over_rho": 3.2316050315491665,
+   "admissible": true,
+   "mean_rank": 7.0
+  }
+ }
+}
