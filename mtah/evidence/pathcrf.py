@@ -35,12 +35,29 @@ class PathCRFParams:
     conf_alpha: float = 1.0      # confidence = 1 - conf_alpha * imputed_frac (imputed nodes are the main damage)
     none_k: float = 0.0          # confidence *= (1 - p_none) ** none_k (out-of-pitch mass = ball likely dead); 0 = off
     threads: int = 4
+    smooth_s: float = 0.0        # input pre-smoothing: centred moving average of the player positions over this many seconds
+                                 # (NaN-aware, visible frames only); 0 = off. The real tactical feed needs 1.0 (runs/arb/FIX_NOTES.md)
     # repo, python, cache_dir, threads are runtime settings: never serialised (see PipelineConfig.to_dict)
 
 
-def write_half_input(match, a, b, path):
+def smooth_positions(pos, fps, seconds):
+    """NaN-aware centred moving average of pos (F, S, 2) over `seconds` along time; only frames with a position are
+    changed (missing stays missing). seconds <= 0 or a window under 2 frames: unchanged (same object)."""
+    w = int(round(seconds * fps))
+    if w < 2:
+        return pos
+    from scipy.ndimage import uniform_filter1d
+    v = np.isfinite(pos[..., 0])
+    P = np.where(v[..., None], pos, 0.0).astype(np.float32)
+    num = uniform_filter1d(P, w, axis=0, mode="nearest")
+    den = uniform_filter1d(v.astype(np.float32), w, axis=0, mode="nearest")
+    return np.where(v[..., None], num / np.maximum(den, 1e-6)[..., None], np.nan).astype(np.float32)
+
+
+def write_half_input(match, a, b, path, smooth_s=0.0):
     """Hand-off file for one graded half (frames a:b): the inputs of run_infer.py."""
-    np.savez(path, pos=match.pos[a:b].astype(np.float32), team=match.team.astype(np.int8),
+    pos = smooth_positions(match.pos[a:b], match.fps, smooth_s)
+    np.savez(path, pos=pos.astype(np.float32), team=match.team.astype(np.int8),
              fps=np.float32(match.fps), pitch=np.asarray(match.pitch, np.float32))
 
 
@@ -59,7 +76,7 @@ def read_half_output(out, a):
 def _run_half(match, a, b, params, tmp):
     stem = Path(tmp) / f"h{a}"
     inp, out = f"{stem}.in.npz", f"{stem}.out.npz"
-    write_half_input(match, a, b, inp)
+    write_half_input(match, a, b, inp, params.smooth_s)
     env = dict(os.environ, TQDM_DISABLE="1")
     subprocess.run([params.python, str(WRAPPER), "--in", inp, "--out", out, "--ckpt", str(params.ckpt),
                     "--repo", params.repo, "--threads", str(params.threads)], check=True, env=env,
@@ -74,7 +91,7 @@ def write_cache(cache, params, meta, res):
     fd, tmpname = tempfile.mkstemp(dir=cache.parent, suffix=".tmp.npz")
     os.close(fd)
     try:
-        np.savez(tmpname, ckpt=np.int32(params.ckpt), threads=np.int32(params.threads),
+        np.savez(tmpname, ckpt=np.int32(params.ckpt), threads=np.int32(params.threads), smooth_s=np.float32(params.smooth_s),
                  input_sha=np.array(meta["input_sha"]), wrapper_sha=np.array(meta["wrapper_sha"]), **res)
         os.replace(tmpname, cache)
     except BaseException:
@@ -116,6 +133,7 @@ def pathcrf_posterior(match, cache_key, params):
                 if (all(k in z.files for k in ("input_sha", "wrapper_sha", "ckpt", "threads"))
                         and str(z["input_sha"]) == meta["input_sha"] and str(z["wrapper_sha"]) == meta["wrapper_sha"]
                         and int(z["ckpt"]) == params.ckpt and int(z["threads"]) == params.threads
+                        and abs((float(z["smooth_s"]) if "smooth_s" in z.files else 0.0) - params.smooth_s) < 1e-6
                         and len(z["p_home"]) == F):
                     r = {k: z[k] for k in ("p_home", "imputed_frac")}
                     if "p_none" in z.files:

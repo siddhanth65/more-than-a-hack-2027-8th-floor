@@ -37,7 +37,7 @@ class PipelineConfig:
 
     def to_dict(self):
         d = asdict(self)
-        d["pathcrf"] = {k: d["pathcrf"][k] for k in ("ckpt", "eps", "conf_alpha", "none_k")}   # runtime paths stay out of configs
+        d["pathcrf"] = {k: d["pathcrf"][k] for k in ("ckpt", "eps", "conf_alpha", "none_k") + (("smooth_s",) if d["pathcrf"].get("smooth_s") else ())}   # runtime paths stay out of configs
         return d
 
     @classmethod
@@ -49,7 +49,7 @@ class PipelineConfig:
         return cls(ball=BallCtrlParams(**d["ball"]), tag=TagPriorParams(**tag), touch=TouchParams(**{"mode": "abs", **d["touch"]}),   # saved before the touch mode existed: abs
                    decoder=DecoderParams(**d["decoder"]), post=PostParams(**d["post"]), dead_model_path=d.get("dead_model_path"),
                    dead_policy=d.get("dead_policy", "full"), dead_offset=float(d.get("dead_offset", 0.0)), use_pathcrf=d.get("use_pathcrf", False),
-                   pathcrf=PathCRFParams(**{k: v for k, v in d.get("pathcrf", {}).items() if k in ("ckpt", "eps", "conf_alpha", "none_k")}),
+                   pathcrf=PathCRFParams(**{k: v for k, v in d.get("pathcrf", {}).items() if k in ("ckpt", "eps", "conf_alpha", "none_k", "smooth_s")}),
                    use_teamctrl=d.get("use_teamctrl", False), team_policy=d.get("team_policy", "full"),
                    use_switch=d.get("use_switch", False), switch_policy=d.get("switch_policy", "full"),
                    use_replay=bool(d.get("use_replay", False)), replay_w=float(d.get("replay_w", 0.0)))
