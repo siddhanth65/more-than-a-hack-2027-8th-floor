@@ -46,3 +46,17 @@ Favours P needs gap diff >= +0.05 and B real <= PathCRF real; favours L needs re
 3. Provenance: sim numbers are out of fold. a14's fold Model B is the recipe-identical exp_seq3/base retrain (a14's own fold weights were not saved); unmasked it gives 6-fold ctrl_Dfull 0.539 vs the registered a14 0.557. a16 fold models are the exact recipe (0.5185 = registered). The a5c fold dead/team/merge models were RETRAINED
 (saved pickles unloadable under sklearn 1.9.1; dead retrain identical to the loadable original, max|dp| = 0; unmasked 6-fold ctrl_Dfull 0.4944 = registered 0.494). a13r fold models: exp_seq2 (a13 refit), unmasked 0.482 (a13 registered 0.477).
 Real-match numbers use the registered artefacts; their CSVs regenerate byte-identically (a5c, a10, a14, a16).
+
+## ADDENDUM 2026-11-11 - after the PathCRF fix (see FIX_NOTES.md)
+The real-second-half failure of PathCRF (and, through its input, of B) was NOT orientation; it was fixed by a 1 s moving-average smoothing of the real player positions before PathCRF (smooth_s = 1.0, real feed only). Real PathCRF accuracy on the confident frames, H1 / H2: 0.907 / 0.970 after (0.910 / 0.550 before).
+Tables A (+-3 s of the centre) after the fix (sim columns unchanged):
+
+| stream | sim acc (6 folds) | real acc | real H1 / H2 | gap raw | gap reweighted |
+|---|---|---|---|---|---|
+| PathCRF | 0.960 ± 0.024 | 0.934 | 0.907 / 0.970 | +0.026 | +0.035 |
+| a14 B | 0.956 ± 0.023 | 0.916 | 0.919 / 0.912 | +0.040 | +0.050 |
+| a16 B | 0.786 ± 0.109 | 0.559 | 0.545 / 0.577 | +0.227 | +0.237 |
+
+Centre-only (>= 10 s hidden each side, n = 141 real frames): PathCRF 0.952 / 0.915 (sim / real), a14 B 0.963 / 0.915, a16 B 0.842 / 0.660.
+Signal T after the fix: gap(B) - gap(PathCRF) = +0.014 (centre-only +0.011); real B - real PathCRF = -0.018 (centre-only 0.000). P needs +0.05 and L needs real B >= PathCRF + 0.03: neither -> T = none. a16's B remains much worse on real (0.559) and in sim (0.786): its per-half-normalised input is not rescued by the fix.
+Files: exp1_fx.json, exp1_fx_centre.json (before-fix versions exp1.json, exp1_centre.json are the tables above).

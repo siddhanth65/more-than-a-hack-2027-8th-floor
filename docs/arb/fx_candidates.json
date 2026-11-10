@@ -1,0 +1,154 @@
+{
+ "a5c": {
+  "valid": true,
+  "frames_changed_overall_graded": 0.10635980787752507,
+  "frames_changed_in_blackouts": 0.036241220986153205,
+  "frames_changed_outside_blackouts": 0.14359928291921276,
+  "frames_changed_H1": 0.023116513773012697,
+  "frames_changed_H1_in_blackouts": 0.011281729865246004,
+  "frames_changed_H2": 0.18968383927446783,
+  "frames_changed_H2_in_blackouts": 0.06340964220739842,
+  "drift_old": {
+   "n_spells": 328.0,
+   "spells_per_HA_min": 5.211864406779661,
+   "spells_per_graded_min": 3.0971250873427048,
+   "pred_D_share": 0.4057548612903429,
+   "spell_len_median_s": 7.72,
+   "share_changes_in_blackout": 0.02403846153846154,
+   "D_starts_near_sp_share": 0.05042016806722689,
+   "tag_agreement": 0.5545124062304849,
+   "tag_agreement_implied": 0.7294156630215892,
+   "non_blackout_D_share": 0.17767025849605797,
+   "blackout_D_share": 0.835217683247736
+  },
+  "drift_new": {
+   "n_spells": 282.0,
+   "spells_per_HA_min": 4.4395465994962215,
+   "spells_per_graded_min": 2.6627721787519594,
+   "pred_D_share": 0.40021528796338846,
+   "spell_len_median_s": 8.68,
+   "share_changes_in_blackout": 0.0440251572327044,
+   "D_starts_near_sp_share": 0.04065040650406504,
+   "tag_agreement": 0.5760198508666069,
+   "tag_agreement_implied": 0.7869188753906264,
+   "non_blackout_D_share": 0.1697091196483991,
+   "blackout_D_share": 0.8342377003066984
+  },
+  "per_half_old": {
+   "H1": {
+    "D_share_nonblackout": 0.14455742098210766,
+    "D_share_blackout": 0.8066088652111842,
+    "spells_per_graded_min": 2.4349730076635585,
+    "team_changes_in_blackouts_per_min_blackout": null,
+    "team_changes_in_blackouts": 16,
+    "blackout_minutes": 19.146,
+    "tag_agreement_implied": 0.824898164288202
+   },
+   "H2": {
+    "D_share_nonblackout": 0.20937252386522281,
+    "D_share_blackout": 0.866358399029715,
+    "spells_per_graded_min": 3.759919385313012,
+    "team_changes_in_blackouts_per_min_blackout": null,
+    "team_changes_in_blackouts": 13,
+    "blackout_minutes": 17.589333333333332,
+    "tag_agreement_implied": 0.6392477596357482
+   }
+  },
+  "per_half_new": {
+   "H1": {
+    "D_share_nonblackout": 0.14609442736659572,
+    "D_share_blackout": 0.8067481458268045,
+    "spells_per_graded_min": 2.2273396504209297,
+    "team_changes_in_blackouts_per_min_blackout": null,
+    "team_changes_in_blackouts": 19,
+    "blackout_minutes": 19.146,
+    "tag_agreement_implied": 0.8129068082976106
+   },
+   "H2": {
+    "D_share_nonblackout": 0.19231785080934233,
+    "D_share_blackout": 0.8641600970285022,
+    "spells_per_graded_min": 3.098627031112231,
+    "team_changes_in_blackouts_per_min_blackout": null,
+    "team_changes_in_blackouts": 9,
+    "blackout_minutes": 17.589333333333332,
+    "tag_agreement_implied": 0.7696759427741573
+   }
+  }
+ },
+ "a14": {
+  "valid": true,
+  "frames_changed_overall_graded": 0.08485619141743833,
+  "frames_changed_in_blackouts": 0.051412808739996006,
+  "frames_changed_outside_blackouts": 0.10261773040075563,
+  "frames_changed_H1": 0.016736506977739186,
+  "frames_changed_H1_in_blackouts": 0.015007486333089593,
+  "frames_changed_H2": 0.1530419448293236,
+  "frames_changed_H2_in_blackouts": 0.09104002425712553,
+  "drift_old": {
+   "n_spells": 352.0,
+   "spells_per_HA_min": 5.406678476709298,
+   "spells_per_graded_min": 3.323743996172659,
+   "pred_D_share": 0.38525214501092175,
+   "spell_len_median_s": 6.04,
+   "share_changes_in_blackout": 0.1459227467811159,
+   "D_starts_near_sp_share": 0.07563025210084033,
+   "tag_agreement": 0.5745269321551458,
+   "tag_agreement_implied": 0.7725898395162173,
+   "non_blackout_D_share": 0.16907299959519634,
+   "blackout_D_share": 0.7922980599967334
+  },
+  "drift_new": {
+   "n_spells": 314.0,
+   "spells_per_HA_min": 4.738382913652781,
+   "spells_per_graded_min": 2.964930723858565,
+   "pred_D_share": 0.37427371787204844,
+   "spell_len_median_s": 7.18,
+   "share_changes_in_blackout": 0.15346534653465346,
+   "D_starts_near_sp_share": 0.07142857142857142,
+   "tag_agreement": 0.5918018081785962,
+   "tag_agreement_implied": 0.8092254656657331,
+   "non_blackout_D_share": 0.1553964184513368,
+   "blackout_D_share": 0.7864000145182658
+  },
+  "per_half_old": {
+   "H1": {
+    "D_share_nonblackout": 0.14828170568298257,
+    "D_share_blackout": 0.7648246805250879,
+    "spells_per_graded_min": 2.9257427611461364,
+    "team_changes_in_blackouts_per_min_blackout": null,
+    "team_changes_in_blackouts": 29,
+    "blackout_minutes": 19.146,
+    "tag_agreement_implied": 0.834649277400592
+   },
+   "H2": {
+    "D_share_nonblackout": 0.18897860619552503,
+    "D_share_blackout": 0.8222028502122498,
+    "spells_per_graded_min": 3.7221312507872533,
+    "team_changes_in_blackouts_per_min_blackout": null,
+    "team_changes_in_blackouts": 29,
+    "blackout_minutes": 17.589333333333332,
+    "tag_agreement_implied": 0.7145004299671348
+   }
+  },
+  "per_half_new": {
+   "H1": {
+    "D_share_nonblackout": 0.14518798770394892,
+    "D_share_blackout": 0.7647550402172778,
+    "spells_per_graded_min": 2.793612442900827,
+    "team_changes_in_blackouts_per_min_blackout": null,
+    "team_changes_in_blackouts": 27,
+    "blackout_minutes": 19.146,
+    "tag_agreement_implied": 0.8315945088564439
+   },
+   "H2": {
+    "D_share_nonblackout": 0.16516998075689546,
+    "D_share_blackout": 0.8099605821710127,
+    "spells_per_graded_min": 3.13641516563799,
+    "team_changes_in_blackouts_per_min_blackout": null,
+    "team_changes_in_blackouts": 28,
+    "blackout_minutes": 17.589333333333332,
+    "tag_agreement_implied": 0.7895240265018859
+   }
+  }
+ }
+}
