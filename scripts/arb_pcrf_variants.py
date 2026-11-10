@@ -12,7 +12,8 @@ from mtah.evidence.pathcrf import PathCRFParams, write_half_input, read_half_out
 from mtah.io.match import half_runs
 from mtah.io.metrica_loader import load_tactical
 
-TRANS = {"asis": (1, 1, 0), "xflip": (-1, 1, 0), "yflip": (1, -1, 0), "rot": (-1, -1, 0), "swap": (1, 1, 1),
+EXTRA = ("stable", "smooth", "dedup", "rev")
+TRANS = {**{k: (1, 1, 0) for k in EXTRA}, "asis": (1, 1, 0), "xflip": (-1, 1, 0), "yflip": (1, -1, 0), "rot": (-1, -1, 0), "swap": (1, 1, 1),
          "swap_xflip": (-1, 1, 1), "swap_rot": (-1, -1, 1)}
 
 
@@ -25,6 +26,20 @@ def main():
     (h, a, b), = [r for r in half_runs(m.half) if r[0] == half]
     pos = m.pos[a:b].copy(); pos[..., 0] *= sx; pos[..., 1] *= sy
     team = (1 - m.team) if sw else m.team
+    if var == "stable":      # keep only the 11 most-present slots per team over the whole half (no identity churn)
+        keep = np.zeros(pos.shape[1], bool)
+        for k in (0, 1):
+            sl = np.flatnonzero(team == k); cnt = np.isfinite(pos[:, sl, 0]).sum(0); keep[sl[np.argsort(-cnt)[:11]]] = True
+        pos[:, ~keep] = np.nan
+    elif var == "smooth":    # 1 s centred moving average of the positions (NaN-aware)
+        from scipy.ndimage import uniform_filter1d
+        v = np.isfinite(pos[..., 0]); P = np.where(v[..., None], pos, 0)
+        num = uniform_filter1d(P, 25, axis=0, mode="nearest"); den = uniform_filter1d(v.astype(np.float32), 25, axis=0, mode="nearest")
+        pos = np.where(v[..., None], num / np.maximum(den, 1e-6)[..., None], np.nan).astype(np.float32)
+    elif var == "dedup":     # replace frames identical to the previous one by NaN, then let the wrapper impute
+        same = np.all(pos[1:] == pos[:-1], axis=-1) & np.isfinite(pos[1:, :, 0]); pos[1:][same] = np.nan
+    elif var == "rev":       # time-reversed half
+        pos = pos[::-1].copy()
     with tempfile.TemporaryDirectory() as tmp:
         inp, out = f"{tmp}/i.npz", f"{tmp}/o.npz"
         np.savez(inp, pos=pos.astype(np.float32), team=team.astype(np.int8), fps=np.float32(m.fps), pitch=np.asarray(m.pitch, np.float32))
@@ -32,6 +47,8 @@ def main():
                        check=True, env=dict(os.environ, TQDM_DISABLE="1"), stdout=subprocess.DEVNULL)
         r = read_half_output(out, a)
     ph = r["p_home"]
+    if var == "rev":
+        ph = ph[::-1]
     if sw:
         ph = 1 - ph
     c = conf[a:b]; i = np.flatnonzero((c >= 0) & np.isfinite(ph))
