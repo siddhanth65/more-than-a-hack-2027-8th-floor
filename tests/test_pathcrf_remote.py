@@ -54,7 +54,7 @@ def test_prepare_assemble_matches_pathcrf_posterior(tmp_path, monkeypatch):
             work / "out" / f"{key}_s100_h0.out.npz", a))
         ref = pc.pathcrf_posterior(m, f"{key}_s100", ref_params)
         with np.load(tmp_path / "cache_remote" / f"{key}_s100.npz") as z, np.load(tmp_path / "cache_ref" / f"{key}_s100.npz") as r:
-            assert sorted(z.files) == sorted(r.files) == sorted(["ckpt", "threads", "input_sha", "wrapper_sha", "p_home", "p_none", "imputed_frac"])
+            assert sorted(z.files) == sorted(r.files) == sorted(["ckpt", "threads", "smooth_s", "input_sha", "wrapper_sha", "p_home", "p_none", "imputed_frac"])
             for k in r.files:
                 assert (str(z[k]) == str(r[k])) if k.endswith("_sha") else np.array_equal(z[k], r[k], equal_nan=True), k
         # and pathcrf_posterior accepts the assembled file as a cache hit (no wrapper call)
