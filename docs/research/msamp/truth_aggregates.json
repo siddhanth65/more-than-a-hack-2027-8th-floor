@@ -1,0 +1,263 @@
+[
+ {
+  "game": 1,
+  "syn_id": 9211,
+  "blank_min_s": 2.0,
+  "truth": {
+   "minutes": 96.7,
+   "dead_share": 0.418,
+   "n_spells": 353,
+   "spells_per_min": 3.65,
+   "lt1s": 0.062,
+   "lt3s": 0.323,
+   "lt5s": 0.496,
+   "median_s": 5.04,
+   "direct_handover_share": 0.725
+  },
+  "dead_composition": {
+   "event_dead": 0.381,
+   "blank_dead": 0.389,
+   "dead": 0.418,
+   "ball_blank": 0.391,
+   "blank_not_dead": 0.003,
+   "dead_ball_visible": 0.029
+  },
+  "visible_dead_share_of_visible": 0.048,
+  "per_half_orientation": [
+   {
+    "left_team": "H",
+    "gk": {
+     "H": "Player11",
+     "A": "Player25"
+    }
+   },
+   {
+    "left_team": "A",
+    "gk": {
+     "H": "Player11",
+     "A": "Player25"
+    }
+   }
+  ],
+  "sensitivity": {
+   "events_only": {
+    "minutes": 96.7,
+    "dead_share": 0.381,
+    "n_spells": 351,
+    "spells_per_min": 3.63,
+    "lt1s": 0.057,
+    "lt3s": 0.305,
+    "lt5s": 0.479,
+    "median_s": 5.36,
+    "direct_handover_share": 0.761
+   },
+   "blank1s": {
+    "minutes": 96.7,
+    "dead_share": 0.419,
+    "n_spells": 355,
+    "spells_per_min": 3.67,
+    "lt1s": 0.065,
+    "lt3s": 0.327,
+    "lt5s": 0.501,
+    "median_s": 4.92,
+    "direct_handover_share": 0.713
+   },
+   "blank2s": {
+    "minutes": 96.7,
+    "dead_share": 0.418,
+    "n_spells": 353,
+    "spells_per_min": 3.65,
+    "lt1s": 0.062,
+    "lt3s": 0.323,
+    "lt5s": 0.496,
+    "median_s": 5.04,
+    "direct_handover_share": 0.725
+   },
+   "blank4s": {
+    "minutes": 96.7,
+    "dead_share": 0.415,
+    "n_spells": 352,
+    "spells_per_min": 3.64,
+    "lt1s": 0.062,
+    "lt3s": 0.318,
+    "lt5s": 0.491,
+    "median_s": 5.1,
+    "direct_handover_share": 0.741
+   }
+  }
+ },
+ {
+  "game": 2,
+  "syn_id": 9212,
+  "blank_min_s": 2.0,
+  "truth": {
+   "minutes": 94.1,
+   "dead_share": 0.414,
+   "n_spells": 323,
+   "spells_per_min": 3.43,
+   "lt1s": 0.065,
+   "lt3s": 0.322,
+   "lt5s": 0.483,
+   "median_s": 5.52,
+   "direct_handover_share": 0.681
+  },
+  "dead_composition": {
+   "event_dead": 0.358,
+   "blank_dead": 0.406,
+   "dead": 0.414,
+   "ball_blank": 0.41,
+   "blank_not_dead": 0.004,
+   "dead_ball_visible": 0.008
+  },
+  "visible_dead_share_of_visible": 0.013,
+  "per_half_orientation": [
+   {
+    "left_team": "A",
+    "gk": {
+     "H": "Player11",
+     "A": "Player25"
+    }
+   },
+   {
+    "left_team": "H",
+    "gk": {
+     "H": "Player11",
+     "A": "Player25"
+    }
+   }
+  ],
+  "sensitivity": {
+   "events_only": {
+    "minutes": 94.1,
+    "dead_share": 0.358,
+    "n_spells": 315,
+    "spells_per_min": 3.35,
+    "lt1s": 0.044,
+    "lt3s": 0.27,
+    "lt5s": 0.422,
+    "median_s": 6.68,
+    "direct_handover_share": 0.733
+   },
+   "blank1s": {
+    "minutes": 94.1,
+    "dead_share": 0.416,
+    "n_spells": 326,
+    "spells_per_min": 3.46,
+    "lt1s": 0.071,
+    "lt3s": 0.331,
+    "lt5s": 0.491,
+    "median_s": 5.42,
+    "direct_handover_share": 0.666
+   },
+   "blank2s": {
+    "minutes": 94.1,
+    "dead_share": 0.414,
+    "n_spells": 323,
+    "spells_per_min": 3.43,
+    "lt1s": 0.065,
+    "lt3s": 0.322,
+    "lt5s": 0.483,
+    "median_s": 5.52,
+    "direct_handover_share": 0.681
+   },
+   "blank4s": {
+    "minutes": 94.1,
+    "dead_share": 0.413,
+    "n_spells": 319,
+    "spells_per_min": 3.39,
+    "lt1s": 0.063,
+    "lt3s": 0.31,
+    "lt5s": 0.467,
+    "median_s": 5.84,
+    "direct_handover_share": 0.69
+   }
+  }
+ },
+ {
+  "game": 3,
+  "syn_id": 9213,
+  "blank_min_s": 2.0,
+  "truth": {
+   "minutes": 95.8,
+   "dead_share": 0.321,
+   "n_spells": 387,
+   "spells_per_min": 4.04,
+   "lt1s": 0.088,
+   "lt3s": 0.341,
+   "lt5s": 0.491,
+   "median_s": 5.12,
+   "direct_handover_share": 0.736
+  },
+  "dead_composition": {
+   "event_dead": 0.278,
+   "blank_dead": 0.319,
+   "dead": 0.321,
+   "ball_blank": 0.322,
+   "blank_not_dead": 0.002,
+   "dead_ball_visible": 0.001
+  },
+  "visible_dead_share_of_visible": 0.001,
+  "per_half_orientation": [
+   {
+    "left_team": "A",
+    "gk": {
+     "H": "H0",
+     "A": "A0"
+    }
+   },
+   {
+    "left_team": "H",
+    "gk": {
+     "H": "H0",
+     "A": "A0"
+    }
+   }
+  ],
+  "sensitivity": {
+   "events_only": {
+    "minutes": 95.8,
+    "dead_share": 0.278,
+    "n_spells": 382,
+    "spells_per_min": 3.99,
+    "lt1s": 0.081,
+    "lt3s": 0.319,
+    "lt5s": 0.471,
+    "median_s": 5.48,
+    "direct_handover_share": 0.762
+   },
+   "blank1s": {
+    "minutes": 95.8,
+    "dead_share": 0.322,
+    "n_spells": 388,
+    "spells_per_min": 4.05,
+    "lt1s": 0.09,
+    "lt3s": 0.34,
+    "lt5s": 0.495,
+    "median_s": 5.1,
+    "direct_handover_share": 0.727
+   },
+   "blank2s": {
+    "minutes": 95.8,
+    "dead_share": 0.321,
+    "n_spells": 387,
+    "spells_per_min": 4.04,
+    "lt1s": 0.088,
+    "lt3s": 0.341,
+    "lt5s": 0.491,
+    "median_s": 5.12,
+    "direct_handover_share": 0.736
+   },
+   "blank4s": {
+    "minutes": 95.8,
+    "dead_share": 0.321,
+    "n_spells": 387,
+    "spells_per_min": 4.04,
+    "lt1s": 0.088,
+    "lt3s": 0.341,
+    "lt5s": 0.491,
+    "median_s": 5.12,
+    "direct_handover_share": 0.736
+   }
+  }
+ }
+]

@@ -1,0 +1,8 @@
+[
+ "Candidates a14f and H: not available (no a14f directory anywhere; runs/kh/H holds calibration files only, no registered artefacts; STATUS.md last updated 10 Nov 22:40) - not scored.",
+ "Server: not used. Scoring took ~10 s per half per system on the laptop (one process, 2 threads); PathCRF ran locally as ONE process, 4 threads, 12 halves, 2640 s total.",
+ "Truth variants ctrl_Dfull / raw_Dnarrow / ctrl_Dnarrow are almost identical to raw_Dfull here (labels are event-derived and the ball is blank in dead time, so the ctrl filter and narrowing barely act); max spellF1 differences are listed in results.json.",
+ "Brief-opponent-spell absorbing truth (metrica_Dfull of Plan 4) not evaluated.",
+ "Pitch for games 1 and 2 assumed 105 x 68 m (files are normalised, no size); game 3 uses its metadata size rescaled.",
+ "a13r, a14 scored from runs/select/<name>; a5c, a10, a16 from models/<name> (a14 registered pipeline has the known input_dead_offset mismatch)."
+]
