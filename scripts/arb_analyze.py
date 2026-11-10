@@ -242,8 +242,9 @@ def exp2_unit(args):
             for h in halves:
                 hm = (half_arr == h) if h else np.ones(match.n_frames, bool)
                 if truth is not None:
-                    tr_codes = np.searchsorted(np.array(["H", "A", "D"]), truth["ctrl_Dfull"]).astype(np.uint8)
-                    tr_codes = np.where(np.isin(truth["ctrl_Dfull"], ["H", "A", "D"]), tr_codes, 3).astype(np.uint8)
+                    tr_codes = np.full(match.n_frames, 3, np.uint8)
+                    for ci, ch_ in enumerate("HAD"):
+                        tr_codes[truth["ctrl_Dfull"] == ch_] = ci
                     for stratum, sw in (("all", mask), ("live", live_w), ("dead", dead_w)):
                         sf, mf = score_codes(tr_codes, pred, sw & hm)
                         rows.append((name, ms, c, h, "truth", stratum, True, sf, mf))
