@@ -24,7 +24,7 @@ From this commit on, no spellF1 or macroF1 is computed on the public window.
   SkillCorner (2.28), DFL (3.69) and the Metrica sample (4.10).
 - Dead-prior offsets are set by one rule for every candidate: the simulator-best admissible offset.
 
-## Amendment 1 (10 Nov, 23:00 IST; still before any M/K/T/B result was seen)
+## Amendment 1 (10 Nov, 22:20 IST; still before any M/K/T/B result was seen)
 
 A label-free diagnostic (`possession-diag`, `runs/diag/REPORT.md`) compared the length of the
 dead run each candidate predicts before a tagged restart with other-game norms from SkillCorner
