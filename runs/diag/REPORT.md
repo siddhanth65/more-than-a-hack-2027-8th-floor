@@ -68,7 +68,7 @@ SkillCorner definition: for each player_possession event with game_interruption_
 
 This reproduces the briefed medians except goal (72 s vs 74 s). One penalty restart ignored.
 
-Contest: the Smart Tagging SET PIECES start frame is taken as the restart time. Per tag, find the candidate D->live edge within a window; run length = the contiguous D run ending at that edge. Finding: the candidate D->live edge falls a median 4.2-7.0 s AFTER the tag start for every type (the tag lies inside a D run for 49 of 58 tags), so the requested +-3 s search misses most edges. Two windows are reported: A = [-3, +3] s (as specified), B = [-3, +10] s. D-through = D still running past the window end (no edge); none = no D in the window. Run-length stats are over all tags of the type (0 when none; for D-through, D length up to the tag).
+Contest: the Smart Tagging SET PIECES start frame is taken as the restart time. Per tag, find the candidate D->live edge within a window; run length = the contiguous D run ending at that edge. Finding: the candidate D->live edge falls a median 4.2-7.0 s AFTER the tag start for every type (the tag lies inside a D run for 50 of 59 tags), so the requested +-3 s search misses most edges. Two windows are reported: A = [-3, +3] s (as specified), B = [-3, +10] s. D-through = D still running past the window end (no edge); none = no D in the window. Run-length stats are over all tags of the type (0 when none; for D-through, D length up to the tag).
 
 Window A, a5c (a14 similar):
 | type | n | edge | D-through | none | run s p25-med-p75 | below SK p25 | blackout before (n): run s | ball visible before (n): run s |
