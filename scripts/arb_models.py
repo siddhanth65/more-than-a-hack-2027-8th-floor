@@ -23,7 +23,7 @@ SIM_FAMILIES = ("a5c", "a13r", "a14", "a16")
 FOLD_MATCHES = (9001, 9002, 9003, 9004, 9005, 9006)
 
 SPEC = {
-    "a5c": dict(build="sim_prev_nosmooth", dead="exp_seq/lomo/models/dead_fold{F}.joblib", team="exp_seq/lomo/models/team_fold{F}.joblib",
+    "a5c": dict(build="sim_prev_nosmooth", dead="../arb/models/a5c_dead_f{F}.joblib", team="../arb/models/a5c_team_f{F}.joblib",
                 merge="../arb/models/a5c_merge_f{F}.joblib", B=None),
     "a13r": dict(build="sim", dead="exp_seq2/lomo/models/dead_fold{F}.joblib", team="exp_seq2/lomo/models/team_fold{F}.joblib",
                  merge="exp_seq2/lomo/merge/f{F}_a13.joblib", B=None),
