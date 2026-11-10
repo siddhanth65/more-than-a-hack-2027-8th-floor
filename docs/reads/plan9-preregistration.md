@@ -41,6 +41,16 @@ rate), base+R leads base by mean spellF1 >= 0.01 and wins >= 60 % of halves, AND
 admissible on the contest match with its dead offset re-set by the usual rule. If accepted,
 base+R replaces base everywhere in the procedure below. Same freeze and deadlines.
 
+## Amendment 2 (10 Nov, late evening IST; before any K score was computed)
+
+The K hold-out as built has the ball missing on only 5.7 % of graded frames (SkillCorner's
+ball-missing frames coincide with its no-player frames, which are ungraded), so it tests the
+visible-ball regime, not the contest match's 41 % blackout regime. K is therefore scored on two
+builds of the same 40 SkillCorner halves: K-nat (natural gaps) and K-sim (the same halves with
+our blackout simulator applied, `runs/sim_extra2`). K favours X iff X leads by mean spellF1
+>= 0.01 and wins >= 60 % of halves on K-sim AND X does not trail by 0.01 or more on K-nat.
+The acceptance test of modifier R uses K-nat and K-sim pooled over the 10 test matches.
+
 ## Procedure
 
 1. Pool, frozen: {a5c, a13r, a10, a14, a16, H, S}.
