@@ -25,3 +25,17 @@ if __name__ == "__main__":
         l, mx = side_by_mean(m.pos[a:b], m.team)
         kl, kr, ml, mr = side_by_keepers(m.pos[a:b], m.team)
         print(f"H{h}: mean-x rule: left team = {'home' if l == 0 else 'away'} (mean x {mx[0]:+.1f}/{mx[1]:+.1f}); keeper rule: left-end slot team {'home' if kl == 0 else 'away'} (median x {ml:+.1f}), right-end slot team {'home' if kr == 0 else 'away'} ({mr:+.1f})")
+
+    # the pipeline's own rule (mtah.evidence.dead.direction_of_play): attack direction per team per half
+    from mtah.evidence.dead import direction_of_play
+    dop = direction_of_play(m)
+    for h, a, b in half_runs(m.half):
+        print(f"H{h}: pipeline direction_of_play home {int(dop[a, 0]):+d} away {int(dop[a, 1]):+d} (+1 = attacks +x); consistent over the half: {bool((dop[a:b] == dop[a]).all())}")
+    from mtah.sim.dataset import load_half_sim
+    agree = 0; tot = 0
+    for mt in range(9001, 9007):
+        for hh in ("H1", "H2"):
+            s = load_half_sim(ROOT / "runs/sim", f"game_{mt}_{hh}", 100); d = direction_of_play(s.match)[len(s.match.half) // 2]
+            l, _ = side_by_mean(s.match.pos, s.match.team)      # left team attacks +x
+            tot += 1; agree += int(d[l] == 1 and d[1 - l] == -1)
+    print(f"sim halves where direction_of_play agrees with the mean-x side rule: {agree}/{tot}")
