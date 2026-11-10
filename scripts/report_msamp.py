@@ -83,6 +83,18 @@ def main():
                  ("skipped.json", "skipped")):
         if (OUT / f).exists():
             res[k] = json.loads((OUT / f).read_text())
+    # per-half table (mean over seeds) and the a5c vs a14 decision statistics
+    ph = {}
+    for r in rows:
+        ph.setdefault(r["system"], {}).setdefault(f"G{r['game'] - 9210}H{r['half']}", []).append(r["raw_Dfull"]["spell_f1"])
+    ph = {sy: {h: float(np.mean(v)) for h, v in d.items()} for sy, d in ph.items()}
+    res["per_half_spell_f1_raw_Dfull"] = ph
+    halves = sorted(ph["a5c"])
+    diff = {h: ph["a14"][h] - ph["a5c"][h] for h in halves}
+    res["a14_vs_a5c"] = {"per_half_diff": diff, "mean_diff": float(np.mean(list(diff.values()))),
+                         "sd_diff": float(np.std(list(diff.values()), ddof=1)),
+                         "a14_wins": int(sum(d > 0 for d in diff.values())), "a5c_wins": int(sum(d < 0 for d in diff.values())),
+                         "ties": int(sum(d == 0 for d in diff.values())), "n_halves": len(diff)}
     (OUT / "results.json").write_text(json.dumps(res, indent=1))
 
     L = ["# Metrica-sample other-game validation (games 1-3, Metrica convention)", ""]
@@ -104,6 +116,14 @@ def main():
         m = res["scores"]["raw_Dfull"]["spell_f1"].get(s)
         if m:
             L.append(f"| {s} | " + " | ".join(fmt(m["cells"].get(f"{g}_s{sd}")) for g in GAME.values() for sd in (100, 101)) + " |")
+    L += ["", "## Per half spellF1 (raw_Dfull, mean over seeds)", "", "| system | " + " | ".join(halves) + " |", "|---|" + "---|" * len(halves)]
+    for sy in SYS_ORDER:
+        if sy in ph:
+            L.append(f"| {sy} | " + " | ".join(fmt(ph[sy].get(h)) for h in halves) + " |")
+    c = res["a14_vs_a5c"]
+    L += ["", f"a14 - a5c over the {c['n_halves']} halves (seed-averaged): mean {c['mean_diff']:+.4f}, sd {c['sd_diff']:.4f}; "
+          f"a14 wins {c['a14_wins']}, a5c wins {c['a5c_wins']}, ties {c['ties']}. Per half: " +
+          ", ".join(f"{h} {d:+.3f}" for h, d in c["per_half_diff"].items()), ""]
     L += ["", "## Label-free drift (mean over the 12 half x seed runs) vs the real match", "",
           "| system | visible-dead share (sim) | spells/graded min (sim) | tag agr. (sim) | visible-dead (real) | spells/min (real) | tag agr. (real) |",
           "|---|---|---|---|---|---|---|"]
