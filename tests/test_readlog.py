@@ -61,10 +61,20 @@ def test_sealed_guard_per_registration(logdir):
     assert mod.check_sealed_guard(rid, match=9006) == []   # other match
 
 
-def test_public_guard(logdir):
+def test_public_read_is_disabled(capsys):
+    # plan9: the public window is never scored; public_read.py refuses and points to final_check.py
     mod = _load("public_read")
-    for note in "vwxyz":   # budget 6 total: 5 logged + 1 done by hand
-        mod.check_budget()
-        readlog.append_read("public", {"note": note})
-    with pytest.raises(SystemExit):
-        mod.check_budget()
+    with pytest.raises(SystemExit) as e:
+        mod.main()
+    assert "final_check.py" in str(e.value) and "disabled" in str(e.value)
+    assert not hasattr(mod, "score") and not hasattr(mod, "GT")   # no scorer, no ground-truth path in the module
+
+
+def test_final_check_helpers():
+    # offsets / swap helpers of the single pre-declared check (the check itself is not run in tests: it reads the public window)
+    import numpy as np
+    fc = _load("final_check")
+    x = np.array(list("HHAAD"))
+    assert list(fc.shifted(x, 2)) == list("DDHHA") and list(fc.shifted(x, -2)) == list("AADDD") and list(fc.shifted(x, 0)) == list(x)
+    assert list(fc.swapped(x)) == list("AAHHD")
+    assert fc.OFFSETS[0] == -50 and fc.OFFSETS[-1] == 50 and len(fc.OFFSETS) == 21 and 0 in fc.OFFSETS
