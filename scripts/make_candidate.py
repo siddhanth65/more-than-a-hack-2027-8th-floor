@@ -87,11 +87,15 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--select", required=True); ap.add_argument("--name", required=True)
     ap.add_argument("--data", default=os.environ.get("MTAH_DATA_DIR"))
+    ap.add_argument("--pathcrf-smooth", type=float, default=0.0,
+                    help="PathCRF input smoothing in seconds (real tactical feed: 1.0); uses its own cache runs/cache/pathcrf_fx")
     args = ap.parse_args()
     if not args.data:
         raise SystemExit("data dir needed: pass --data or set MTAH_DATA_DIR")
     sel = Path(args.select)
     cfg, dead, lengths, team, merge, switch, seq = load_selection(sel, with_seq=True)
+    if args.pathcrf_smooth > 0:
+        cfg.pathcrf.smooth_s = args.pathcrf_smooth; cfg.pathcrf.cache_dir = str(ROOT / "runs" / "cache" / "pathcrf_fx")
     d = Path(args.data) / "tactical"
     md5s = {n: hashlib.md5((d / f"{STEMS['tactical']}{suf}").read_bytes()).hexdigest()
             for n, suf in (("atd", "_atd.txt"), ("meta", "_atd.xml"), ("tags", "_smart_tagging.xml"), ("homography", "_homography.csv"))}
