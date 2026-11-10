@@ -81,7 +81,7 @@ def exp1(a):
             mask, centres = z["mask"], z["centres"]
             near = np.zeros(match.n_frames, bool)
             for c in centres:
-                near[max(0, c - 75):c + 76] = True            # +-3 s of a centre: >= 7 s of hidden ball on either side
+                near[max(0, c - int(a.eval_s * 25)):c + int(a.eval_s * 25) + 1] = True            # +-3 s of a centre: >= 7 s of hidden ball on either side
             E = np.flatnonzero((conf >= 0) & near & mask)
             if len(E) == 0:
                 continue
@@ -379,7 +379,7 @@ def repro(a):
 def main():
     ap = argparse.ArgumentParser(); ap.add_argument("cmd", choices=["exp1", "exp2", "boot", "repro"])
     ap.add_argument("--out", default="runs/arb/out"); ap.add_argument("--res", default=None)
-    ap.add_argument("--workers", type=int, default=8); ap.add_argument("--boot", type=int, default=200)
+    ap.add_argument("--workers", type=int, default=8); ap.add_argument("--boot", type=int, default=200); ap.add_argument("--eval-s", type=float, default=3.0)
     a = ap.parse_args(); a.res = a.res or f"runs/arb/{a.cmd}.json"
     {"exp1": exp1, "exp2": exp2, "boot": bootstrap, "repro": repro}[a.cmd](a)
 
