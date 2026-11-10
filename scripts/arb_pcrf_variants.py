@@ -12,7 +12,7 @@ from mtah.evidence.pathcrf import PathCRFParams, write_half_input, read_half_out
 from mtah.io.match import half_runs
 from mtah.io.metrica_loader import load_tactical
 
-EXTRA = ("stable", "smooth", "dedup", "rev")
+EXTRA = ("stable", "smooth", "dedup", "rev", "sm5", "sm11", "sm51", "sm101", "jumpnan")
 TRANS = {**{k: (1, 1, 0) for k in EXTRA}, "asis": (1, 1, 0), "xflip": (-1, 1, 0), "yflip": (1, -1, 0), "rot": (-1, -1, 0), "swap": (1, 1, 1),
          "swap_xflip": (-1, 1, 1), "swap_rot": (-1, -1, 1)}
 
@@ -36,6 +36,14 @@ def main():
         v = np.isfinite(pos[..., 0]); P = np.where(v[..., None], pos, 0)
         num = uniform_filter1d(P, 25, axis=0, mode="nearest"); den = uniform_filter1d(v.astype(np.float32), 25, axis=0, mode="nearest")
         pos = np.where(v[..., None], num / np.maximum(den, 1e-6)[..., None], np.nan).astype(np.float32)
+    elif var.startswith("sm") and var != "smooth":
+        from scipy.ndimage import uniform_filter1d
+        w = int(var[2:]); v = np.isfinite(pos[..., 0]); P = np.where(v[..., None], pos, 0)
+        num = uniform_filter1d(P, w, axis=0, mode="nearest"); den = uniform_filter1d(v.astype(np.float32), w, axis=0, mode="nearest")
+        pos = np.where(v[..., None], num / np.maximum(den, 1e-6)[..., None], np.nan).astype(np.float32)
+    elif var == "jumpnan":   # frames reached by a > 0.6 m single-frame jump (> 15 m/s) are marked missing
+        step = np.linalg.norm(pos[1:] - pos[:-1], axis=-1); jmp = np.zeros(pos.shape[:2], bool); jmp[1:] = step > 0.6
+        pos[jmp] = np.nan
     elif var == "dedup":     # replace frames identical to the previous one by NaN, then let the wrapper impute
         same = np.all(pos[1:] == pos[:-1], axis=-1) & np.isfinite(pos[1:, :, 0]); pos[1:][same] = np.nan
     elif var == "rev":       # time-reversed half
