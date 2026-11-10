@@ -24,6 +24,23 @@ From this commit on, no spellF1 or macroF1 is computed on the public window.
   SkillCorner (2.28), DFL (3.69) and the Metrica sample (4.10).
 - Dead-prior offsets are set by one rule for every candidate: the simulator-best admissible offset.
 
+## Amendment 1 (10 Nov, 23:00 IST; still before any M/K/T/B result was seen)
+
+A label-free diagnostic (`possession-diag`, `runs/diag/REPORT.md`) compared the length of the
+dead run each candidate predicts before a tagged restart with other-game norms from SkillCorner
+open data (dead time before a throw-in p25 10 s, free kick 19 s, goal kick 24 s, corner 31 s,
+kick-off after a goal 64 s). Where the ball is visible before the tag, candidates call only
+~4 s dead before throw-ins and goal kicks; corners are short too. The camera-motion cue failed
+its pre-set bar and is dropped.
+
+The pool gains one optional modifier, R: a type-specific pre-restart dead prior whose window
+lengths and strength come ONLY from SkillCorner matches (fitted on 10 matches), applied to P, L
+and H. R is accepted for a base candidate iff, on the other 10 SkillCorner matches of the K
+hold-out (tags synthesised from SkillCorner's typed restart events at the contest match's tag
+rate), base+R leads base by mean spellF1 >= 0.01 and wins >= 60 % of halves, AND base+R is
+admissible on the contest match with its dead offset re-set by the usual rule. If accepted,
+base+R replaces base everywhere in the procedure below. Same freeze and deadlines.
+
 ## Procedure
 
 1. Pool, frozen: {a5c, a13r, a10, a14, a16, H, S}.
