@@ -22,6 +22,23 @@ SIGNED = {f"{k}_ha" for k in STREAMS} | {"last_touch_team", "next_touch_team", "
 SWAP = [("touch_H", "touch_A"), ("strong_H", "strong_A")]
 
 
+LOC = ["ball_speed", "ball_absx", "ball_absy", "log_since_touch", "log_until_touch", "pcrf_imputed"]
+SIGNED_SCALE = [f"{k}_ha" for k in STREAMS] + ["pcrf_phome"]
+
+
+def normalise_v1(X, names):
+    """Per-half robust normalisation 'v1' (identical to scripts/seq3_common.normalise, mode v1) of ONE half's steps:
+    location+scale (median / IQR) for LOC; scale-only (median |x| over x != 0) for the signed H-A margins."""
+    X = X.astype(np.float32, copy=True); ix = {n: i for i, n in enumerate(names)}
+    for n in LOC:
+        v = X[:, ix[n]]; q1, q2, q3 = np.percentile(v, [25, 50, 75])
+        X[:, ix[n]] = (v - q2) / max(q3 - q1, 1e-3)
+    for n in SIGNED_SCALE:
+        v = X[:, ix[n]]; nz = np.abs(v[v != 0])
+        X[:, ix[n]] = v / (max(float(np.median(nz)), 1e-3) if len(nz) else 1.0)
+    return X
+
+
 class Net(nn.Module):
     def __init__(self, nf, h=64):
         super().__init__()
@@ -80,7 +97,11 @@ def main():
     lp = np.zeros((len(X), 3), np.float32)
     for h in np.unique(seg):                  # one sequence per half: windows never cross halves
         ii = np.flatnonzero(seg == h)
-        lp[ii] = infer(net, X[ii], mu, sd, names, int(ck["win"]), int(ck["stride"]))
+        norm = ck.get("norm", "none")
+        if norm not in ("none", "v1"):
+            raise SystemExit(f"unsupported input normalisation {norm!r}")
+        Xh = normalise_v1(X[ii], names) if norm == "v1" else X[ii]
+        lp[ii] = infer(net, Xh, mu, sd, names, int(ck["win"]), int(ck["stride"]))
     np.savez(a.out, logp=lp, torch_version=np.array(torch.__version__))
 
 

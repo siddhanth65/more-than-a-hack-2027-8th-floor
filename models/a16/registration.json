@@ -1,0 +1,48 @@
+{
+ "candidate": "a16",
+ "base": "a13r",
+ "learned_stream": {
+  "variant": "exp_seq3 v1 (per-half robust input normalisation, mtah/evidence/seq_b_infer.py normalise_v1)",
+  "final": {
+   "epochs": 12,
+   "fold_best_epochs": [
+    12,
+    14,
+    16,
+    11,
+    10,
+    10
+   ],
+   "seconds": 573.7,
+   "torch": "2.11.0+cu128"
+  },
+  "weights": {
+   "seqB": 12.0
+  }
+ },
+ "merge": "off (merge_theta 1.0); th0.7 was inadmissible on spells/min (2.4-2.5 < 2.7) in every cell",
+ "calibration": {
+  "script": "scripts/calib_v1.py",
+  "grid": "dead {-3..-5 by .5} x seq_d {-1..-4} x merge {off, th0.7}",
+  "rule": "real visible-dead 0.10-0.18 AND spells/graded min 2.7-4.3; best 6-fold mean rank over the four spellF1 variants",
+  "chosen": {
+   "dead_offset": -3.0,
+   "seq_d_offset": -3.0,
+   "merge": "off",
+   "ctrl_Dfull": 0.5185058230644332,
+   "ctrl_Dnarrow": 0.49110671777012316,
+   "raw_Dfull": 0.5367476190018216,
+   "raw_Dnarrow": 0.506401043636221,
+   "macro_f1": 0.8167772542776984,
+   "n_pred": 167.79166666666666,
+   "real_vis_dead": 0.1791256240723249,
+   "real_spells_per_min": 3.049912814669798,
+   "real_tag_implied": 0.8088127165058611,
+   "real_pathcrf_agree": 0.7500552049556617,
+   "real_replay_D": 0.4818101642597288,
+   "real_pred_D": 0.3653852206701625,
+   "admissible": true,
+   "mean_rank": 17.25
+  }
+ }
+}
