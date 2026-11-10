@@ -1,0 +1,84 @@
+{
+ "rule": {
+  "r_near": 1.5,
+  "r_opp": 5.0,
+  "v_rel": 5.0,
+  "v_ball_min": 1.0,
+  "min_run_s": 1.0,
+  "trim_s": 0.5,
+  "same_player": true
+ },
+ "criterion": "strict precision vs raw_Dfull >= target, pooled and each fold >= target-0.02; max coverage",
+ "target": 0.97,
+ "seeds": [
+  100,
+  101
+ ],
+ "pooled": {
+  "n": 30640,
+  "prec_raw_strict": 0.9706592689295039,
+  "D_share": 0.01106396866840731,
+  "prec_ctrl_strict": 0.8428851174934726,
+  "prec_ctrl_ignoringD": 0.8523151051120426,
+  "cov_visible": 0.030943993795042497,
+  "min_fold_prec_raw": 0.9537987679671458
+ },
+ "class_balance_H_share": 0.5200391644908616,
+ "per_fold": {
+  "9001": {
+   "n": 5618,
+   "ok_raw": 5545,
+   "H": 2085,
+   "A": 3533,
+   "trueD_raw": 3,
+   "graded_visible": 162860,
+   "ok_ctrl": 4553
+  },
+  "9002": {
+   "n": 3896,
+   "ok_raw": 3716,
+   "H": 2066,
+   "A": 1830,
+   "trueD_raw": 97,
+   "graded_visible": 159034,
+   "ok_ctrl": 2847
+  },
+  "9003": {
+   "n": 4177,
+   "ok_raw": 4079,
+   "H": 2468,
+   "A": 1709,
+   "trueD_raw": 42,
+   "graded_visible": 160573,
+   "ok_ctrl": 3764
+  },
+  "9004": {
+   "n": 5128,
+   "ok_raw": 4896,
+   "H": 2785,
+   "A": 2343,
+   "trueD_raw": 121,
+   "graded_visible": 165182,
+   "ok_ctrl": 4057
+  },
+  "9005": {
+   "n": 5032,
+   "ok_raw": 4931,
+   "H": 3521,
+   "A": 1511,
+   "trueD_raw": 18,
+   "graded_visible": 172521,
+   "ok_ctrl": 4467
+  },
+  "9006": {
+   "n": 6789,
+   "ok_raw": 6574,
+   "H": 3009,
+   "A": 3780,
+   "trueD_raw": 58,
+   "graded_visible": 170006,
+   "ok_ctrl": 6138
+  }
+ },
+ "n_admissible": 147
+}
