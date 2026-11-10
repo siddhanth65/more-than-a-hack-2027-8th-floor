@@ -71,7 +71,10 @@ def main():
         lab = candidate_labels(m, tags, cfg, mdl["dead"], mdl["team"], mdl["merge"], None, cache_key="real_tactical", seq=mdl["seq"], sel_dir=mdl["sel_dir"])
         out = ROOT / "runs/candidates"; out.mkdir(parents=True, exist_ok=True)
         p = write_submission(lab, out / f"{fam}_fx.csv"); assert validate(p) is None
-        old = np.array([x.split(",")[1] for x in (ROOT / "runs/candidates" / f"{fam}.csv").read_text().split("\n")[1:] if x])
+        oldp = ROOT / "runs/candidates" / f"{fam}.csv"
+        if not oldp.exists():
+            oldp = ROOT / "runs/arb/repro" / f"{fam}.csv"      # server: byte-identical regeneration of the registered file
+        old = np.array([x.split(",")[1] for x in oldp.read_text().split("\n")[1:] if x])
         new = np.asarray(lab)
         g = m.graded
         r = {"valid": True, "frames_changed_overall_graded": float((old[g] != new[g]).mean()),
