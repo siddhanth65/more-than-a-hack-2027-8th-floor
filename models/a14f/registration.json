@@ -1,0 +1,159 @@
+{
+ "candidate": "a14",
+ "base": "a13r (runs/select/a13r: a13's cell refit under sklearn 1.9.1; config, dead + team models)",
+ "learned_streams": {
+  "variant": "B12/off",
+  "weights": {
+   "seqB": 12.0
+  },
+  "feature_spec": {
+   "module": "scripts/exp_seq_feats.py",
+   "step_frames": 5,
+   "streams": [
+    "ball",
+    "tag",
+    "dead",
+    "pathcrf",
+    "teamctrl"
+   ],
+   "step_features": [
+    "ball_ha",
+    "ball_d",
+    "ball_miss",
+    "tag_ha",
+    "tag_d",
+    "tag_miss",
+    "dead_ha",
+    "dead_d",
+    "dead_miss",
+    "pathcrf_ha",
+    "pathcrf_d",
+    "pathcrf_miss",
+    "teamctrl_ha",
+    "teamctrl_d",
+    "teamctrl_miss",
+    "ball_present",
+    "blackout",
+    "ball_speed",
+    "ball_absx",
+    "ball_absy",
+    "touch_H",
+    "touch_A",
+    "touch_C",
+    "strong_H",
+    "strong_A",
+    "log_since_touch",
+    "log_until_touch",
+    "last_touch_team",
+    "next_touch_team",
+    "pcrf_phome",
+    "pcrf_imputed",
+    "pcrf_miss"
+   ],
+   "windows_steps": [
+    10,
+    25,
+    50
+   ],
+   "A_input": "windowed(X): [X, past mean W, future mean W] for W in 10 25 50 within each half",
+   "B_input": "standardised X (modelB.pt mu/sd), 600-step windows stride 300, centre kept",
+   "team_symmetrised": true,
+   "logp_clip": 0.0001,
+   "upsample": "each frame takes its 5-frame step's value (exp_seq_feats.upsample)"
+  },
+  "training": {
+   "matches": [
+    9001,
+    9002,
+    9003,
+    9004,
+    9005,
+    9006
+   ],
+   "seeds": [
+    100,
+    101
+   ],
+   "evidence": "per match: a13-cell streams from dead/team models trained on the other five matches (out-of-sample, as fold test caches)"
+  },
+  "modelB": {
+   "epochs": 13,
+   "fold_best_epochs": [
+    10,
+    14,
+    15,
+    13,
+    13,
+    10
+   ],
+   "seconds": 851.0,
+   "arch": "Linear(nf,64)+ReLU -> BiGRU(64, 2 layers) -> cls(3) + boundary(1)"
+  },
+  "envs": {
+   "modelB": "PathCRF venv via subprocess (mtah/evidence/seq_b_infer.py)"
+  }
+ },
+ "merge": "off (merge_theta 1.0)",
+ "adversarial": {
+  "auc_base": 0.9500685962081421,
+  "auc_base_folds": [
+   0.9322748960129644,
+   0.9438152646474638,
+   0.9548026300991597,
+   0.966449649375145,
+   0.9599278674105347
+  ],
+  "auc_touch_group_only": 0.5890745769123265,
+  "auc_without_touch_group": 0.9407463156765221,
+  "top_single_auc": {
+   "log_since_touch": 0.6120747079587747,
+   "log_until_touch": 0.6109606850684752,
+   "tag_miss": 0.5767876912426423,
+   "pcrf_imputed": 0.5529294459986094,
+   "dead_d": 0.5406172871254026,
+   "ball_speed": 0.5364496099609013,
+   "ball_absy": 0.5106983051541183,
+   "ball_miss": 0.5100683298651443
+  },
+  "reference": {
+   "a10_abs_base": 0.9970312742891425,
+   "a10_abs_windowed": 0.9954552530834226,
+   "a13_rebuild_base": 0.951794771319997,
+   "a13_rebuild_windowed": 0.9854530864769107
+  },
+  "auc_windowed": 0.983165453859077
+ },
+ "calibration": {
+  "rule": "dead_offset x seq_d_offset on 6-fold LOMO (decoding only) + real-match label-free bands (visible-dead 0.10-0.18, spells/graded min 2.7-4.3); best mean rank among admissible cells",
+  "chosen": {
+   "dead_offset": -3.0,
+   "seq_d_offset": -1.0,
+   "ctrl_Dfull": 0.556828439144184,
+   "ctrl_Dnarrow": 0.5202224658759859,
+   "raw_Dfull": 0.5675544794568467,
+   "raw_Dnarrow": 0.523468613501359,
+   "macro_f1": 0.8487143899701989,
+   "n_pred": 157.125,
+   "real_vis_dead": 0.17670644023362955,
+   "real_spells_per_min": 3.285974178034333,
+   "real_tag_implied": 0.7770352856895645,
+   "real_pred_D": 0.3988555745104087,
+   "real_pathcrf_agree": 0.796125161150403,
+   "real_replay_D": 0.4705104178150149,
+   "real_spells_per_HA_min": 5.466197537069616,
+   "admissible": true,
+   "mean_rank": 3.0
+  },
+  "lomo_6fold_uncalibrated": {
+   "ctrl_Dfull": 0.567696740668053,
+   "raw_Dfull": 0.5801706545941936,
+   "ctrl_Dnarrow": 0.5266107312520051,
+   "raw_Dnarrow": 0.5311364747077018,
+   "macro_f1": 0.8571134443830326,
+   "n_pred": 153.875,
+   "wins": 6,
+   "losses": 0,
+   "mean_rank": 1.5
+  }
+ }
+}

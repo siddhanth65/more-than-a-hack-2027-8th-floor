@@ -1,0 +1,29 @@
+{
+ "candidate": "H",
+ "base": "a14 (runs/select/a14: a13r base + BiGRU B, merge off), learned weight x0.5 (seqB 12 -> 6)",
+ "calibration": {
+  "rule": "simulator-best admissible (dead_offset, seq_d_offset): visible-dead in [0.116, 0.181] and R / rho in [2.28, 4.10] (rho = ctrl_Dfull n_pred / n_gt, 6-fold LOMO, same cell)",
+  "chosen": {
+   "dead_offset": -3.5,
+   "seq_d_offset": -0.5,
+   "ctrl_Dfull": 0.546215791379182,
+   "ctrl_Dnarrow": 0.5117584144848469,
+   "raw_Dfull": 0.5690648325358579,
+   "raw_Dnarrow": 0.5280438815518769,
+   "macro_f1": 0.8417549502445345,
+   "n_pred": 163.41666666666666,
+   "real_vis_dead": 0.1795978950209148,
+   "real_spells_per_min": 3.437053450587636,
+   "real_tag_implied": 0.7777686417753136,
+   "real_pred_D": 0.4021604335975122,
+   "real_pathcrf_agree": 0.8088857631352387,
+   "real_replay_D": 0.4831330614044758,
+   "real_spells_per_HA_min": 5.7491234166219165,
+   "admissible": true,
+   "mean_rank": 26.0,
+   "rho": 0.9346527511792488,
+   "implied_rate": 3.677358726276807
+  }
+ },
+ "input_dead_offset": -2.0
+}

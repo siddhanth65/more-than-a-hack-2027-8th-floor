@@ -1,0 +1,111 @@
+{
+ "candidate": {
+  "n_spells": 364,
+  "spells_per_HA_min": 5.7491234166219165,
+  "spells_per_graded_min": 3.437053450587636,
+  "pred_D_share": 0.40216043359751225,
+  "spell_len_median_s": 5.44,
+  "share_changes_in_blackout": 0.13934426229508196,
+  "D_starts_near_sp_share": 0.06666666666666667,
+  "tag_agreement": 0.5799078528453754,
+  "tag_agreement_implied": 0.7777686417753136,
+  "non_blackout_D_share": 0.17959789502091486,
+  "blackout_D_share": 0.8212257045895868
+ },
+ "reference": {
+  "D_starts_near_sp_share": {
+   "min": 0.0,
+   "median": 0.04124149659863945,
+   "max": 0.1
+  },
+  "blackout_D_share": {
+   "min": 0.274607748959334,
+   "median": 0.43675612160904553,
+   "max": 0.5908831334609829
+  },
+  "n_spells": {
+   "min": 125.0,
+   "median": 154.5,
+   "max": 169.0
+  },
+  "non_blackout_D_share": {
+   "min": 0.2157447376618753,
+   "median": 0.32347250938708516,
+   "max": 0.3664277234955712
+  },
+  "pred_D_share": {
+   "min": 0.26841793117414764,
+   "median": 0.35127814457142803,
+   "max": 0.43395474295433106
+  },
+  "share_changes_in_blackout": {
+   "min": 0.16822429906542055,
+   "median": 0.28014069264069263,
+   "max": 0.432
+  },
+  "spell_len_median_s": {
+   "min": 6.76,
+   "median": 8.39,
+   "max": 10.2
+  },
+  "spells_per_HA_min": {
+   "min": 3.8097366710013,
+   "median": 5.0397169584574195,
+   "max": 5.979901868277033
+  },
+  "spells_per_graded_min": {
+   "min": 2.712241975380076,
+   "median": 3.1849027815011093,
+   "max": 3.651474994238304
+  },
+  "tag_agreement": {
+   "min": 0.6621176245328425,
+   "median": 0.7516986207338823,
+   "max": 0.8057407734613172
+  },
+  "tag_agreement_implied": {
+   "min": 0.6621176245328425,
+   "median": 0.7516986207338823,
+   "max": 0.8057407734613172
+  }
+ },
+ "out_of_range": [
+  "spell_len_median_s",
+  "share_changes_in_blackout",
+  "tag_agreement",
+  "non_blackout_D_share",
+  "blackout_D_share"
+ ],
+ "bands": {
+  "old": {
+   "visible_dead": [
+    0.1,
+    0.18
+   ],
+   "spell_rate_R": [
+    2.7,
+    4.3
+   ]
+  },
+  "new": {
+   "visible_dead": [
+    0.116,
+    0.181
+   ],
+   "implied_rate_R_over_rho": [
+    2.28,
+    4.1
+   ]
+  },
+  "values": {
+   "visible_dead": 0.17959789502091486,
+   "R": 3.437053450587636,
+   "rho": 0.9346527511792488,
+   "R_over_rho": 3.677358726276807,
+   "admissible_old": true,
+   "admissible_new": true
+  },
+  "lomo_ctrl_Dfull": 0.546215791379182,
+  "lomo_raw_Dfull": 0.5690648325358579
+ }
+}
