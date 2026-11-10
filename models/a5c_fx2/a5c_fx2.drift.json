@@ -1,0 +1,60 @@
+{
+ "candidate": {
+  "n_spells": 282,
+  "spells_per_HA_min": 4.4395465994962215,
+  "spells_per_graded_min": 2.6627721787519594,
+  "pred_D_share": 0.40021528796338846,
+  "spell_len_median_s": 8.68,
+  "share_changes_in_blackout": 0.0440251572327044,
+  "D_starts_near_sp_share": 0.04065040650406504,
+  "tag_agreement": 0.5760198508666069,
+  "tag_agreement_implied": 0.7869188753906264,
+  "non_blackout_D_share": 0.1697091196483991,
+  "blackout_D_share": 0.8342377003066984
+ },
+ "reference": null,
+ "out_of_range": [],
+ "per_half": {
+  "H1": {
+   "tag_agreement_implied": 0.8047302563351107,
+   "HA_changes_in_blackout": 6
+  },
+  "H2": {
+   "tag_agreement_implied": 0.7696759427741573,
+   "HA_changes_in_blackout": 1
+  }
+ },
+ "bands": {
+  "new": {
+   "visible_dead": [
+    0.116,
+    0.181
+   ],
+   "implied_rate_R_over_rho": [
+    2.28,
+    4.1
+   ]
+  },
+  "old": {
+   "visible_dead": [
+    0.1,
+    0.18
+   ],
+   "spell_rate_R": [
+    2.7,
+    4.3
+   ]
+  },
+  "values": {
+   "visible_dead": 0.1697091196483991,
+   "R": 2.6627721787519594,
+   "rho": 0.8719237643982939,
+   "R_over_rho": 3.0539048108059226,
+   "admissible_new": true,
+   "admissible_old": false
+  },
+  "lomo_ctrl_Dfull": 0.494402255402909,
+  "lomo_raw_Dfull": 0.5241520296542342,
+  "pathcrf_smooth_s": 1.0
+ }
+}

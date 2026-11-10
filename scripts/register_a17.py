@@ -27,4 +27,4 @@ reg = {"candidate": a.name, "base": str(src), "pathcrf_smooth_s": a.smooth,
        "note": "simulator inputs unchanged (smooth_s 0 in the simulator caches); smoothing is a property of the real feed (runs/arb/FIX_NOTES.md)",
        "calibration": {"rule": "simulator-best (mean rank, 4 variants) admissible cell on the FIXED real evidence: visible-dead [0.116, 0.181], R/rho [2.28, 4.10]", "chosen": ch}}
 (out / "registration.json").write_text(json.dumps(reg, indent=1, default=float))
-print(json.dumps({"dead_offset": cfg["dead_offset"], "seq_d_offset": ch["seq_d_offset"]}))
+print(json.dumps({"dead_offset": cfg["dead_offset"], "seq_d_offset": ch.get("seq_d_offset")}))

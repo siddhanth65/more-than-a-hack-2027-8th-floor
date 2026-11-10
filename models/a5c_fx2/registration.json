@@ -1,0 +1,22 @@
+{
+ "candidate": "a5c_fx2",
+ "base": "models\\a5c",
+ "pathcrf_smooth_s": 1.0,
+ "note": "simulator inputs unchanged (smooth_s 0 in the simulator caches); smoothing is a property of the real feed (runs/arb/FIX_NOTES.md)",
+ "calibration": {
+  "rule": "simulator-best (mean rank, 4 variants) admissible cell on the FIXED real evidence: visible-dead [0.116, 0.181], R/rho [2.28, 4.10]",
+  "chosen": {
+   "dead_offset": -2.0,
+   "ctrl_Dfull": 0.494402255402909,
+   "raw_Dfull": 0.5241520296542342,
+   "ctrl_Dnarrow": 0.4797835822017511,
+   "raw_Dnarrow": 0.5088715315392794,
+   "rho": 0.8719237643982939,
+   "real_vis_dead": 0.1697091196483991,
+   "R": 2.6627721787519594,
+   "R_over_rho": 3.0539048108059226,
+   "mean_rank": 1.0,
+   "admissible": true
+  }
+ }
+}
