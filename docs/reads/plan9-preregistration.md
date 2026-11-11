@@ -138,3 +138,22 @@ read for S.
    M, K, T and B (all "none") stand, so the decision is S. If it is not accepted, a17 stays. Negative results are
    disclosed.
 7. **Deadline.** S is registered by Sat 14 Nov 2026 12:00 IST or it is dropped.
+
+## Amendment 3b (11 Nov 2026, 11:45 IST; correction of the fine-tuning schedule of Amendment 3 item 4, before any S prediction was scored)
+
+What happened. After the base models were retrained and the pseudo-labels were built for the six simulator folds, the
+first fine-tuning jobs were started. Their logs showed that the schedule of item 4 is degenerate for V1 and V2: the
+confident-ball-control rule labels only about 2.6 % of the steps of a half (about 350 of 13,500), so a window needs at
+least 30 labelled steps of 600 in only 0 to 19 of about 90 windows per half (median 10); in the jobs seen the epoch held
+2 pseudo windows and 6 windows in all, i.e. one gradient step per epoch, a no-op. This was seen from label counts and
+job logs only. No fine-tuned prediction has been decoded or scored; the partial outputs of those jobs were deleted
+unread, and the pseudo-label files, base models and a17 reference are untouched. Amendment 3 items 1 to 3 and 5 to 7
+(definition, pseudo-labels, variants and weights, acceptance, deadline) are unchanged.
+
+Replacement for item 4 (fixed here, not tuned on any score): Adam, learning rate 5e-4, weight decay 1e-5, gradient
+clipping 1.0, batch 64, 8 epochs, seeds 0, deterministic CPU torch. Each epoch: every pseudo window (600 steps, stride
+150, random first offset below 150) of the other half that holds at least 5 labelled steps, plus the same number of
+simulator windows drawn at random from the simulator training sequences (team-swap augmentation, as before); pseudo
+windows are team-swap augmented at random. Loss as before: cross-entropy over labelled steps with per-step weight (1
+simulator, w pseudo, i.e. per labelled frame, not per window) normalised by the batch's weight sum, plus 0.5 times the
+boundary BCE on simulator windows only. V0 (diagnostic, weight 0) uses the same schedule.
