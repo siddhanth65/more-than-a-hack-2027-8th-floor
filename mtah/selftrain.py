@@ -12,8 +12,9 @@ STEP = 5
 IGNORE = 3
 # the organisers' public window (frames 11185..18685 inclusive of the contest match): never pseudo-labelled
 PUBLIC_WINDOW = (11185, 18685)
-PSEUDO_MIN_LABELLED = 30          # a pseudo window needs at least this many labelled steps (of 600)
-SIM_PER_PSEUDO = 2                # simulator windows drawn per pseudo window
+PSEUDO_MIN_LABELLED = 5           # a pseudo window needs at least this many labelled steps (of 600); amendment 3b
+PSEUDO_STRIDE = 150               # stride of pseudo windows (simulator windows keep the base stride)
+SIM_PER_PSEUDO = 1                # simulator windows drawn per pseudo window
 
 
 def cross_half_source(target, halves):
@@ -99,17 +100,17 @@ def leakage_check(target_half, source_half, train_halves):
 
 
 def build_epoch(sim_seqs, pseudo_seq, w_pseudo, rng, win, stride, mirror, swap_labels, min_labelled=PSEUDO_MIN_LABELLED,
-                sim_per_pseudo=SIM_PER_PSEUDO):
+                sim_per_pseudo=SIM_PER_PSEUDO, pseudo_stride=PSEUDO_STRIDE):
     """Windows of one fine-tuning epoch (shuffled): every pseudo window of `pseudo_seq` (the OTHER half's normalised
     steps and pseudo step labels; None = no pseudo data) plus `sim_per_pseudo` times as many simulator windows drawn
-    at random from `sim_seqs` [(Xn, y)]. Each window is team-swapped with probability 1/2 (`mirror(x)` on the
+    at random from `sim_seqs` [(Xn, y)] (stride `stride`; pseudo windows use `pseudo_stride`). Each window is team-swapped with probability 1/2 (`mirror(x)` on the
     features, `swap_labels(y)` on the labels). Returns a list of dicts x, y, w (per-step weights) and pseudo (bool).
     A pseudo window with weight 0 carries no gradient (the V0 control)."""
     out = []
     n_p = 0
     if pseudo_seq is not None:
         Xp, yp = pseudo_seq
-        for a in pseudo_windows(yp, win, stride, rng.integers(0, stride), min_labelled):
+        for a in pseudo_windows(yp, win, pseudo_stride, rng.integers(0, pseudo_stride), min_labelled):
             x, y = Xp[a:a + win], yp[a:a + win]
             if rng.random() < 0.5:
                 x, y = mirror(x), swap_labels(y)

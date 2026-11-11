@@ -10,7 +10,7 @@ Stages (the torch stages run in the torch venv, the others in the main env; all 
   score  [--folds ...]             main   decode every variant at the a17 cell (dead -3.0, seq_d -0.5, B weight 12),
                                           four truth variants -> <out>/lomo_scores.csv, summary.json
 Variants: V1 (conf, w 1.0), V2 (conf, w 0.5), V3 (conf + a17 decode >= 0.9, w 0.5), V0 (diagnostic: V1 labels at weight 0).
-Hyper-parameters are fixed here (amendment 3, item 4).
+Hyper-parameters are fixed here (amendment 3 item 4 as replaced by amendment 3b).
 """
 import argparse, json, os, sys, time
 from pathlib import Path
@@ -27,7 +27,7 @@ MATCHES = [9001, 9002, 9003, 9004, 9005, 9006]
 SEEDS = [100, 101]
 VARIANTS = {"V1": {"labels": "conf", "w": 1.0}, "V2": {"labels": "conf", "w": 0.5}, "V3": {"labels": "conf+a17", "w": 0.5},
             "V0": {"labels": "conf", "w": 0.0}}
-FT = {"epochs": 4, "lr": 5e-4, "wd": 1e-5, "batch": 64, "clip": 1.0, "boundary_w": 0.5, "seed": 0}
+FT = {"epochs": 8, "lr": 5e-4, "wd": 1e-5, "batch": 64, "clip": 1.0, "boundary_w": 0.5, "seed": 0}
 CELL = {"dead_offset": -3.0, "seq_d_offset": -0.5, "w_B": 12.0}
 MIN_POST = 0.9
 DEFAULT_LOMO = ROOT / "runs" / "select" / "exp_seq2" / "lomo"
