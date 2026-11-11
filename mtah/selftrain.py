@@ -10,6 +10,7 @@ import numpy as np
 
 STEP = 5
 IGNORE = 3
+MERGED_POSTERIOR_MIN = 0.9      # V3: a17 labels kept where the merged posterior is at least this
 # the organisers' public window (frames 11185..18685 inclusive of the contest match): never pseudo-labelled
 PUBLIC_WINDOW = (11185, 18685)
 PSEUDO_MIN_LABELLED = 5           # a pseudo window needs at least this many labelled steps (of 600); amendment 3b

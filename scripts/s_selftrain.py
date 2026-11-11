@@ -104,6 +104,10 @@ def load_base(path):
 def sim_train_seqs(gl, F, ck):
     """Normalised simulator training sequences of fold F (the five training matches, cross-fitted evidence)."""
     paths = [gl.fpath(gl.src_of(F, m), k, s) for m in MATCHES if m != F for k, s in gl.halves_of(m)]
+    return sim_train_seqs_paths(gl, paths, ck)
+
+
+def sim_train_seqs_paths(gl, paths, ck):
     S, _, _, names = gl.seqs(paths, ck["mu"], ck["sd"])
     assert list(names) == list(ck["names"])
     return [(((X - ck["mu"]) / ck["sd"]).astype(np.float32), y) for _, X, y, _ in S]
@@ -150,18 +154,19 @@ def stage_ft(a):
 
 
 # ------------------------------------------------------------------------------------------------------ main env
-def decode_cell(h, wts_B=CELL["w_B"], seq=None):
+def decode_cell(h, wts_B=CELL["w_B"], seq=None, dead_offset=None, seq_d=None):
     """(labels, cost matrix) of the registered decoder at the a17 cell for exp_seq_lomo.Half-like `h` with h.seq['B']."""
     import copy
     import exp_seq_lomo as L
     import mtah.select as sel
     from mtah.decode.viterbi import cost_matrix
     from mtah.evidence.dead import dead_evidence
+    do = CELL["dead_offset"] if dead_offset is None else dead_offset; sd = CELL["seq_d_offset"] if seq_d is None else seq_d
     base = L.base_cfg()
-    cfg = sel.apply_cell(base, {**sel.GRID8[0], "dead_offset": CELL["dead_offset"]})
+    cfg = sel.apply_cell(base, {**sel.GRID8[0], "dead_offset": do})
     cfg.decoder.lengths = sel.estimate_lengths([], cfg, None)
-    ev = dict(h.ev); ev["dead"] = dead_evidence(h.p_dead, logit_offset=CELL["dead_offset"])
-    sb = (seq if seq is not None else h.seq["B"]).copy(); sb[:, 2] += np.float32(CELL["seq_d_offset"])
+    ev = dict(h.ev); ev["dead"] = dead_evidence(h.p_dead, logit_offset=do)
+    sb = (seq if seq is not None else h.seq["B"]).copy(); sb[:, 2] += np.float32(sd)
     hh = copy.copy(h); hh.seq = {"B": sb}
     lab = L.decode_labels(hh, ev, {"B": wts_B}, cfg)
     dcfg = copy.deepcopy(cfg.decoder); evd = dict(ev); evd["seqB"] = sb

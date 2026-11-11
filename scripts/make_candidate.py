@@ -35,7 +35,10 @@ def load_selection(sel, with_seq=False):
     seq = raw.pop("seq_stream", None)
     if seq is not None:
         for k in ("modelA", "modelB"):
-            if any(w == ("seq" + k[-1]) for w in seq["weights"]) and not (sel / seq[k]).exists():
+            if not any(w == ("seq" + k[-1]) for w in seq["weights"]):
+                continue
+            files = list(seq[k].values()) if isinstance(seq[k], dict) else [seq[k]]   # S: one checkpoint per half
+            if not all((sel / f).exists() for f in files):
                 raise SystemExit(f"{sel}: config uses learned stream {k} but {seq[k]} is missing")
 
     cfg = PipelineConfig.from_dict(raw); cfg.decoder.lengths = lengths

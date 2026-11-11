@@ -112,3 +112,24 @@ def test_swap_augmentation_flips_labels_consistently():
             if np.array_equal(e["x"], src[a:a + 600]) or np.array_equal(e["x"], -src[a:a + 600]):
                 found = True; break
         assert found
+
+
+def test_per_half_model_dispatch(monkeypatch, tmp_path):
+    """seqstream.compute_streams with a per-half modelB dict runs each half's checkpoint on that half's steps only."""
+    import mtah.evidence.seqstream as sq
+    import mtah.evidence.seq_feats as fx
+    seen = {}
+
+    def fake_b(path, Xs, seg, names, python=None, threads=4):
+        seen[path.name] = sorted(set(seg.tolist()))
+        lp = np.zeros((len(Xs), 3), np.float32); lp[:, 0] = {"h1.pt": -1.0, "h2.pt": -2.0}[path.name]
+        return lp
+
+    monkeypatch.setattr(sq, "model_b_logp", fake_b)
+    F = 400
+    z = {"fps": np.float32(25.0), "half": np.r_[np.full(200, 1), np.full(200, 2)].astype(np.int8)}
+    monkeypatch.setattr(sq.fx, "frame_features", lambda z: (np.zeros((F, 3), np.float32), ["a", "b", "c"]))
+    spec = {"weights": {"seqB": 1.0}, "modelB": {"1": "h1.pt", "2": "h2.pt"}}
+    out = sq.compute_streams(z, spec, tmp_path)["seqB"]
+    assert seen == {"h1.pt": [1], "h2.pt": [2]}
+    assert (out[:200, 0] == -1.0).all() and (out[200:, 0] == -2.0).all()
