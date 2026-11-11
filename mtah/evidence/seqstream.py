@@ -77,7 +77,16 @@ def compute_streams(z, spec, model_dir):
         if k == "seqA":
             lp = model_a_logp(Path(model_dir) / spec["modelA"], Xs, seg, names)
         elif k == "seqB":
-            lp = model_b_logp(Path(model_dir) / spec["modelB"], Xs, seg, names)
+            mb = spec["modelB"]
+            if isinstance(mb, dict):         # one checkpoint per half id (candidate S: cross-half self-training)
+                lp = np.zeros((len(Xs), 3), np.float32); done = np.zeros(len(Xs), bool)
+                for h, fname in mb.items():
+                    ii = np.flatnonzero(seg == int(h))
+                    lp[ii] = model_b_logp(Path(model_dir) / fname, Xs[ii], seg[ii], names); done[ii] = True
+                if not done.all():
+                    raise ValueError("per-half modelB does not cover every half of the input")
+            else:
+                lp = model_b_logp(Path(model_dir) / mb, Xs, seg, names)
         else:
             raise ValueError(f"unknown learned stream {k!r}")
         out[k] = fx.upsample(lp, starts, F, z["half"])

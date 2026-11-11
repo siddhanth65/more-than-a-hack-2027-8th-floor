@@ -1,0 +1,50 @@
+{
+ "candidate": "s",
+ "base": "models/a17",
+ "definition": "a17 with stream B fine-tuned by cross-half self-training (variant V3, weight 0.5): the checkpoint predicting half h is fine-tuned on the simulator training data plus pseudo-labels of the OTHER half only; public-window frames excluded from every pseudo-label set (docs/reads/plan9-preregistration.md, amendments 3 and 3b)",
+ "calibration": {
+  "rule": "simulator-best (mean rank, 4 variants, S's V3 predictions) admissible cell on the real evidence: visible-dead [0.116, 0.181], R/rho [2.28, 4.10]",
+  "chosen": {
+   "dead_offset": -4.0,
+   "seq_d_offset": 0.5,
+   "ctrl_Dfull": 0.566478681467632,
+   "ctrl_Dnarrow": 0.5260018745544045,
+   "raw_Dfull": 0.5835534436386659,
+   "raw_Dnarrow": 0.5356894390856387,
+   "rho": 0.8921081072691707,
+   "real_vis_dead": 0.17927983499431346,
+   "R": 2.946045814789402,
+   "real_tag_implied": 0.8203394589374274,
+   "real_pred_D": 0.4145741138256419,
+   "R_over_rho": 3.302341712606484,
+   "admissible": true,
+   "mean_rank": 3.0
+  }
+ },
+ "lomo_acceptance_run": {
+  "V0": {
+   "ctrl_Dfull": 0.5616461751024533,
+   "raw_Dfull": 0.5745786859043651
+  },
+  "V1": {
+   "ctrl_Dfull": 0.5590918106977045,
+   "raw_Dfull": 0.5759757486819318
+  },
+  "V2": {
+   "ctrl_Dfull": 0.5594595183594012,
+   "raw_Dfull": 0.5764803346344901
+  },
+  "V3": {
+   "ctrl_Dfull": 0.5614088730434607,
+   "raw_Dfull": 0.5769433419947676
+  },
+  "ref_base_retrained": {
+   "ctrl_Dfull": 0.5617217040488369,
+   "raw_Dfull": 0.5736002035466135
+  },
+  "ref_stored": {
+   "ctrl_Dfull": 0.5621591560970424,
+   "raw_Dfull": 0.5740187486500713
+  }
+ }
+}
