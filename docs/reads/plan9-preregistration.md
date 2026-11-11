@@ -86,3 +86,55 @@ The acceptance test of modifier R uses K-nat and K-sim pooled over the 10 test m
 6. Final file: official validator and row count; one boolean check on the public window
    ("best frame offset is 0 and H/A are not swapped"), with no score printed. Only a demonstrable
    alignment or orientation bug may change the file.
+
+## Amendment 3 (11 Nov 2026, 11:26 IST; S recipe, written before any S training or scoring)
+
+Selected for S in Procedure step 1 and step 3. Nothing in this amendment has been run. The sealed match 9007 is not
+read for S.
+
+1. **Definition of S.** S is the a17 build (same evidence streams, decoder, post-processing, PathCRF smoothing, offsets
+   rule) with the BiGRU sequence stream B (`seqB`) fine-tuned by cross-half self-training. For a target match half h,
+   B is fine-tuned on (a) the original simulator training data (the same windows and augmentation as B's own
+   training) plus (b) pseudo-labelled frames from the OTHER half of the same match only, then used to predict half h.
+   No frame's own pseudo-label ever trains the model that predicts it. Each half therefore has its own fine-tuned copy
+   of B; the starting point of every copy is the same base B (in the simulator folds: the fold-final B trained on the
+   five training matches; on the contest match: `models/a17/seq_modelB.pt`). Input normalisation constants of the base
+   stay fixed.
+2. **Pseudo-labels (algorithmic only: no human input, no ground truth of the target).**
+   (i) H or A on confident-ball-control frames by the frozen rule of `docs/arb/rule.json` (`scripts/arb_common.py`,
+   `confident_control`: nearest player within 1.5 m, nearest opponent at least 5 m, ball speed at least 1 m/s, ball
+   moving at most 5 m/s relative to that player, same player for at least 1 s, middle of the run only, 0.5 s trimmed
+   from both ends; precision 0.971 against simulator truth). A 5-frame step takes the label of its centre frame.
+   (ii) V3 only: the labels of a17 itself (a17 decode with the base B, never a fine-tuned B) on frames whose merged
+   posterior is at least 0.9. Merged posterior of frame t = softmax over {H, A, D} of minus the decoder's per-frame
+   cost row (`mtah.decode.viterbi.cost_matrix` of all a17 streams including the base `seqB`, at the a17 weights and
+   offsets); the frame qualifies iff the posterior of its final decoded label is at least 0.9; the label is the final
+   decoded label. Where (i) and (ii) disagree, (i) wins.
+   Frames 11185 to 18685 (inclusive) of the contest match, the organisers' public window, are EXCLUDED from every
+   pseudo-label set; no score is ever computed on the window.
+3. **Variants (at most three, fixed here).** V1 = (i) only, pseudo-label weight 1.0 relative to a simulator frame.
+   V2 = (i) at weight 0.5. V3 = (i) plus (ii), weight 0.5 (this adds D labels). A fourth run, V0 = the identical
+   fine-tuning schedule with no pseudo-labels, is a diagnostic only (separates the effect of pseudo-labels from the
+   effect of extra training) and cannot be chosen. The variant is chosen on the simulator leave-one-match-out run only:
+   best mean ctrl_Dfull. This is a simulator-only choice.
+4. **Fine-tuning schedule (fixed in `scripts/s_selftrain.py`, not tuned).** Adam, learning rate 5e-4 (the base training
+   used 3e-3), weight decay 1e-5, gradient clipping 1.0, batch 64, 4 epochs, torch and numpy seeds 0, deterministic
+   CPU torch. Each epoch: every pseudo window (600 steps, stride 300, random offset) of the other half that holds at
+   least 30 labelled steps, plus twice as many windows drawn at random from the simulator training sequences (random
+   offsets, team-swap augmentation, as in base training); pseudo windows are team-swap augmented at random. Loss =
+   cross-entropy over labelled steps with per-step weight (1 simulator, w pseudo) normalised by the batch's weight
+   sum, plus 0.5 times the boundary BCE on simulator windows only.
+5. **Acceptance (stricter than the original rule S >= a14 - 0.005).** The chosen S must reach leave-one-match-out
+   ctrl_Dfull >= a17's 0.5622 - 0.005 = 0.5572, computed with the same harness as a17 (decode cell dead offset -3.0,
+   stream-B D offset -0.5, B weight 12, `exp_seq_lomo.py` decoder; scored with the vendored organisers' scorer), the
+   same folds 9001 to 9006 and the same simulated blackouts (seeds 100 and 101). In simulation the held-out match gets
+   the same cross-half procedure, with pseudo-labels computed by the same rule from its simulated feed. The a17
+   reference is re-decoded in the same harness from the registered a17 fold predictions; if it differs from 0.5622 by
+   more than 0.0005, the re-run value minus 0.005 is the bar and both are reported. It must also be admissible on the
+   real match: visible-dead share of the real-match prediction in [0.116, 0.181], R / rho in [2.28, 4.10], the dead
+   offset set by the usual rule (simulator-best admissible offset), the official validator passes, and the clean-clone
+   md5 reproduces.
+6. **Consequence.** If S is accepted it replaces a17 as the L-family representative. The already computed signals
+   M, K, T and B (all "none") stand, so the decision is S. If it is not accepted, a17 stays. Negative results are
+   disclosed.
+7. **Deadline.** S is registered by Sat 14 Nov 2026 12:00 IST or it is dropped.
