@@ -1,16 +1,18 @@
 # Regenerate the submission file (default: candidate a17) from the committed models. Windows PowerShell 5.1 or PowerShell 7.
-#   scripts\reproduce.ps1                   a17: runs/candidates/a17.csv, prints the md5 and compares it with the expected one
+#   scripts\reproduce.ps1                   s: runs/candidates/s.csv, prints the md5 and compares it with the expected one
+#   scripts\reproduce.ps1 -Name a17        the predecessor
 #   scripts\reproduce.ps1 -Name a5c_fx2     the fallback candidate
 # Needs (see README.md): the competition data bundle (MTAH_DATA_DIR), the main venv (MTAH_VENV, Python 3.12, requirements-main.txt),
 # PathCRF checkout + torch venv (MTAH_PATHCRF_REPO, MTAH_PATHCRF_PY; third_party/pathcrf/SETUP.md).
 # It does not retrain anything: every trained artefact the candidate needs is in models/<Name>/.
-param([string]$Name = "a17")
+param([string]$Name = "s")
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
 Set-Location $Root
 
 # candidate -> PathCRF input smoothing (s) and expected md5 of the CSV
 $Known = @{
+    "s"        = @{ smooth = 1.0; md5 = "4c2184b6807ae6f2b0c110c3dc164388" }
     "a17"      = @{ smooth = 1.0; md5 = "afb9e7b4ede118268fd0222fd5e11068" }
     "a5c_fx2"  = @{ smooth = 1.0; md5 = "107e7fc1157c05ad3ba8f893734606b7" }
 }

@@ -25,7 +25,7 @@ Status: ACCEPTED (simulator bar passed, admissible on the real match, clean-clon
 | V2 (confident control, w 0.5) | 0.5595 | 0.5765 | .5611 .4410 .5895 .5456 .6052 .6143 |
 | V3 (confident control + a17 decode >= 0.9, w 0.5) | 0.5614 | 0.5769 | .5689 .4373 .5940 .5540 .6028 .6115 |
 
-raw_Dfull per fold is in `runs/s/lomo/summary.json`; per-half scores in `runs/s/lomo/lomo_scores.csv`.
+raw_Dfull per fold is in `docs/s/lomo_summary.json`; per-half scores in `docs/s/lomo_scores.csv`.
 The re-decoded reference equals the registered 0.5622 / 0.5740 exactly (difference < 0.0005), so the bar is 0.5622 - 0.005 = 0.5572.
 
 Pseudo-label quality on the simulator (aggregates, `pseudo` stage): confident control labels about 2.6 % of steps at raw
@@ -49,7 +49,7 @@ the `~/mtah-data` link) is not attached at the moment. No label of the contest m
   the OTHER half only (V3, weight 0.5, schedule of amendment 3b). Checkpoint for half 1 uses half 2's pseudo-labels and vice versa.
 - `scripts/calib_s.py sim|real`: offsets by the usual rule. Grid = a17's 21 cells (dead {-2,-2.5,-3} x seq_d {-1,-2,-3} union dead {-3,-3.5,-4} x
   seq_d {-1,-0.5,0,0.5}); simulator side = S's V3 LOMO predictions decoded at each cell; real side = the registered pipeline per cell, label-free.
-  Chosen = best simulator mean rank among admissible cells: **dead offset -4.0, stream-B D offset +0.5** (`runs/s/calib/calib_s.csv`, `.json`).
+  Chosen = best simulator mean rank among admissible cells: **dead offset -4.0, stream-B D offset +0.5** (`docs/s/calib_s.csv`, `.json`).
   Cells (-3.0, +0.5) and (-3.5, +0.5) rank higher in the simulator but exceed the visible-dead band (0.1876, 0.1835 > 0.181). The chosen cell
   has little margin to the band edge (visible-dead 0.1793 against 0.181).
 - `scripts/register_s.py` -> `models/s` (a17's dead/team models, decoder and drift reference unchanged; `modelB` is a per-half dict;
@@ -65,7 +65,7 @@ the `~/mtah-data` link) is not attached at the moment. No label of the contest m
 The acceptance test was fixed at a17's cell (0.5614, passes the 0.5572 bar). The higher number at S's own cell is a consequence of the offset
 rule, not an improvement of the stream: at identical cells S and a17 differ by under 0.001 on ctrl_Dfull.
 
-### Admissibility (real match, label-free; `runs/candidates/s.drift.json`, `scripts/a17_report.py s a17`)
+### Admissibility (real match, label-free; `docs/s/s.drift.json`, `scripts/a17_report.py s a17`)
 
 | measure | S | a17 | band / note |
 |---|---|---|---|

@@ -1,6 +1,6 @@
 # Frame-level possession labelling: technical document
 
-More Than A Hack 2027 (Metrica Sports). Submitted file: candidate **a17**, md5 `afb9e7b4ede118268fd0222fd5e11068`, 199,319 rows, labels H / A / D (X is never written).
+More Than A Hack 2027 (Metrica Sports). Submitted file: candidate **S** (a17 with the BiGRU stream B self-trained across halves), md5 `4c2184b6807ae6f2b0c110c3dc164388`, 199,319 rows, labels H / A / D (X is never written). Its documented predecessor is a17 (md5 `afb9e7b4ede118268fd0222fd5e11068`); S differs from a17 only in stream B, its offsets, and 3.0 % of the labels.
 Repository: this one. Every number below comes from a file in it (section 9 lists them); the aggregates were computed on simulated or other-game data unless the text says otherwise.
 
 ## 1. Approach
@@ -17,11 +17,13 @@ Repository: this one. Every number below comes from a file in it (section 9 list
 | dead-ball model | gradient-boosted trees | D versus live. Features: ball-out geometry at blackout entry, time since blackout start, set-piece tags, restart shapes, player-speed collapse, and ball-independent long-context player-motion features (slowdown, slow share, acceleration, team spread, centroid distance, compactness, visible count over 2, 5 and 10 s windows plus trends). Features are standardised per match-half. A scalar log-odds prior offset (-3.0 in a17) calibrates the dead share to other-game levels. Weight 4 |
 | PathCRF, players only | player positions at 5 fps | external model (Kim et al.; MPL-2.0, run unmodified in its own environment) giving the posterior of which node owns the ball. **On the real feed the player positions are first smoothed with a 1 s centred moving average** (section 6 and 7). Weight 1 |
 | team in control | gradient-boosted trees on ball-player geometry | per-frame H versus A on visible-ball frames (three nearest players per team, closing speeds, ball speed and acceleration, direction of play, time to and from touches); held-out frame accuracy 0.883 against 0.744 for the hand-built ball stream. Weight 2 |
-| BiGRU stream B | the five streams above plus touches, the PathCRF posterior and the ball, at 5-frame steps | a small bidirectional GRU (0.5 MB, 32 input features) trained on the simulator, team-symmetrised, giving per-frame H/A/D log-probabilities. Weight 12, D offset -0.5, inputs computed at the dead offset it was trained at (-2.0) |
+| BiGRU stream B | the five streams above plus touches, the PathCRF posterior and the ball, at 5-frame steps | a small bidirectional GRU (0.5 MB, 32 input features) trained on the simulator, team-symmetrised, giving per-frame H/A/D log-probabilities. Weight 12, inputs computed at the dead offset it was trained at (-2.0). a17: one network, D offset -0.5. S: two fine-tuned copies, one per half (below), D offset +0.5 |
 
 **Decoder.** Costs are summed with the weights above; team-switch cost tau_HA = 30 and dead-switch costs 100; the cost matrix is centred per frame so smoothed evidence does not swamp the switch costs.
 
-**Post-processing** (all O(segments)): islands shorter than 0.4 s removed; A-B-A patterns shorter than 1 s merged unless a strong touch says otherwise; team-change boundaries snapped to a touch within 50 frames (worth about +0.02 spellF1 in a fold experiment). The spell-merge model of earlier candidates, the broadcast replay stream and the switch hazard are off in a17.
+**Post-processing** (all O(segments)): islands shorter than 0.4 s removed; A-B-A patterns shorter than 1 s merged unless a strong touch says otherwise; team-change boundaries snapped to a touch within 50 frames (worth about +0.02 spellF1 in a fold experiment). The spell-merge model of earlier candidates, the broadcast replay stream and the switch hazard are off in a17 and S.
+
+**S: cross-half self-training of stream B** (Amendments 3 and 3b of the pre-registration, section 5). Everything above is a17 except stream B. For a target half h, a copy of a17's network is fine-tuned on (a) the simulator training sequences plus (b) pseudo-labelled steps of the other half of the same match only, and that copy predicts h; no half's own pseudo-labels ever train the network that predicts it. Pseudo-labels are algorithmic: H or A on confident-ball-control frames (the rule of section 3, frozen on simulator folds), plus a17's own decoded label (H, A or D) on frames where the softmax of the decoder's per-frame cost row gives that label a posterior of at least 0.9 (the confident-control label wins a disagreement); frames 11185 to 18685, the organisers' public window, are removed from every pseudo-label set. Pseudo-labelled steps carry weight 0.5 against 1 for a simulator step. Fine-tuning: Adam, learning rate 5e-4 (base training 3e-3), 8 epochs, each epoch every pseudo window (600 steps, stride 150, at least 5 labelled steps) plus the same number of simulator windows. On the contest match this is 15,235 labelled steps (6,376 D, taken from the second half) for the first-half network and 13,998 (6,080 D, taken from the first half) for the second-half network. Code: `mtah/selftrain.py`, `scripts/s_selftrain.py` (simulator run), `scripts/s_real.py` (contest match).
 
 **Why this and not something simpler.** The organisers' smoother (nearest player plus 2 s majority vote) scores about 0.21 to 0.23 on our simulator and 0.32 on the 5-minute public window, where the ball is present 88 % of the time. On the long blackouts, which the window under-represents, a ball-only method has nothing to work with. Our evidence on blackout frames is therefore tags, dead-ball motion patterns and players-only models, and the learned stream B was added because, as a10, it beat the hand-weighted a5c on all six simulator folds (section 5).
 
@@ -51,7 +53,7 @@ None of it comes from the provided game. No label on the provided game, hand-mad
 | Metrica sample games 1 to 3 | public event data and tracking from Metrica Sports; truth derived algorithmically from the events (possession events; dead from out-of-play, shot, foul and similar events up to the next set piece; blank-ball stretches) | 3 games, 6 halves | **validation only** (signal M); no model was trained on them |
 | PathCRF pretrained weights (`saved/140`) | trained by the PathCRF authors on DFL open-data matches | 37 MB checkpoint | used as shipped. **Overlap caveat as recorded in our notes:** our simulator matches 9001 to 9005 are PathCRF's training matches and 9006 its validation match; 9007 is its clean test match. PathCRF's simulator accuracy is therefore optimistic, which contributes to the simulator-to-real gap |
 
-Algorithmic pseudo-labels on the provided game (frames where one player clearly controls the ball: nearest player within 1.5 m, nearest opponent at least 5 m away, ball moving, same player for at least 1 s; precision 0.971 against simulator truth, rule fixed on simulator folds) were used only to diagnose the PathCRF input problem on the real feed and to choose the smoothing length (section 6). They are not used to train any model. The learned models were trained once, on DFL simulator data, before the real-feed fix, and were not retrained for it.
+Algorithmic pseudo-labels on the provided game (frames where one player clearly controls the ball: nearest player within 1.5 m, nearest opponent at least 5 m away, ball moving, same player for at least 1 s; precision 0.971 against simulator truth, rule fixed on simulator folds) were used only to diagnose the PathCRF input problem on the real feed and to choose the smoothing length (section 6). In a17 they train no model. In S they are the only thing that differs: stream B is fine-tuned on pseudo-labels of the other half of the contest match, as described in section 1, with the public window excluded. The dead-ball, team-in-control and PathCRF models are unchanged and were trained on DFL simulator data only.
 
 ## 4. Possession rules implemented
 
@@ -70,7 +72,7 @@ Algorithmic pseudo-labels on the provided game (frames where one player clearly 
 
 **Admissibility on the real match (label-free), re-anchored on other games.** A candidate is admissible only if (i) its predicted dead share on visible-ball frames lies in [0.116, 0.181] = [0.8, 1.25] x 0.145 (SkillCorner), and (ii) its implied truth spell rate R / rho lies in [2.28, 4.10] per graded minute (the span of controlled-possession rates in SkillCorner, DFL and the Metrica sample), where R is the predicted rate on the real match and rho the same configuration's simulator count ratio. The dead and learned-stream offsets of every candidate are set by one rule: the best simulator rank among admissible cells. The original bands were anchored on public-window aggregates (section 6).
 
-**Pre-registered final selection** (`docs/reads/plan9-preregistration.md`, committed 10 Nov before any of these results): pool {a5c, a13r, a10, a14, a16, H} (a self-training variant S was allowed but never built); P = a5c (hand-built streams), L = a14 (learned sequence streams). Four signals, each favouring P, L or neither; P is chosen only if at least two favour P and none favours L, a hedge H if one favours P or they conflict, otherwise L.
+**Pre-registered final selection** (`docs/reads/plan9-preregistration.md`, committed 10 Nov before any of these results): pool {a5c, a13r, a10, a14, a16, H} (a self-training variant S was allowed; it was built afterwards under Amendment 3, below); P = a5c (hand-built streams), L = a14 (learned sequence streams). Four signals, each favouring P, L or neither; P is chosen only if at least two favour P and none favours L, a hedge H if one favours P or they conflict, otherwise L.
 
 | signal | test | result | verdict |
 |---|---|---|---|
@@ -94,6 +96,38 @@ All four were none or invalid, so the rule's default L = a14 family applied. We 
 
 a17 itself was not scored on K, M or the sealed match: those were computed for its predecessors before the PathCRF fix was found. On the other-game tests the a14 and a5c families differ by amounts within noise (0.005 to 0.015 spellF1, in either direction); the choice of the learned family rests on the simulator (about +0.06 to +0.08), the pre-registered default, and the real-match label-free checks, not on a decisive independent test.
 
+### Candidate S (Amendments 3 and 3b)
+
+**Pre-registration.** Amendment 3 (11 Nov 2026, 11:26 IST, commit 839d70e) fixed S before any S training or scoring: definition, pseudo-label rule, variants V1 (confident control, weight 1.0), V2 (weight 0.5) and V3 (confident control plus a17's own labels at posterior >= 0.9, weight 0.5), simulator-only choice of the variant, and the acceptance bar: leave-one-match-out ctrl_Dfull >= a17's 0.5622 - 0.005 = 0.5572 in the same harness, same folds and blackouts, plus real-match admissibility. **Amendment 3b** (11:45 IST, commit a8e593c) corrected the fine-tuning schedule of Amendment 3 before any S prediction was decoded or scored: the original schedule (windows with at least 30 labelled steps, 4 epochs) turned out to be a no-op, because the confident-control rule labels only about 2.6 % of steps and few windows qualified (about one gradient step per epoch). This was seen from label counts and job logs; the partial outputs were deleted unread. Variants, weights, bar and deadline did not change. The schedule of section 1 is the corrected one.
+
+**Simulator run** (6 folds, seeds 100 and 101, a17's decoding cell; `docs/s/lomo_summary.json`):
+
+| system | ctrl_Dfull | raw_Dfull |
+|---|---|---|
+| a17, registered fold predictions re-decoded in this harness | 0.5622 | 0.5740 |
+| a17 base network retrained here (start of every fine-tune; not bit-identical, 0.02 to 0.04 % of steps differ in argmax) | 0.5617 | 0.5736 |
+| V0, diagnostic: same schedule, pseudo-label weight 0 | 0.5616 | 0.5746 |
+| V1 | 0.5591 | 0.5760 |
+| V2 | 0.5595 | 0.5765 |
+| **V3 (chosen)** | **0.5614** | **0.5769** |
+
+V3 has the best ctrl_Dfull of V1 to V3 and clears the bar of 0.5572, so S passed. **This is non-inferiority, not an improvement.** V0, which runs the same fine-tuning without any pseudo-label, scores the same (-0.0006 against a17), so the pseudo-labels add nothing measurable on the simulator; V3 is -0.0008 on ctrl_Dfull (better in 2 of 6 folds) and +0.0029 on raw_Dfull. The held-out simulated match is in-distribution, so the simulator could not show the adaptation to the real feed that self-training is meant to give.
+
+**Offsets and admissibility on the real match** (label-free; `docs/s/calib_s.csv`). The offsets follow the usual rule (best simulator mean rank among admissible cells of a17's 21-cell grid): dead -4.0, stream-B D offset +0.5. The two cells that rank higher in the simulator, (-3.0, +0.5) and (-3.5, +0.5), were skipped because their visible-dead shares (0.1876, 0.1835) exceed 0.181. At the chosen cell the simulator gives 0.5665 / 0.5836; that gain comes from the offset rule, not from the stream (at the same cell S and a17 differ by less than 0.001).
+
+| real match, label-free | S | a17 | band |
+|---|---|---|---|
+| visible-dead share | 0.1793 | 0.1778 | [0.116, 0.181]; **margin to the upper edge only 0.0017** |
+| R, spells per graded minute | 2.946 | 2.871 | |
+| rho (simulator count ratio) / R over rho | 0.892 / 3.302 | 0.888 / 3.232 | R over rho in [2.28, 4.10] |
+| tag agreement, overall / H1 / H2 | 0.820 / 0.840 / 0.801 | 0.817 / 0.841 / 0.794 | |
+| predicted D share | 0.415 | 0.404 | |
+| spells | 312 | 304 | |
+
+S changes **3.0 %** of graded frames against a17 (H1 2.6 %, H2 3.5 %; 3.4 % inside blackouts, 2.8 % outside). Because V3's pseudo-labels include a17's own decisions (about a third of them D), S is partly a self-distillation of a17 on the contest match.
+
+**Reproducibility of S.** Candidate `models/s`; md5 `4c2184b6807ae6f2b0c110c3dc164388`, 199,319 rows, vendored official validator passes. The file was regenerated byte-identically from two fresh clones of the repository on the university server, using the PathCRF real-match posterior computed on the laptop (cache md5 equal on both machines); the same server environment rebuilds a17 byte-identically to its laptop-registered md5. **A clean-clone rebuild on the laptop is pending**: the laptop's data drive was not mounted when S was built. Run logs and per-fold tables: `docs/s/REPORT.md`.
+
 ## 6. Public-window disclosure
 
 The organisers published a 5-minute labelled window (7,500 frames, 17 possessions). Their rules say it is for checking that the pipeline is correct, "never to choose between two versions of it", and is not a tuning set. We read it more often and used it more than that, and we say exactly how.
@@ -110,6 +144,7 @@ The organisers published a 5-minute labelled window (7,500 frames, 17 possession
 | 6 | 24 Oct | a14 | 0.556 / 0.803 | report-only |
 | 7 | 27 Oct | a16 | 0.565 / 0.800 | **decision rule: a16 becomes final if spellF1 >= 0.62, otherwise a5c** |
 | 8 | 11 Nov | a17 | no score computed | final correctness check, booleans only (below) |
+| 9 | 11 Nov | S | no score computed | final correctness check of the submitted file, booleans only (below) |
 
 **What this means.**
 
@@ -120,6 +155,8 @@ The organisers published a 5-minute labelled window (7,500 frames, 17 possession
 
 **Final check and why the file was not changed.** As the last step of the pre-registered procedure we ran `scripts/final_check.py` once on a17. It validates the file (valid, 199,319 rows) and prints two booleans and no score: whether the best frame offset among -50 to +50 frames (step 5) equals zero, and whether swapping H and A is worse. Result: **best_offset_is_zero = False; swap_HA_is_worse = True.** The orientation check passes. The offset boolean says that some shift scored at least marginally higher on the window than zero. We did not change the file: frame alignment is established independently (the organisers' smoother reproduces to the digit through the same loader and frame index, read 1), the window holds only 17 possessions so a shift of 0.2 to 2 s can flip one by chance, and choosing a shift from the window would be tuning, which the rules forbid. The size and sign of the best offset were not printed and are not known to us.
 
+**Final check of S (read 9).** After S was accepted under Amendment 3, `scripts/final_check.py` was run once on `s.csv` (11 Nov, after the S registration; the public ground-truth copy was on the laptop, so it ran there). Result: file valid, 199,319 rows; **best_offset_is_zero = False; swap_HA_is_worse = True**; no score printed or logged. Same outcome as for a17, and the same decision: the file is not changed, for the reasons above. S was selected before this check; the check did not influence it.
+
 **The PathCRF fix and the window.** The second-half failure of PathCRF on the real feed was found and fixed without the window, using algorithmic pseudo-labels and tag agreement on the provided game (real accuracy against confident ball-control frames, H1 / H2: 0.897 / 0.577 before, 0.899 / 0.956 after; simulator unchanged). It is not a window-derived change, but the smoothing length (1 s; 0.2 s had no effect, 0.44 s gave 0.948, 2 s 0.961) was picked on the provided game's pseudo-labels.
 
 ## 7. Limitations and what we would fix
@@ -129,7 +166,8 @@ The organisers published a 5-minute labelled window (7,500 frames, 17 possession
 - **Short spells** (under 3 s) are rarely matched; for the first candidate only 34 % of true possessions were matched at IoU 0.5 and oracle boundaries would add about +0.18 on the simulator. Boundary placement remains the largest lever. a17 emits 2.87 spells per graded minute against an implied truth rate of 3.2 (R / rho), i.e. it still under-segments slightly.
 - **Simulator-to-real gap.** The simulator under-represents the worst real tracking (player outages p90 about 35 s against about 102 s) and has a dead prior of about 0.30 on visible frames against about 0.15 in real feeds; the dead offsets are therefore set by label-free bands, not by simulator evidence. The learned stream B transfers worse than PathCRF in accuracy terms on the real feed (0.916 against 0.934 after the fix) and is partly redundant with it (it takes PathCRF as an input). Its per-half-normalised variant (a16) transferred much worse (0.559).
 - **a14 versus a5c is within noise on the other-game tests** (section 5). We chose the learned family because the pre-registered rule defaulted to it, not because an independent test showed it better.
-- **No independent score for a17.** Its sealed-match read, K and M scores were not taken after the final changes; numbers for its predecessors are quoted.
+- **S is not shown to be better than a17.** On the simulator it is non-inferior (-0.0008 ctrl_Dfull) and the no-pseudo-label control V0 scores the same; its benefit on the real feed cannot be measured without labels. It sits 0.0017 from the visible-dead band edge, and 3.0 % of its labels differ from a17's.
+- **No independent score for a17 or S.** Its sealed-match read, K and M scores were not taken after the final changes; numbers for its predecessors are quoted.
 - **Residual label exposure of the sealed match.** DFL match 9007's labels were used for PathCRF's clean evaluation, its robustness experiment, the choice of PathCRF's output head and a truth-convention diagnostic before it was sealed; sealed scores are not fully untouched estimates.
 - **One real match, no real labels:** every real-match decision rests on label-free bands anchored on other games, and on the simulator.
 - **Reproducibility.** The md5 is defined by our machine's torch build; PathCRF's output differed by about 6e-6 on another machine (it did not change the labels in the one comparison made). The six DFL training matches were converted by an earlier private converter; the repository's `parse_dfl_match.py` writes the same layout but was not verified to reproduce those files byte for byte, so retraining from raw DFL XML is not guaranteed to be bit-identical to the committed models. Regenerating the submission file does not need retraining.
@@ -141,13 +179,15 @@ Full instructions, environments and pins are in `README.md`; the short version:
 
 ```
 set MTAH_DATA_DIR=<folder that contains tactical/>
-powershell -File scripts\reproduce.ps1          # equivalent to:
-python scripts/make_candidate.py --select models/a17 --name a17 --pathcrf-smooth 1.0
+powershell -File scripts\reproduce.ps1          # S; add -Name a17 for the predecessor; equivalent to:
+python scripts/make_candidate.py --select models/s --name s --pathcrf-smooth 1.0       # submitted candidate S
+python scripts/make_candidate.py --select models/a17 --name a17 --pathcrf-smooth 1.0   # predecessor a17
 ```
 
 - Environments: main Python 3.12.10 (`requirements-main.txt`; numpy 2.5.4, pandas 3.0.6, scipy 1.18.1, scikit-learn 1.9.1) and a torch / PathCRF environment, Python 3.14.0 (`requirements-torch.txt`; torch 2.11.0, torch-geometric 2.8.0), PathCRF commit `1b7c6f85a6b78c92e4543fde72ca2b86a933f997` with checkpoint `saved/140` (setup in `third_party/pathcrf/SETUP.md`).
-- Expected output: `runs/candidates/a17.csv`, md5 `afb9e7b4ede118268fd0222fd5e11068`, 199,319 rows, passes `validate_submission.py`. Regenerated byte-identically from a clean clone, with the PathCRF posterior computed from scratch (about 6.5 min, 4 threads) and the rest in 2 to 3 minutes.
-- Committed trained artefacts: `models/a17` (dead-ball model, team-in-control model, stream B weights, configuration); none contains match data. The repository contains no data files.
+- Expected output: `runs/candidates/s.csv`, md5 `4c2184b6807ae6f2b0c110c3dc164388`, 199,319 rows, passes `validate_submission.py` (a17: `afb9e7b4ede118268fd0222fd5e11068`, regenerated byte-identically from a clean clone on the laptop, PathCRF from scratch about 6.5 min with 4 threads). S was regenerated byte-identically from two fresh clones on the server; the laptop clean-clone rebuild of S is pending.
+- The PathCRF cache key includes the sha256 of `third_party/pathcrf/run_infer.py`. The cache was written from a Windows working copy with CRLF line endings, so a clone must be checked out with `git config core.autocrlf true` (the Windows default) or the cache misses and PathCRF is recomputed.
+- Committed trained artefacts: `models/s` (dead-ball and team-in-control models of a17, the two per-half stream-B networks, configuration) and `models/a17`; none contains match data. The repository contains no data files.
 - Tests: `python -m pytest -m "not dfl and not real"`.
 - Licences: this repository's own licence is to be chosen by the team. Third-party: PathCRF MPL-2.0 (unmodified, external), DFL open data CC BY 4.0, SkillCorner open data MIT.
 
@@ -155,6 +195,7 @@ python scripts/make_candidate.py --select models/a17 --name a17 --pathcrf-smooth
 
 | content | file |
 |---|---|
+| S: simulator run, calibration, admissibility, md5, run log | `docs/s/REPORT.md`, `docs/s/lomo_summary.json`, `docs/s/lomo_scores.csv`, `docs/s/calib_s.csv`, `docs/s/s.drift.json` |
 | a17 and a5c_fx2 calibration, md5, drift, tag agreement, pre-restart table | `docs/kh/FINAL_BUILD.md` |
 | signals K (and the SkillCorner hold-out) | `docs/kh/K_tables.md`, `docs/kh/agg.json` |
 | signal M, Metrica truth conventions | `docs/research/msamp/REPORT.md` |
