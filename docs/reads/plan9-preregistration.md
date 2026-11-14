@@ -157,3 +157,22 @@ simulator windows drawn at random from the simulator training sequences (team-sw
 windows are team-swap augmented at random. Loss as before: cross-entropy over labelled steps with per-step weight (1
 simulator, w pseudo, i.e. per labelled frame, not per window) normalised by the batch's weight sum, plus 0.5 times the
 boundary BCE on simulator windows only. V0 (diagnostic, weight 0) uses the same schedule.
+
+## Amendment 4 (15 Nov 2026, 02:15 IST; period-handling bug fix, written before the rebuild)
+
+What. Graded frames that precede a half's kick-off frame must be D: the organisers' FAQ states that the graded second
+half starts at video frame 110,808 but kicks off at 113,742, and that those 2,934 graded frames are all D (the same
+follows from the provided period data, the half video blocks of BAR-ATH). The pipeline defines the kick-off frames
+(mtah/io/periods.py) but never used them, so the registered candidate S labels most of that block H or A.
+
+Rule (post-decode, deterministic). For each half, every graded frame from the half's first graded frame up to, not
+including, its kick-off frame is set to D. For half 1 the graded block starts at the kick-off frame, so the rule is a
+no-op there. The kick-off frames are read from the existing constant, not from any score.
+
+Status. This is a period-handling (alignment) bug of the kind step 6 of the Final-file section allows. It was found by a
+label-free review of the predicted file against the FAQ, not by any window score. The public window (frames 11185 to
+18685) lies in the first half and is unaffected by the rule. The fix applies to the selected candidate S only (new name
+s_ko, built from the same models/s); it does not choose between candidates, and no other setting, offset, threshold or
+cell changes. The new file must equal s.csv byte for byte outside the forced block; the official validator, the
+admissibility statistics (reported both with and without the block) and the clean-clone md5 are reported afterwards.
+Candidates s and a17 stay reproducible unchanged (the rule is behind a flag that is off by default).
