@@ -1,0 +1,74 @@
+{
+ "s_ko": {
+  "tag_agr_overall": 0.8203394589374274,
+  "tag_agr_H1": 0.839936018925093,
+  "tag_agr_H2": 0.801368321077028,
+  "vis_dead_literal": 0.19585750910808258,
+  "vis_dead_block_excl": 0.1768646408839779,
+  "spells": 302,
+  "R_literal": 2.851621269443588,
+  "R_block_excl": 2.9052801703404887,
+  "rho": 0.8921081072691707,
+  "R_over_rho_literal": 3.1964974269460202,
+  "R_over_rho_block_excl": 3.2566458556618576,
+  "pred_D_share": 0.42632682223635093
+ },
+ "s": {
+  "tag_agr_overall": 0.8203394589374274,
+  "tag_agr_H1": 0.839936018925093,
+  "tag_agr_H2": 0.801368321077028,
+  "vis_dead_literal": 0.17927983499431346,
+  "vis_dead_block_excl": 0.1768646408839779,
+  "spells": 312,
+  "R_literal": 2.946045814789402,
+  "R_block_excl": 2.895660037326116,
+  "rho": 0.8921081072691707,
+  "R_over_rho_literal": 3.302341712606484,
+  "R_over_rho_block_excl": 3.245862260113308,
+  "pred_D_share": 0.4145741138256419
+ },
+ "a17": {
+  "tag_agr_overall": 0.8167392201600564,
+  "tag_agr_H1": 0.8406300621793369,
+  "tag_agr_H2": 0.7936108518222427,
+  "vis_dead_literal": 0.17775700213967655,
+  "vis_dead_block_excl": 0.17466456195737964,
+  "spells": 304,
+  "R_literal": 2.8705061785127506,
+  "R_block_excl": 2.8090788401967637,
+  "rho": 0.8883,
+  "R_over_rho_literal": 3.2314602932711365,
+  "R_over_rho_block_excl": 3.162308724751507,
+  "pred_D_share": 0.4044203277161221
+ },
+ "a5c_fx2": {
+  "tag_agr_overall": 0.7869188753906264,
+  "tag_agr_H1": 0.8047302563351107,
+  "tag_agr_H2": 0.7696759427741573,
+  "vis_dead_literal": 0.1697091196483991,
+  "vis_dead_block_excl": 0.1573993685872139,
+  "spells": 282,
+  "R_literal": 2.6627721787519594,
+  "R_block_excl": 2.655156711966804,
+  "rho": 0.8719237643982939,
+  "R_over_rho_literal": 3.0539048108059226,
+  "R_over_rho_block_excl": 3.045170713748239,
+  "pred_D_share": 0.40021528796338846
+ },
+ "smooth50": {
+  "tag_agr_overall": 0.6979125423042405,
+  "tag_agr_H1": 0.6990703196724888,
+  "tag_agr_H2": 0.6947269420597543,
+  "vis_dead_literal": 0.03966112149893016,
+  "vis_dead_block_excl": 0.040597868981846884,
+  "spells": 594,
+  "R_literal": 5.608817993541361,
+  "R_block_excl": 5.608537547379155,
+  "pred_D_share": 0.32336000302158546
+ },
+ "window_identity": {
+  "frames_11185_18685_differing_s_ko_vs_s": 0,
+  "frames_differing_total_s_ko_vs_s": 1867,
+  "differing_outside_block": 0
+ }
+}
