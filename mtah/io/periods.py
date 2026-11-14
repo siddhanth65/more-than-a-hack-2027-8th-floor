@@ -10,3 +10,14 @@ def half_array(n_frames):
     for h, (a, b) in HALF_BLOCKS.items():
         half[a:b + 1] = h
     return half
+
+
+def force_pre_kickoff_dead(labels):
+    """Amendment 4: graded frames of a half that precede its kick-off frame are D (organisers' FAQ). Returns a copy.
+    For half 1 the graded block starts at the kick-off, so nothing changes there."""
+    out = np.array(labels, copy=True)
+    for h, ko in KICKOFF_FRAMES.items():
+        first = HALF_BLOCKS[h][0]
+        if ko > first:
+            out[first:min(ko, len(out))] = "D"
+    return out

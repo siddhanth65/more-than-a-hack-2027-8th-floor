@@ -92,6 +92,8 @@ def main():
     ap.add_argument("--data", default=os.environ.get("MTAH_DATA_DIR"))
     ap.add_argument("--pathcrf-smooth", type=float, default=0.0,
                     help="PathCRF input smoothing in seconds (real tactical feed: 1.0); uses its own cache runs/cache/pathcrf_fx")
+    ap.add_argument("--kickoff-dead", action="store_true",
+                    help="Amendment 4: graded frames before a half's kick-off frame are D (post-decode rule; default off)")
     args = ap.parse_args()
     if not args.data:
         raise SystemExit("data dir needed: pass --data or set MTAH_DATA_DIR")
@@ -109,6 +111,9 @@ def main():
         if cue is None:
             raise SystemExit(f"{sel}: config uses the replay stream but there is no broadcast data under {args.data}")
     labels = candidate_labels(m, tags, cfg, dead, team, merge, switch, cue=cue, seq=seq, sel_dir=sel)
+    if args.kickoff_dead:
+        from mtah.io.periods import force_pre_kickoff_dead
+        labels = force_pre_kickoff_dead(labels)
     out = ROOT / "runs" / "candidates"; out.mkdir(parents=True, exist_ok=True)
     p = Path(write_submission(labels, out / f"{args.name}.csv")); reason = validate(p)
     if reason is not None:
@@ -130,7 +135,7 @@ def main():
     (out / f"{args.name}.drift.json").write_text(json.dumps(drift, indent=1))
     manifest = {"git": subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], cwd=ROOT).decode().strip(),
                 "git_dirty": bool(subprocess.check_output(["git", "status", "--porcelain"], cwd=ROOT).strip()),
-                "select_dir": str(sel), "config": {**cfg.to_dict(), "lengths": lengths, **({"seq_stream": seq} if seq is not None else {})}, "data_md5": md5s,
+                "select_dir": str(sel), "kickoff_dead": bool(args.kickoff_dead), "config": {**cfg.to_dict(), "lengths": lengths, **({"seq_stream": seq} if seq is not None else {})}, "data_md5": md5s,
                 "versions": {"numpy": numpy.__version__, "pandas": pandas.__version__, "sklearn": sklearn.__version__, "python": sys.version.split()[0]}}
     (out / f"{args.name}.manifest.json").write_text(json.dumps(manifest, indent=1))
     counts = {k: int((labels == k).sum()) for k in "HAD"}
