@@ -13,7 +13,7 @@ Set-Location $Root
 
 # candidate -> PathCRF input smoothing (s) and expected md5 of the CSV
 $Known = @{
-    "s_ko"     = @{ smooth = 1.0; md5 = "TBD"; model = "s"; kickoff = $true }
+    "s_ko"     = @{ smooth = 1.0; md5 = "2b908887901aad725558de040f3874b6"; model = "s"; kickoff = $true }
     "s"        = @{ smooth = 1.0; md5 = "4c2184b6807ae6f2b0c110c3dc164388" }
     "a17"      = @{ smooth = 1.0; md5 = "afb9e7b4ede118268fd0222fd5e11068" }
     "a5c_fx2"  = @{ smooth = 1.0; md5 = "107e7fc1157c05ad3ba8f893734606b7" }
