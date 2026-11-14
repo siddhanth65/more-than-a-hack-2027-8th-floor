@@ -1,14 +1,14 @@
 # S (cross-half self-training of stream B): report
 
-Status: ACCEPTED (simulator bar passed, admissible on the real match, clean-clone md5 reproducible on the server; laptop rebuild pending, see 'Laptop' below).
+Status: ACCEPTED (simulator bar passed, admissible on the real match, clean-clone md5 reproducible on the server; laptop fresh-clone rebuild of 14 Nov matched, see 'Laptop' below).
 
 ## Stage log
-- 2026-11-11 11:26 IST  Amendment 3 committed on exp-s (839d70e) before any S run.
-- 11:33  library `mtah/selftrain.py`, `scripts/s_selftrain.py`, `tests/test_selftrain.py` committed (99047ca).
+- 2026-11-11 11:26 IST  Amendment 3 committed on exp-s ("docs: Plan 9 amendment 3 (S recipe, before any S result)") before any S run.
+- 11:33  library `mtah/selftrain.py`, `scripts/s_selftrain.py`, `tests/test_selftrain.py` committed ("S: cross-half self-training library, fine-tuning/LOMO script, unit tests").
 - 11:34  harness check: re-decoding the registered a17 fold-9001 predictions with the new script reproduces the stored
   calibration row exactly (ctrl_Dfull 0.5623 fold 9001).
 - 11:35  base B (fold-final) retraining for folds 9001-9006 on compute-server (CPU torch, ~/projects/mtah/s).
-- 11:45  Amendment 3b committed (a8e593c): fine-tuning schedule of item 4 was degenerate for V1/V2 (about 2.6 % of
+- 11:45  Amendment 3b committed ("docs: Plan 9 amendment 3b ..."): fine-tuning schedule of item 4 was degenerate for V1/V2 (about 2.6 % of
   steps labelled; 0-19 qualifying windows per half), found from label counts and job logs before any prediction was
   decoded; partial outputs deleted unread. New schedule: stride 150, min 5 labelled steps, 1:1 simulator windows, 8 epochs.
 - 11:50-12:05  Simulator acceptance run (compute-server, CPU, ~/projects/mtah/s/out): base B retrained per fold, pseudo-labels,
@@ -53,7 +53,7 @@ the `~/mtah-data` link) is not attached at the moment. No label of the contest m
   Cells (-3.0, +0.5) and (-3.5, +0.5) rank higher in the simulator but exceed the visible-dead band (0.1876, 0.1835 > 0.181). The chosen cell
   has little margin to the band edge (visible-dead 0.1793 against 0.181).
 - `scripts/register_s.py` -> `models/s` (a17's dead/team models, decoder and drift reference unchanged; `modelB` is a per-half dict;
-  `mtah/evidence/seqstream.py` and `scripts/make_candidate.py` accept it). Commit 1795bb3.
+  `mtah/evidence/seqstream.py` and `scripts/make_candidate.py` accept it). Commit "S: register models/s" (11 Nov 12:23).
 
 ### S at its registered cell and at the a17 cell (simulator LOMO, 6 folds, ctrl_Dfull / raw_Dfull)
 
@@ -85,16 +85,13 @@ identical to a17's: those are the legacy simulator-reference ranges in `drift_re
 ### Reproducibility
 
 - `runs/candidates/s.csv`: 199,319 rows, vendored official validator OK (H 55,768 / A 37,231 / D 106,320).
-- **md5 4c2184b6807ae6f2b0c110c3dc164388**, byte-identical from two independent fresh clones of the bundle of `exp-s` at commit 1795bb3 (server,
+- **md5 4c2184b6807ae6f2b0c110c3dc164388**, byte-identical from two independent fresh clones of the bundle of `exp-s` at the commit "S: register models/s" (server,
   `git clone -c core.autocrlf=true`, PathCRF real feed read from the laptop-computed smoothed cache whose md5 equals the server copy
   6b10de0f...; B subprocess in the server torch 2.11.0+cpu venv).
 - Sanity check of the server environment: a17 rebuilt there from `models/a17` has md5 afb9e7b4ede118268fd0222fd5e11068, the laptop-registered value.
 - Note for clean clones: the PathCRF cache key includes the sha256 of `third_party/pathcrf/run_infer.py`; the cache was written from a Windows
   working copy (CRLF), so a clone needs `core.autocrlf=true` (as on the laptop) or it misses the cache and tries to run PathCRF.
-- Laptop: a rebuild "on the laptop from a clean clone" was NOT done, because the laptop currently has no contest data (E:\C-offload\mtah-data is not
-  mounted, `~/mtah-data` is a dangling link). Command once it is attached:
-  `git clone --branch exp-s <repo> t && cd t && (copy or link runs/cache/pathcrf_fx) && python scripts/make_candidate.py --select models/s --name s --pathcrf-smooth 1.0`
-  and compare with 4c2184b6.... Expected equal (a17 transfers server-to-laptop byte-identically here), but not verified.
+- Laptop: on 14 Nov a fresh clone of the final branch (clone of the S documentation commit, empty PathCRF cache, `scripts/reproduce.ps1`) rebuilt S to md5 4c2184b6807ae6f2b0c110c3dc164388, equal to the expected value.
 
 ### Tests
 `pytest -m "not dfl and not real"` on the final tree: 363 passed (352 on `final` + 11 new in `tests/test_selftrain.py`: cross-half split / no leakage, public-window
