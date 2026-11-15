@@ -1,0 +1,146 @@
+{
+ "sealed": {
+  "ctrl_Dfull": {
+   "n_halves": 2,
+   "ref_lead5.0": 0.576,
+   "mismatch": 0.57663,
+   "corrected_minus_mismatch": -0.00062,
+   "wins/ties/losses_corrected": [
+    1,
+    0,
+    1
+   ]
+  },
+  "raw_Dfull": {
+   "n_halves": 2,
+   "ref_lead5.0": 0.6009,
+   "mismatch": 0.60227,
+   "corrected_minus_mismatch": -0.00141,
+   "wins/ties/losses_corrected": [
+    0,
+    0,
+    2
+   ]
+  }
+ },
+ "Knat": {
+  "ctrl_Dfull": {
+   "n_halves": 40,
+   "ref_lead5.0": 0.5345,
+   "mismatch": 0.53333,
+   "corrected_minus_mismatch": 0.00114,
+   "wins/ties/losses_corrected": [
+    22,
+    8,
+    10
+   ]
+  },
+  "raw_Dfull": {
+   "n_halves": 40,
+   "ref_lead5.0": 0.4314,
+   "mismatch": 0.43034,
+   "corrected_minus_mismatch": 0.00109,
+   "wins/ties/losses_corrected": [
+    20,
+    10,
+    10
+   ]
+  }
+ },
+ "Ksim": {
+  "ctrl_Dfull": {
+   "n_halves": 40,
+   "ref_lead5.0": 0.4151,
+   "mismatch": 0.4139,
+   "corrected_minus_mismatch": 0.00121,
+   "wins/ties/losses_corrected": [
+    20,
+    6,
+    14
+   ]
+  },
+  "raw_Dfull": {
+   "n_halves": 40,
+   "ref_lead5.0": 0.3377,
+   "mismatch": 0.33661,
+   "corrected_minus_mismatch": 0.00104,
+   "wins/ties/losses_corrected": [
+    21,
+    7,
+    12
+   ]
+  }
+ },
+ "M": {
+  "ctrl_Dfull": {
+   "n_halves": 6,
+   "ref_lead5.0": 0.6148,
+   "mismatch": 0.6152,
+   "corrected_minus_mismatch": -0.00041,
+   "wins/ties/losses_corrected": [
+    2,
+    0,
+    4
+   ]
+  },
+  "raw_Dfull": {
+   "n_halves": 6,
+   "ref_lead5.0": 0.6149,
+   "mismatch": 0.61546,
+   "corrected_minus_mismatch": -0.00059,
+   "wins/ties/losses_corrected": [
+    2,
+    0,
+    4
+   ]
+  }
+ },
+ "LOMO": {
+  "ctrl_Dfull": {
+   "n_halves": 12,
+   "ref_lead5.0": 0.5665,
+   "mismatch": 0.56651,
+   "corrected_minus_mismatch": -3e-05,
+   "wins/ties/losses_corrected": [
+    5,
+    1,
+    6
+   ]
+  },
+  "raw_Dfull": {
+   "n_halves": 12,
+   "ref_lead5.0": 0.5836,
+   "mismatch": 0.58376,
+   "corrected_minus_mismatch": -0.0002,
+   "wins/ties/losses_corrected": [
+    6,
+    0,
+    6
+   ]
+  }
+ },
+ "LOMO_null_chain_check": {
+  "ctrl_Dfull": {
+   "n_halves": 12,
+   "ref_lead5.0": 0.5665,
+   "mismatch": 0.56648,
+   "corrected_minus_mismatch": 0.0,
+   "wins/ties/losses_corrected": [
+    0,
+    12,
+    0
+   ]
+  },
+  "raw_Dfull": {
+   "n_halves": 12,
+   "ref_lead5.0": 0.5836,
+   "mismatch": 0.58355,
+   "corrected_minus_mismatch": 0.0,
+   "wins/ties/losses_corrected": [
+    0,
+    12,
+    0
+   ]
+  }
+ }
+}
