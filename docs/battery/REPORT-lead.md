@@ -1,6 +1,6 @@
 # Set-piece tag lead experiment (Amendment 5), report
 
-Branch exp-lead (from final). Pre-registration: docs/reads/plan9-preregistration.md, Amendment 5 (commit 2bca9e1, written before any
+Branch exp-lead (from final). Pre-registration: docs/reads/plan9-preregistration.md, Amendment 5 (commit ccc722c, written before any
 stand-in or corrected-candidate run). Public window not read; no score computed on the real match. Aggregates only.
 Runs: a university compute server, CPU only. Aggregate files: docs/battery/lead/agg_main.json, agg_d34.json, real_labelfree.json.
 

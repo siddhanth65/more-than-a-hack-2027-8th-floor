@@ -1,7 +1,7 @@
 # Feed-adaptive touch detector (branch `fix-touch`, 2026-10-24)
 
 Label-free. Aggregates only: the public ground-truth file is never read, sim match 9007 is never loaded, nothing is
-registered. Base commit is `3fb349a` (master + the a10 learned-stream code; master itself lacks the a10 sources, which
+registered. Base commit is `f65bd8c` (master + the a10 learned-stream code; master itself lacks the a10 sources, which
 step 4 needs). Reproduce with `scripts/touch_{diagnose,validate,adversarial,candidates,sweep}.py` (outputs under the
 gitignored `runs/touch/`).
 

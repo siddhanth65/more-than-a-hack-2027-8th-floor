@@ -5,7 +5,7 @@ Read-only review. Sources: the ledger `.superpowers/sdd/progress.md` (gitignored
 ## 0. Decisions
 
 1. **The read-7 decision is void.** "a16 final iff window >= 0.62, else a5c" used the window to choose between two versions. The final entry must be re-chosen by the rule in section 3. Commit that rule before any Exp1, Exp2, Metrica-sample or SkillCorner-test number is printed.
-2. **Re-anchor both bands on other-game data recorded on 23 Oct** (`runs/extra/report.json`, commit bd84575, written before we knew of the rule change):
+2. **Re-anchor both bands on other-game data recorded on 23 Oct** (`runs/extra/report.json`, commit 9b63a18, written before we knew of the rule change):
    - visible-dead share in **[0.116, 0.181]**, which is 0.8–1.25 × the SkillCorner value of 0.145;
    - spell rate as an **implied truth rate** R/ρ in **[2.28, 4.10]**, the range of other-game controlled-possession truths.
 
@@ -26,18 +26,18 @@ The old EVALUATION.md already advised "never to choose between two versions of i
 
 | # | Window-truth use | Evidence | Effect on a5c or on a choice | Class | Severity |
 |---|---|---|---|---|---|
-| C1 | Read 1: the organisers' baselines scored on the window (smooth50 0.3256) | e65510f; `runs/baselines_public.json` | none | check | OK |
-| C2 | Read 2 (a1, 0.290) diagnostics led to the tag-sign bug fix and to the finding "D recall 0.16" | 53f9918, 86cf2d0; L47–48 | The tag fix is "labels meaning what you think". The D finding set the direction of later work. | check / grey | Low |
+| C1 | Read 1: the organisers' baselines scored on the window (smooth50 0.3256) | 99ff6be; `runs/baselines_public.json` | none | check | OK |
+| C2 | Read 2 (a1, 0.290) diagnostics led to the tag-sign bug fix and to the finding "D recall 0.16" | 258bf2b, 94a5107; L47–48 | The tag fix is "labels meaning what you think". The D finding set the direction of later work. | check / grey | Low |
 | C3 | The ctrl truth variant was justified by the window's 3.4 possessions/min | L46, L58; tech doc §4 | The ranking variant. It is also justified by the written "controlled possession" rule. | grey (convention) | Low |
-| C4 | **Visible-dead band [0.10, 0.18] anchored on the window's 0.155** | `mtah/select.py:85-86` (993c1b9); L59, L91 | It chose a3b cell 52 (sim rank 5), `long_rel` over `long`, and **a5c's offset −2.0** (grid8 was built from the band, 671ae2c; the sim prefers offset 0). It also chose the offsets of a6, a8r, a10, a14 and a16. | tuned / chose | **High** |
+| C4 | **Visible-dead band [0.10, 0.18] anchored on the window's 0.155** | `mtah/select.py:85-86` (5372362); L59, L91 | It chose a3b cell 52 (sim rank 5), `long_rel` over `long`, and **a5c's offset −2.0** (grid8 was built from the band, ed3873b; the sim prefers offset 0). It also chose the offsets of a6, a8r, a10, a14 and a16. | tuned / chose | **High** |
 | C5 | **Spell-rate band [2.7, 4.3] = 17/5 × [0.8, 1.25]** | `select.py:87-91` (9336057); `eval/drift.py:63` | In a4 it rejected sim rank 1, cell 32 (merge off, 4.995/min), which gave **cell 41, a5c's base (merge 0.7)**. It also rejected a9. | tuned / chose | **High** (the outcome survives, §2) |
 | C6 | Each candidate's window shares (D 0.103/0.078 vs truth 0.196/0.155; spell starts vs 17) set the next plan's goal | L91, L103, L121, L125, L135; tech doc §6.1–6.4; plan2d-design §0.4/0.6 | Plans 2c–2e targeted "the window gap". No parameter was fitted. | grey | Medium (disclose) |
-| C7 | Plan 2f: a pre-restart prior designed from the window's 5 visible-dead runs; the sweep printed window catch rates | L140–143; afd9afd, e02b91d; tech doc §6.5 | a6 was not selected. The code stays, inert (bonus 0). | tuned, not shipped | Medium |
-| C8 | Reads 3 and 4 (a5c and a8r, 0.656), report-only and pre-registered | 17cbff1, 063a290; `plan3r-preregistration.md` | No effect then. 0.656 later became the comparator behind read 7's 0.62. | grey | Medium |
+| C7 | Plan 2f: a pre-restart prior designed from the window's 5 visible-dead runs; the sweep printed window catch rates | L140–143; 8403711, 239666c; tech doc §6.5 | a6 was not selected. The code stays, inert (bonus 0). | tuned, not shipped | Medium |
+| C8 | Reads 3 and 4 (a5c and a8r, 0.656), report-only and pre-registered | d732b6c, c13aa71; `plan3r-preregistration.md` | No effect then. 0.656 later became the comparator behind read 7's 0.62. | grey | Medium |
 | C9 | Replay cue checked against window truth-D (0.81 vs 0.12) | L158 | a8r is not final | grey | Low |
 | C10 | Plan 4 Metrica-convention truth calibrated to the window's spell-length quantiles | c2d0065 (its commit subject says so); L163–168 | a9 was rejected. The code is still in the repository. | tuned, not shipped | Medium |
-| C11 | **Reads 5 (a10, 0.594) and 6 (a14, 0.556)**, labelled report-only | 3fb349a, c93e9ea; L176–177 ("decision held pending"), L193 ("learned family lower twice") | They weighed in on the family choice in practice | chose (informally) | **High** |
-| C12 | **Read 7: "a16 iff >= 0.62 else a5c"** | 420ccca (exp-seq2 `public.jsonl`) | It chose a5c over the learned family | chose | **High** (direct breach) |
+| C11 | **Reads 5 (a10, 0.594) and 6 (a14, 0.556)**, labelled report-only | f65bd8c, 8fa600d; L176–177 ("decision held pending"), L193 ("learned family lower twice") | They weighed in on the family choice in practice | chose (informally) | **High** |
+| C12 | **Read 7: "a16 iff >= 0.62 else a5c"** | bd8c2e1 (exp-seq2 `public.jsonl`) | It chose a5c over the learned family | chose | **High** (direct breach) |
 | C13 | Window facts used in interpretation ("56 % D in blackouts", "Athletic losing long balls") | `candidates-analysis-2026-10-26.md` §3.3–3.4 | none | grey | Low |
 
 Hygiene: the main tree's `docs/reads/public.jsonl` lacks reads 5 and 7, and has read 6 uncommitted. The final repository needs one complete log.
@@ -73,8 +73,8 @@ Hygiene: the main tree's `docs/reads/public.jsonl` lacks reads 5 and 7, and has 
 1. Replace the band constants and comments (`select.py:85-91`, `drift.py:63`), add the R/ρ check, and update the tests.
 2. Recompute admissibility for every sweep cell already on disk (`a5b/offset_sweep_real.json`, `exp_robust/variants/*/real_cells.csv`, the exp-seq2 drift files). Flag any cell in (0.180, 0.181] or [0.100, 0.116).
 3. Recommended for the audit trail: re-run the grid8 registration with the new constants (about 45 min). The same cell is expected, so no sealed read is needed.
-4. Remove or flag the window-calibrated code: Plan 4 truth (c2d0065) and the Plan 2f per-type pre-restart windows (afd9afd). Then re-verify the md5 of a5c (2a672be6) and of the chosen candidate.
-5. Merge the read log from 3fb349a, c93e9ea and 420ccca, and set the guard to refuse all scoring reads.
+4. Remove or flag the window-calibrated code: Plan 4 truth (c2d0065) and the Plan 2f per-type pre-restart windows (8403711). Then re-verify the md5 of a5c (2a672be6) and of the chosen candidate.
+5. Merge the read log from f65bd8c, 8fa600d and bd8c2e1, and set the guard to refuse all scoring reads.
 6. Resolve the a14 artefact mismatch: the registered drift is 0.169/3.32, the calibrated one 0.177/3.29. Name one md5.
 
 **What stands:** all LOMO tables, all sealed reads, the a5c artefacts, and the learned-family artefacts.
