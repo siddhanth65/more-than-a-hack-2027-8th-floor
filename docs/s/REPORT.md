@@ -7,11 +7,11 @@ Status: ACCEPTED (simulator bar passed, admissible on the real match, clean-clon
 - 11:33  library `mtah/selftrain.py`, `scripts/s_selftrain.py`, `tests/test_selftrain.py` committed ("S: cross-half self-training library, fine-tuning/LOMO script, unit tests").
 - 11:34  harness check: re-decoding the registered a17 fold-9001 predictions with the new script reproduces the stored
   calibration row exactly (ctrl_Dfull 0.5623 fold 9001).
-- 11:35  base B (fold-final) retraining for folds 9001-9006 on compute-server (CPU torch, ~/projects/mtah/s).
+- 11:35  base B (fold-final) retraining for folds 9001-9006 on the compute server (CPU torch).
 - 11:45  Amendment 3b committed ("docs: Plan 9 amendment 3b ..."): fine-tuning schedule of item 4 was degenerate for V1/V2 (about 2.6 % of
   steps labelled; 0-19 qualifying windows per half), found from label counts and job logs before any prediction was
   decoded; partial outputs deleted unread. New schedule: stride 150, min 5 labelled steps, 1:1 simulator windows, 8 epochs.
-- 11:50-12:05  Simulator acceptance run (compute-server, CPU, ~/projects/mtah/s/out): base B retrained per fold, pseudo-labels,
+- 11:50-12:05  Simulator acceptance run (compute server, CPU): base B retrained per fold, pseudo-labels,
   96 fine-tunes (4 variants x 6 folds x 2 halves x 2 seeds), decode at the a17 cell, scored with the vendored scorer.
 
 ## Simulator acceptance run (LOMO folds 9001-9006, seeds 100/101, cell dead -3.0 / seq_d -0.5 / B weight 12)
@@ -38,7 +38,7 @@ match is in-distribution, so no gain was expected. Admissibility on the real mat
 
 ## Real-match S (accepted branch)
 
-Everything that touches the contest data ran on compute-server (`~/projects/mtah/s`, CPU), because the laptop's data drive (E:, target of
+Everything that touches the contest data ran on the compute server (CPU), because the laptop's data drive (E:, target of
 the `~/mtah-data` link) is not attached at the moment. No label of the contest match, no score and nothing of the public window was used or computed.
 
 - `scripts/s_real.py prep`: a17's pipeline on the contest match (PathCRF smoothing 1.0 s, cache `runs/cache/pathcrf_fx`), step features of B,

@@ -169,7 +169,7 @@ def main():
     ap.add_argument("--in", dest="inp", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--ckpt", type=int, default=140)
-    ap.add_argument("--repo", default=os.environ.get("MTAH_PATHCRF_REPO", r"HOME/mtah-ext\pathcrf"))
+    ap.add_argument("--repo", default=os.environ.get("MTAH_PATHCRF_REPO", os.path.join(os.path.expanduser("~"), "mtah-ext", "pathcrf")))
     ap.add_argument("--threads", type=int, default=4)
     a = ap.parse_args()
     inp, outp = os.path.abspath(a.inp), os.path.abspath(a.out)

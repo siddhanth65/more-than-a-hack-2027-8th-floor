@@ -85,6 +85,4 @@ with this caveat. The PathCRF integration tests use the label-free nearest-playe
 - On the real tactical feed PathCRF is run on player positions smoothed with a 1 s centred moving average
   (`PathCRFParams.smooth_s = 1.0`, `make_candidate.py --pathcrf-smooth 1.0`, own cache `runs/cache/pathcrf_fx`). Without it the
   second half is near chance; see `docs/arb/FIX_NOTES.md`. The simulator inputs are not smoothed.
-- `third_party/pathcrf/run_infer.py` still contains a user-specific default for `--repo`; the caller always overrides it
-  (`mtah/evidence/pathcrf.py` passes `--repo`). The line was left untouched on purpose: the sha256 of this file is part of the
-  PathCRF cache key, so editing it would invalidate the cached posteriors.
+- `third_party/pathcrf/run_infer.py` defaults `--repo` to `MTAH_PATHCRF_REPO` or `~/mtah-ext/pathcrf`; the caller (`mtah/evidence/pathcrf.py`) always passes `--repo` explicitly. The sha256 of this file is part of the PathCRF cache key, so editing it invalidates a cache written by an earlier copy (the cache is only a speed-up; a clean build recomputes it).

@@ -111,7 +111,7 @@ Aggregates over the 40 halves (the blackout, corruption and tag simulators are t
 
 Truth: the `ctrl_Dfull` variant is the training truth for these halves (the selection's `train_dead`, `train_team_ctrl` and `train_switch` already train on `ctrl_Dfull`). The raw and ctrl D shares coincide on these halves (.441); the controlled spell filter changes H/A spell structure, as in the table above.
 
-### Part 2. PathCRF posteriors on compute-server (blocked)
+### Part 2. PathCRF posteriors on the compute server (blocked)
 
 Stopped at the environment check, as instructed: `~/miniconda3/envs/det12/bin/python` has torch 2.5.1 but **no `torch_geometric`**, and the PathCRF checkout imports it (`dataset.py`, `inference.py`, `models/gat_lstm.py`, `models/utils.py`). Nothing was installed or cloned on the server. `~/projects/mtah/` does not exist yet. The server was at load 85 / 128 cores and 722 GB free on `/` when checked.
 
