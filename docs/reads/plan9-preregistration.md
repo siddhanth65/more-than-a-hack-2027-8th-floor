@@ -176,3 +176,76 @@ s_ko, built from the same models/s); it does not choose between candidates, and 
 cell changes. The new file must equal s.csv byte for byte outside the forced block; the official validator, the
 admissibility statistics (reported both with and without the block) and the clean-clone md5 are reported afterwards.
 Candidates s and a17 stay reproducible unchanged (the rule is behind a flag that is off by default).
+
+## Amendment 5 (15 Nov 2026, 05:40 IST; set-piece tag lead, written before any stand-in was built or scored and before any corrected candidate was run)
+
+Why. An external review suspects that `mtah/sim/tag_sim.py` (`sp_before_s = 5.0`, `sp_after_s = 30.0`: tag starts 5 s before the
+restart and is 35 s long) writes set-piece Smart Tags at a different lead than the real match, where the two published kick-offs
+(FAQ frames 11185 and 113742) sit 3.52 s and 3.28 s after their `Kick Off (Start)` tag starts. The dead-ball features (`sp_dist_s`,
+`sp_inside`, `sp_type`, the set-piece team prior) are read from tag starts, so a lead mismatch could shift where restarts are
+called live. No public-window truth is read, no window score is computed, and frames 11185 to 18685 are excluded from the
+measurement below (any tag whose [start - 10 s, end + 10 s] touches the window is dropped).
+
+Measurement (label-free, ball only; `scripts/lead_measure.py`, detector fixed before its output was looked at except that a first
+speed-threshold version found too few static balls on this noisy ball track and was replaced by the displacement detector
+described in the script header; aggregates only). Restart = last frame of a visible ball that stayed within 1.0 m of its median
+position for at least 1.0 s before it left that disk and was at least 4 m away within 1.5 s; search window tag start +- 10 s;
+when several qualify, the one closest to start + 3.4 s. Lead = restart - tag start, seconds, median [p25, p75], counts used / tags:
+
+| tag type | used / tags | lead median [p25, p75] | tag length |
+|---|---|---|---|
+| Throw-in | 13 / 26 | 3.96 [2.04, 5.24] | 35.0 s |
+| Goal Kick | 5 / 9 | 4.36 [3.44, 5.20] | 35.0 s |
+| Corner Kick | 1 / 12 | 9.6 | 35.0 s |
+| Free Kick | 0 / 4 | none | 35.0 s |
+| Kick Off (After Goal) | 3 / 4 | 8.60 [6.72, 8.96] | 5.0 s |
+| Kick Off (Start), outside the window | 0 / 1 | none | 5.0 s |
+| types with fewer than 8 used, pooled | 9 | 5.20 [4.36, 8.60] | |
+| all types pooled | 22 / 56 | 4.46 [2.31, 7.74] | |
+
+The two published kick-off leads (3.52 s, 3.28 s) are the only ground-truth-like anchors; the detector does not find the
+second-half kick-off (frame 113742: ball not visible and static), so it is unvalidated against them, and its three
+kick-off-after-goal values (6.7 to 9.0 s, beyond the 5 s tag length) are not credible as leads. Only 39 % of the tags yield a
+restart (the ball is missing on 41 % of graded frames). Both facts are reported as limits of this measurement, and the rule
+below is nevertheless applied exactly as fixed: the measured value is used where the count rule says so, with no manual
+override. Typed real tags are 35.0 s long (like the simulator's 5 + 30), kick-off tags 5.0 s (the simulator writes 35 s for
+kick-offs as well; that second mismatch is outside this amendment and is not changed).
+
+Rule for the leads (fixed): a type with at least 8 usable restarts gets its own median; every other type shares the pooled
+median of the usable restarts of the types below 8. Therefore lead(Throw-in) = 3.96 s and lead(every other type) = 5.20 s.
+Relative to the simulator's 5.0 s: throw-in tags start 1.04 s later than the simulator writes them (stand-in shift +1.04 s),
+other types 0.2 s earlier (stand-in shift -0.2 s). The tag length stays 35 s (start and end move together).
+
+Candidate (a'), chosen over (a). (a) would re-fit every tag-consuming model (dead model, team model, merge model, the six
+cross-fitted pair models and fold models, six fold bases of B, the per-half self-training of S) on re-simulated tags; that chain
+does not finish by Mon 16 Nov 18:00 IST. (a') = s_ko with the real-match set-piece tag times (start and end, `SET PIECES` rows
+only) moved by the opposite of the stand-in shift (throw-in -1.04 s, other types +0.2 s) before any feature is built, with the
+cross-half self-training of B and the post-decode kick-off rule redone on those tags and every other setting, model, offset and
+threshold unchanged. For every model that reads tag timing, (a) trained and applied at the measured lead and (a') trained and
+applied at the simulator lead 5.0 s see the same relative tag timing; on a stand-in whose tags use the measured lead, (a')
+reads the stand-in with the shift undone, that is, exactly the lead-5.0 stand-in. Hence the corrected candidate's score on a
+stand-in equals s_ko's score at lead 5.0 by construction (checked in the code: shift then unshift reproduces the tags
+exactly). Variant (b), a kick-off law, is not built: the pipeline does not contain one, but the stand-in data cannot test it
+independently of the lead and it was marked optional.
+
+Stand-ins. Every simulated or other-game half of the sets below gets its SET PIECES rows moved by +1.04 s (throw-in) or -0.2 s
+(other types) in `load_half_sim` (opt-in environment hook, off by default). Sets: LOMO DFL 9001-9006 (12 halves, ctrl_Dfull and
+raw_Dfull, seeds 100 and 101 averaged per half), K-sim (40 halves), K-nat (40), sealed 9007 (2 halves), M (6 halves).
+Reference = s_ko on the same halves at lead 5.0 (stored harness outputs, recomputed on LOMO from the stored fold predictions).
+Mismatch = s_ko models (trained at lead 5.0, LOMO fold models and fold bases unchanged) evaluated on the shifted stand-ins, with
+S's per-half self-training redone on the shifted held-out halves exactly as on the real match. LOMO: the held-out match's halves
+are recomputed with the fold's dead and team models; training sequences of B stay the original cross-fitted ones.
+Diagnostic only, cannot be adopted: D34 = the same mismatch test with every set-piece type at 3.4 s (the reviewer's
+hypothesis), reported if time allows.
+
+Adoption rule (fixed now, unchanged from the instruction): adopt (a') over s_ko only if all of
+1. on LOMO DFL 9001-9006 (12 halves) AND on K-sim (40 halves), the mean ctrl_Dfull spellF1 of the corrected candidate minus the
+   mismatch run is >= 0 on both sets and >= +0.003 on at least one;
+2. no set (sealed 9007, K-nat, M) drops: corrected minus mismatch >= -0.003 on each;
+3. on the real match the corrected candidate (the whole S chain re-run on the moved tags, kick-off rule applied) still passes the
+   label-free checks: (i) tag agreement against the ORIGINAL tags not below s_ko's minus 0.02; (ii) visible-dead share, with the
+   organiser-forced pre-kick-off block excluded as in Amendment 4, in [0.116, 0.181]; (iii) R / rho in [2.28, 4.10] with R
+   block-excluded and rho = 0.8921 (S's registered simulator ratio; unchanged by (a')).
+Reported for reference: s_ko at lead 5.0 on every set; per-half wins; per-set means for raw_Dfull. The public window is not read.
+The decision is made by the caller, not by this amendment's code. If a step cannot finish by 16 Nov 18:00 IST the experiment
+stops and reports; it does not substitute another rule.

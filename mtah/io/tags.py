@@ -43,8 +43,35 @@ def parse_sportscode(xml_path, fps=25):
                          for c in cols}, columns=cols)
 
 
+def shift_set_pieces(tags, shifts, fps=25):
+    """Amendment 5: move SET PIECES rows (start and end together) by shifts[type prefix] seconds (key "*" = every other type;
+    prefixes are lower-case: "throw", "goal", "corner", "free", "kick"). Positive = later. Returns a copy."""
+    out = tags.copy()
+    for i, r in enumerate(out.itertuples(index=False)):
+        if r.code != "SET PIECES":
+            continue
+        t = (r.type or "").lower()
+        sec = shifts.get("*", 0.0)
+        for k, v in shifts.items():
+            if k != "*" and t.startswith(k):
+                sec = v; break
+        d = int(round(sec * fps))
+        out.iat[i, out.columns.get_loc("start")] = int(r.start) + d
+        out.iat[i, out.columns.get_loc("end")] = int(r.end) + d
+    return out
+
+
+def env_shift(var):
+    """Opt-in JSON shift from the environment variable `var` (None when unset)."""
+    import json, os
+    v = os.environ.get(var)
+    return json.loads(v) if v else None
+
+
 def load_tags(data_dir):
-    return parse_sportscode(Path(data_dir) / "tactical" / "BAR-ATH_tactical_smart_tagging.xml")
+    tags = parse_sportscode(Path(data_dir) / "tactical" / "BAR-ATH_tactical_smart_tagging.xml")
+    sh = env_shift("MTAH_SP_SHIFT_REAL")   # Amendment 5 corrected candidate; off by default
+    return shift_set_pieces(tags, sh) if sh else tags
 
 
 def coverage(df, n_frames, team_only=False):
