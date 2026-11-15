@@ -15,8 +15,8 @@ def cmp(setname, ref, mis):
     for v in ("ctrl_Dfull", "raw_Dfull"):
         r, m = ref[v].dropna(), mis[v].reindex(ref[v].dropna().index)
         diff = r - m
-        out.setdefault(setname, {})[v] = {"n_halves": int(len(r)), "ref_lead5.0": round(float(r.mean()), 4), "mismatch": round(float(m.mean()), 4),
-                                          "corrected_minus_mismatch": round(float(diff.mean()), 4),
+        out.setdefault(setname, {})[v] = {"n_halves": int(len(r)), "ref_lead5.0": round(float(r.mean()), 4), "mismatch": round(float(m.mean()), 5),
+                                          "corrected_minus_mismatch": round(float(diff.mean()), 5),
                                           "wins/ties/losses_corrected": [int((diff > 1e-12).sum()), int((diff.abs() <= 1e-12).sum()), int((diff < -1e-12).sum())]}
 for s in ("sealed", "Knat", "Ksim", "M"):
     ref = sets_half(glob.glob(f"{B}/out/{s}/sdec_part*.csv")); mis = sets_half(glob.glob(f"{LD}/out/sets_{name}/{s}/sdec_part*.csv"))
