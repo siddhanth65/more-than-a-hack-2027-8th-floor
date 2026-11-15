@@ -2,26 +2,71 @@
 
 **Frame-level possession labelling: technical document**
 
-The registered team name is **team 8th floor**: Siddhanth Susheel, Rishitej Reddy Vyalla, Anirudh Srinivas Dronamraju. Submission of 15 November 2026 to the Possession Challenge of More Than A Hack 2027 (Metrica Sports). Code and this document: https://github.com/siddhanth65/more-than-a-hack-2027-8th-floor (MIT licence).
+- **Team:** team 8th floor (registered name): Siddhanth Susheel, Rishitej Reddy Vyalla, Anirudh Srinivas Dronamraju
+- **Repository:** https://github.com/siddhanth65/more-than-a-hack-2027-8th-floor (code and this document; MIT licence)
+- **Date:** 15 November 2026, submission to the Possession Challenge of More Than A Hack 2027 (Metrica Sports)
+- **Submitted md5:** `2b908887901aad725558de040f3874b6`
 
-Submitted file:  candidate **s_ko** = candidate S plus the second-half kick-off rule of Amendment 4, md5 `2b908887901aad725558de040f3874b6`, 199,319 rows, labels H / A / D (X is never written). S is a17 with the BiGRU stream B self-trained across halves (md5 `4c2184b6807ae6f2b0c110c3dc164388`); s_ko equals S byte for byte except on 1,867 frames of the graded pre-kick-off block of the second half (section 5). The documented predecessor is a17 (md5 `afb9e7b4ede118268fd0222fd5e11068`). S differs from a17 in stream B **and** in two offsets (the dead-ball prior offset moved from -3.0 to -4.0 and the stream-B D offset from -0.5 to +0.5), and 3.0 % of the labels differ; that difference is therefore not attributable to stream B alone.
+> **At a glance**
+>
+> - **What it does.** Labels every one of the 199,319 graded frames of the provided match H, A or D (the two teams, or dead ball; X is never written). Evidence streams (ball control, touches, Smart Tagging, a dead-ball model, PathCRF, a team-in-control model and a small BiGRU) are combined by one 3-state Viterbi decoder per half, then cleaned up at spell level.
+> - **Submitted file.** Candidate **s_ko**, md5 `2b908887901aad725558de040f3874b6`, 302 possessions, passes the organisers' validator.
+> - **Expected score.** Full-match spellF1 of **roughly 0.35 to 0.55**; we have no label beyond the public window and offer no point estimate.
+> - **Read first.** Our procedure was amended four times in five days, the public window was used beyond a correctness check, and a window-measured statistic is a fitting target of our simulator (sections 5 and 6).
+> - **Reproduce.** Set `MTAH_DATA_DIR` to the competition bundle and run `scripts\reproduce.ps1` (Windows), or the Linux steps of section 8; the build takes about 7 to 10 minutes and ends at the md5 above.
+
+## Summary of the submission
+
+**Submitted file.** Candidate **s_ko** is candidate S plus the second-half kick-off rule of Amendment 4. It has 199,319 rows and labels H / A / D. md5 `2b908887901aad725558de040f3874b6`.
+
+- S is a17 with the BiGRU stream B self-trained across halves (md5 `4c2184b6807ae6f2b0c110c3dc164388`).
+- s_ko equals S byte for byte except on 1,867 frames of the graded pre-kick-off block of the second half (section 5).
+- The documented predecessor is a17 (md5 `afb9e7b4ede118268fd0222fd5e11068`).
+- S differs from a17 in stream B **and** in two offsets (the dead-ball prior offset moved from -3.0 to -4.0 and the stream-B D offset from -0.5 to +0.5), and 3.0 % of the labels differ; that difference is therefore not attributable to stream B alone.
+
 **Position of the submitted candidate in our own procedure.** s_ko is outside the originally pre-registered candidate pool: a17 is a post-registration candidate, S was added by Amendment 3 (with a non-inferiority bar, and a corrected fine-tuning schedule, Amendment 3b), and s_ko by Amendment 4 after the pool froze; it also fails the literal form of our own admissibility band (section 5). The procedure was amended four times in five days, and we say so rather than describe the result as the output of one fixed protocol. A fifth amendment (set-piece tag lead) was tested and not adopted (section 5).
 
-**Expected score.** We have no label for this match beyond the 5-minute public window, so we cannot measure the full-match score. Our stand-ins give spellF1 of about 0.57 to 0.58 on simulated blackouts (an optimistic upper end: the models were trained on the same simulator), 0.43 to 0.53 on other-game halves with natural visibility (depending on the truth convention), and 0.34 to 0.42 on other-game halves with simulated blackouts (a lower bound). We therefore expect a full-match spellF1 of **roughly 0.35 to 0.55** and do not offer a point estimate.
+**Expected score.** We have no label for this match beyond the 5-minute public window, so we cannot measure the full-match score. Our stand-ins give spellF1 of:
 
-Repository: this one. Most numbers below come from a file in it (section 9 lists them); the aggregates were computed on simulated or other-game data unless the text says otherwise. A few s_ko figures (frame counts, the visible-dead share) were recomputed label-free from the two candidate files and have no committed output; section 9 says which.
+- about 0.57 to 0.58 on simulated blackouts (an optimistic upper end: the models were trained on the same simulator);
+- 0.43 to 0.53 on other-game halves with natural visibility (depending on the truth convention);
+- 0.34 to 0.42 on other-game halves with simulated blackouts (a lower bound).
+
+We therefore expect a full-match spellF1 of **roughly 0.35 to 0.55** and do not offer a point estimate.
+
+**Where the numbers come from.** Most numbers below come from a file in this repository (section 9 lists them); the aggregates were computed on simulated or other-game data unless the text says otherwise. A few s_ko figures (frame counts, the visible-dead share) were recomputed label-free from the two candidate files and have no committed output; section 9 says which.
+
+### Terms used in this document
+
+- **H, A, D, X.** The two teams (H, A) and dead ball (D) as per-frame labels; X (unknown) is never written because the scorer forward-fills it.
+- **Spell, spellF1.** A spell is a possession (a maximal run of H or of A). spellF1 is the ranking metric: predicted and true possessions are matched one-to-one by IoU (overlap of the two time intervals).
+- **Blackout.** A stretch of frames in which the ball is not tracked.
+- **Smart Tagging.** The organisers' per-phase tags (BUILD UP, SET PIECES and so on).
+- **PathCRF.** An external players-only model of which node owns the ball (Kim et al.).
+- **Stream.** One source of per-frame evidence for the decoder (section 1). Stream B is the learned BiGRU stream.
+- **a17, S, s_ko.** Candidate files: a17 is the documented predecessor, S adds cross-half self-training of stream B, s_ko adds the kick-off rule.
+- **LOMO.** Leave-one-match-out validation on the simulator (DFL matches 9001 to 9006); 9007 is the sealed match, read once per registered candidate.
+- **K, K-nat, K-sim, M, T, B.** The four pre-registered selection signals (section 5). K: SkillCorner other-game halves, with natural visibility (K-nat) or simulated blackouts (K-sim). M: Metrica sample games. T and B: tests on the players-only stream and a masked-ball re-decode.
+- **ctrl, raw, Dfull.** Truth variants: `raw` counts every touch as a possession, `ctrl` is controlled possession (section 4); `Dfull` uses the full dead-ball definition (the alternative is a narrowed one). We rank on `ctrl_Dfull`.
+- **Public window.** The organisers' 5-minute labelled window (frames 11,185 to 18,685); see section 6.
 
 ## 1. Approach
 
-**The problem as we measured it.** On the provided match the ball is missing on 41 % of graded frames, and almost all of that is in long blackouts rather than flicker: 79 blackouts longer than 10 s hold 85 % of the missing frames (median 20.8 s, p90 50.5 s); there are no gaps between 0.5 s and 5 s. Interpolation cannot bridge 20 s. Inside a blackout the system has to decide, from player geometry, Smart Tagging and restart structure, whether the ball is dead and, if it is live, which team has it. Where the ball is visible, the problem is ordinary ball-control labelling. The ranking metric (spellF1, possessions matched one-to-one by IoU) rewards the right number of possessions with the right boundaries far more than per-frame accuracy, so the design aims at not splitting and not merging possessions.
+**The problem as we measured it.** On the provided match the ball is missing on 41 % of graded frames, and almost all of that is in long blackouts rather than flicker: 79 blackouts longer than 10 s hold 85 % of the missing frames (median 20.8 s, p90 50.5 s); there are no gaps between 0.5 s and 5 s. Interpolation cannot bridge 20 s.
+
+Inside a blackout the system has to decide, from player geometry, Smart Tagging and restart structure, whether the ball is dead and, if it is live, which team has it. Where the ball is visible, the problem is ordinary ball-control labelling.
+
+The ranking metric (spellF1, possessions matched one-to-one by IoU) rewards the right number of possessions with the right boundaries far more than per-frame accuracy, so the design aims at not splitting and not merging possessions.
 
 **Pipeline.** Evidence streams give per-frame log-scores for H, A, D (or abstain). A weighted sum is decoded by one centred 3-state Viterbi per half, followed by spell-level post-processing. Given the same inputs and the same software environment the pipeline is deterministic (no random numbers at inference; section 8 reports what was and was not observed across machines).
+
+*Table 1. The seven evidence streams of the pipeline: what each takes as input and what it contributes.*
 
 | stream | input | what it does |
 |---|---|---|
 | ball control | tracked ball and nearest players | carrier / flight / contested model; the ball model's loose-ball probability is added equally to H and A (`alpha_loose` = 0.5), so loose mass is neutral and the last owner is kept only by the decoder's switch cost; weight 1 |
 | touches | ball-velocity kinks | strong boundary evidence, used by the snap and by stream B |
-| tag prior | Smart Tagging phases | team prior with a per-code sign and reliability (`configs/tag_codes.json`): attacking codes (BUILD UP, PROGRESSION, ATTACKING TRANSITION, LONG BALL, BALL IN FINAL THIRD) name the team with the ball (sign +1, p 0.61 to 0.77); defensive codes name the team without it (sign -1, p 0.52 to 0.77); box / chance / goal codes are ignored; a team-tagged set piece (code SET PIECES, sign +1, p 0.8) gives a team prior over its whole tagged interval (typed set-piece tags are 35.0 s long on the real match, kick-off tags 5.0 s; the config field `sp_team_after_s` = 10 is not read by any code). Treating every tag team as the possessor gave 0.60 agreement with nearest-player on the real match against 0.86 to 0.96 in simulation; the sign table fixed it. Weight 1 |
+| tag prior | Smart Tagging phases | team prior with a per-code sign and reliability (`configs/tag_codes.json`): attacking codes (BUILD UP, PROGRESSION, ATTACKING TRANSITION, LONG BALL, BALL IN FINAL THIRD) name the team with the ball (sign +1, p 0.61 to 0.77); <br>defensive codes name the team without it (sign -1, p 0.52 to 0.77); <br>box / chance / goal codes are ignored; <br>a team-tagged set piece (code SET PIECES, sign +1, p 0.8) gives a team prior over its whole tagged interval (typed set-piece tags are 35.0 s long on the real match, kick-off tags 5.0 s; the config field `sp_team_after_s` = 10 is not read by any code). <br>Treating every tag team as the possessor gave 0.60 agreement with nearest-player on the real match against 0.86 to 0.96 in simulation; the sign table fixed it. Weight 1 |
 | dead-ball model | gradient-boosted trees | D versus live. Features: ball-out geometry at blackout entry, time since blackout start, set-piece tags, restart shapes, player-speed collapse, and ball-independent long-context player-motion features (slowdown, slow share, acceleration, team spread, centroid distance, compactness, visible count over 2, 5 and 10 s windows plus trends). Features are standardised per match-half. A scalar log-odds prior offset (-3.0 in a17, -4.0 in S and s_ko) calibrates the dead share to other-game levels. Weight 4 |
 | PathCRF, players only | player positions at 5 fps | external model (Kim et al.; MPL-2.0, run unmodified in its own environment) giving the posterior of which node owns the ball. **On the real feed the player positions are first smoothed with a 1 s centred moving average** (section 6 and 7). Weight 1 |
 | team in control | gradient-boosted trees on ball-player geometry | per-frame H versus A on visible-ball frames (three nearest players per team, closing speeds, ball speed and acceleration, direction of play, time to and from touches); held-out frame accuracy 0.883 against 0.744 for the hand-built ball stream. Weight 2 |
@@ -31,11 +76,17 @@ Repository: this one. Most numbers below come from a file in it (section 9 lists
 
 **Post-processing** (all O(segments)): an H or A run shorter than 0.4 s with D on both sides is set to D (a short run between two different labels is not removed by this rule); A-B-A patterns shorter than 1 s merged unless a strong touch says otherwise; team-change boundaries snapped to a touch within 50 frames (worth about +0.02 spellF1 in a fold experiment). The spell-merge model of earlier candidates, the broadcast replay stream and the switch hazard are off in a17 and S.
 
-**S: cross-half self-training of stream B** (Amendments 3 and 3b of the pre-registration, section 5). Everything above is a17 except stream B. For a target half h, a copy of a17's network is fine-tuned on (a) the simulator training sequences plus (b) pseudo-labelled steps of the other half of the same match only, and that copy predicts h; no half's own pseudo-labels ever train the network that predicts it. Pseudo-labels are algorithmic: H or A on confident-ball-control frames (the rule of section 3, frozen on simulator folds), plus a17's own decoded label (H, A or D) on frames where the softmax of the decoder's per-frame cost row gives that label a posterior of at least 0.9 (the confident-control label wins a disagreement); frames 11185 to 18685, the organisers' public window, are removed from every pseudo-label set. Pseudo-labelled steps carry weight 0.5 against 1 for a simulator step. Fine-tuning: Adam, learning rate 5e-4 (base training 3e-3), 8 epochs, each epoch every pseudo window (600 steps, stride 150, at least 5 labelled steps) plus the same number of simulator windows. On the contest match this is 15,235 labelled steps (6,376 D, taken from the second half) for the first-half network and 13,998 (6,080 D, taken from the first half) for the second-half network. Code: `mtah/selftrain.py`, `scripts/s_selftrain.py` (simulator run), `scripts/s_real.py` (contest match).
+**S: cross-half self-training of stream B** (Amendments 3 and 3b of the pre-registration, section 5). Everything above is a17 except stream B. For a target half h, a copy of a17's network is fine-tuned on (a) the simulator training sequences plus (b) pseudo-labelled steps of the other half of the same match only, and that copy predicts h; no half's own pseudo-labels ever train the network that predicts it.
+
+Pseudo-labels are algorithmic: H or A on confident-ball-control frames (the rule of section 3, frozen on simulator folds), plus a17's own decoded label (H, A or D) on frames where the softmax of the decoder's per-frame cost row gives that label a posterior of at least 0.9 (the confident-control label wins a disagreement); frames 11185 to 18685, the organisers' public window, are removed from every pseudo-label set. Pseudo-labelled steps carry weight 0.5 against 1 for a simulator step.
+
+Fine-tuning: Adam, learning rate 5e-4 (base training 3e-3), 8 epochs, each epoch every pseudo window (600 steps, stride 150, at least 5 labelled steps) plus the same number of simulator windows. On the contest match this is 15,235 labelled steps (6,376 D, taken from the second half) for the first-half network and 13,998 (6,080 D, taken from the first half) for the second-half network. Code: `mtah/selftrain.py`, `scripts/s_selftrain.py` (simulator run), `scripts/s_real.py` (contest match).
 
 **Why this and not something simpler.** The organisers' smoother (nearest player plus 2 s majority vote) scores about 0.21 to 0.23 on our simulator and 0.32 on the 5-minute public window, where the ball is present 88 % of the time. On the long blackouts, which the window under-represents, a ball-only method has nothing to work with. Our evidence on blackout frames is therefore tags, dead-ball motion patterns and players-only models, and the learned stream B was added because, as a10, it beat the hand-weighted a5c on all six simulator folds (section 5).
 
 ## 2. Assets used and dropped
+
+*Table 2. Assets and ideas we considered, the decision taken and the evidence for it.*
 
 | asset or idea | decision | what we found |
 |---|---|---|
@@ -52,7 +103,11 @@ Repository: this one. Most numbers below come from a file in it (section 9 lists
 
 ## 3. Training data
 
-No human-made or outside label of the provided game was used to train anything. The training sets below are other games. The submitted candidate does use **algorithmic pseudo-labels of the provided game** (labels produced by our own code from the tracking, with no human annotation; the rules allow learning from "pseudo-labels produced by an algorithm"): stream B of S and s_ko is fine-tuned on them, and the PathCRF smoothing length was chosen on them (below). The organisers' public 5-minute window is excluded from every pseudo-label set in code (`mtah/selftrain.py`). The window's own labels were read as aggregates for the checks, band anchoring, decision rule and one simulator fitting target disclosed in section 6; they trained nothing.
+No human-made or outside label of the provided game was used to train anything. The training sets below are other games. The submitted candidate does use **algorithmic pseudo-labels of the provided game** (labels produced by our own code from the tracking, with no human annotation; the rules allow learning from "pseudo-labels produced by an algorithm"): stream B of S and s_ko is fine-tuned on them, and the PathCRF smoothing length was chosen on them (below).
+
+The organisers' public 5-minute window is excluded from every pseudo-label set in code (`mtah/selftrain.py`). The window's own labels were read as aggregates for the checks, band anchoring, decision rule and one simulator fitting target disclosed in section 6; they trained nothing.
+
+*Table 3. Datasets from other games: source, amount and use (the pseudo-labels of the provided game are described after the table).*
 
 | dataset | source / who labelled | amount | used for |
 |---|---|---|---|
@@ -61,7 +116,9 @@ No human-made or outside label of the provided game was used to train anything. 
 | Metrica sample games 1 to 3 | public event data and tracking from Metrica Sports; truth derived algorithmically from the events (possession events; dead from out-of-play, shot, foul and similar events up to the next set piece; blank-ball stretches) | 3 games, 6 halves | **validation only** (signal M); no model was trained on them |
 | PathCRF pretrained weights (`saved/140`) | trained by the PathCRF authors on DFL open-data matches | 37 MB checkpoint | used as shipped. **Overlap caveat:** our simulator matches 9001 to 9005 are PathCRF's training matches and 9006 its validation match; 9007 is its clean test match. PathCRF's simulator accuracy is therefore optimistic, which contributes to the simulator-to-real gap |
 
-Algorithmic pseudo-labels on the provided game (frames where one player clearly controls the ball: nearest player within 1.5 m, nearest opponent at least 5 m away, ball moving, same player for at least 1 s; precision 0.971 against simulator truth, rule fixed on simulator folds) were used only to diagnose the PathCRF input problem on the real feed and to choose the smoothing length (section 6). In a17 they train no model. In S they are the only thing that differs: stream B is fine-tuned on pseudo-labels of the other half of the contest match, as described in section 1, with the public window excluded. The dead-ball, team-in-control and PathCRF models are unchanged and were trained on DFL simulator data only.
+Algorithmic pseudo-labels on the provided game (frames where one player clearly controls the ball: nearest player within 1.5 m, nearest opponent at least 5 m away, ball moving, same player for at least 1 s; precision 0.971 against simulator truth, rule fixed on simulator folds) were used only to diagnose the PathCRF input problem on the real feed and to choose the smoothing length (section 6). In a17 they train no model.
+
+In S they are the only thing that differs: stream B is fine-tuned on pseudo-labels of the other half of the contest match, as described in section 1, with the public window excluded. The dead-ball, team-in-control and PathCRF models are unchanged and were trained on DFL simulator data only.
 
 ## 4. Possession rules implemented
 
@@ -77,11 +134,17 @@ Algorithmic pseudo-labels on the provided game (frames where one player clearly 
 
 **Simulator.** One real match with no usable labels cannot be tuned on, so candidates are validated on DFL halves with simulated blackouts. The simulator is fitted to the real feed without ground-truth labels, **with one disclosed exception (section 6, item 6)**: the share of dead ball inside blackouts (target 0.56, tolerance 0.15, `configs/blackout_targets.json`) was measured on about 900 ball-missing frames of the public window and is part of the blackout fit (`scripts/fit_blackouts.py`). The rest is label-free: blackout lengths from the 79 real blackouts, player outages (mean 18.3 players visible inside blackouts, real 18.8), identity swaps (0.2 per team-minute), sparse typed set-piece tags at the real rates, ball smoothing, and dead-ball behaviour on visible frames. Scoring uses the organisers' scorer, vendored unmodified and md5-pinned.
 
-**Protocol.** Leave-one-match-out over DFL matches 9001 to 9006 (two seeds), ranking by mean rank over four truth variants; a bar of margin over the best baseline and folds won; one sealed match (9007) read once per registered candidate and logged in `docs/reads/sealed.jsonl` (13 reads, the last four being the 15 Nov battery; 9007's labels were also used earlier for PathCRF-side work, section 7).
+**Protocol.** Leave-one-match-out (LOMO) over DFL matches 9001 to 9006 (two seeds), ranking by mean rank over four truth variants; a bar of margin over the best baseline and folds won; one sealed match (9007) read once per registered candidate and logged in `docs/reads/sealed.jsonl` (13 reads, the last four being the 15 Nov battery; 9007's labels were also used earlier for PathCRF-side work, section 7).
 
-**Admissibility on the real match (label-free), re-anchored on other games.** A candidate is admissible only if (i) its predicted dead share on visible-ball frames lies in [0.116, 0.181] = [0.8, 1.25] x 0.145 (SkillCorner), and (ii) its implied truth spell rate R / rho lies in [2.28, 4.10] per graded minute (the span of controlled-possession rates in SkillCorner, DFL and the Metrica sample), where R is the predicted rate on the real match and rho the same configuration's simulator count ratio. The dead and learned-stream offsets of every candidate are set by one rule: the best simulator rank among admissible cells. The original bands were anchored on public-window aggregates (section 6). **Plainly: the re-anchored upper edge (0.181 = 1.25 x 0.145) sits next to the old window-anchored edge (0.18 = 1.25 x the window's 0.155, rounded), and it is the binding constraint on the submitted dead offsets. The cell we submit is the one the old window band would also have selected, so the re-anchoring did not change the file; it only gives the choice a non-window justification.** The SkillCorner anchor and the [0.8, 1.25] tolerance were chosen on 10 Nov by people who knew the window value.
+**Admissibility on the real match (label-free), re-anchored on other games.** A candidate is admissible only if (i) its predicted dead share on visible-ball frames lies in [0.116, 0.181] = [0.8, 1.25] x 0.145 (SkillCorner), and (ii) its implied truth spell rate R / rho lies in [2.28, 4.10] per graded minute (the span of controlled-possession rates in SkillCorner, DFL and the Metrica sample), where R is the predicted rate on the real match and rho the same configuration's simulator count ratio. The dead and learned-stream offsets of every candidate are set by one rule: the best simulator rank among admissible cells. The original bands were anchored on public-window aggregates (section 6).
+
+**Plainly: the re-anchored upper edge (0.181 = 1.25 x 0.145) sits next to the old window-anchored edge (0.18 = 1.25 x the window's 0.155, rounded), and it is the binding constraint on the submitted dead offsets. The cell we submit is the one the old window band would also have selected, so the re-anchoring did not change the file; it only gives the choice a non-window justification.**
+
+The SkillCorner anchor and the [0.8, 1.25] tolerance were chosen on 10 Nov by people who knew the window value.
 
 **Pre-registered final selection** (`docs/reads/plan9-preregistration.md`, committed 10 Nov before any of these results): pool {a5c, a13r, a10, a14, a16, H} (a self-training variant S was allowed; it was built afterwards under Amendment 3, below); P = a5c (hand-built streams), L = a14 (learned sequence streams). Four signals, each favouring P, L or neither; P is chosen only if at least two favour P and none favours L, a hedge H if one favours P or they conflict, otherwise L.
+
+*Table 4. The four pre-registered selection signals, the test behind each and its verdict.*
 
 | signal | test | result | verdict |
 |---|---|---|---|
@@ -93,6 +156,8 @@ Algorithmic pseudo-labels on the provided game (frames where one player clearly 
 All four were none or invalid, so the rule's default L = a14 family applied. We then built **a17** = a14 with its BiGRU inputs computed at the dead offset it was trained at ("a14f"), plus the PathCRF input smoothing (section 6), with the offsets re-set by the admissibility rule on the fixed evidence (dead -3.0, stream-B D offset -0.5). Fallback, not submitted: `a5c_fx2` (the hand-built a5c with the same smoothing, md5 `107e7fc1157c05ad3ba8f893734606b7`).
 
 **a17 numbers.**
+
+*Table 5. Evidence for a17 across the test sets, with reference systems.*
 
 | measure | a17 | reference |
 |---|---|---|
@@ -107,9 +172,13 @@ a17 itself was not scored on K, M or the sealed match: those were computed for i
 
 ### Candidate S (Amendments 3 and 3b)
 
-**Pre-registration.** Amendment 3 (11 Nov 2026, 11:26 IST, commit "docs: Plan 9 amendment 3 (S recipe, before any S result)") fixed S before any S training or scoring: definition, pseudo-label rule, variants V1 (confident control, weight 1.0), V2 (weight 0.5) and V3 (confident control plus a17's own labels at posterior >= 0.9, weight 0.5), simulator-only choice of the variant, and the acceptance bar: leave-one-match-out ctrl_Dfull >= a17's 0.5622 - 0.005 = 0.5572 in the same harness, same folds and blackouts, plus real-match admissibility. **Amendment 3b** (11:45 IST, commit "docs: Plan 9 amendment 3b (S fine-tuning schedule corrected before any S score)") corrected the fine-tuning schedule of Amendment 3 before any S prediction was decoded or scored: the original schedule (windows with at least 30 labelled steps, 4 epochs) turned out to be a no-op, because the confident-control rule labels only about 2.6 % of steps and few windows qualified (about one gradient step per epoch). This was seen from label counts and job logs; the partial outputs were deleted unread. Variants, weights, bar and deadline did not change. The schedule of section 1 is the corrected one.
+**Pre-registration.** Amendment 3 (11 Nov 2026, 11:26 IST, commit "docs: Plan 9 amendment 3 (S recipe, before any S result)") fixed S before any S training or scoring: definition, pseudo-label rule, variants V1 (confident control, weight 1.0), V2 (weight 0.5) and V3 (confident control plus a17's own labels at posterior >= 0.9, weight 0.5), simulator-only choice of the variant, and the acceptance bar: leave-one-match-out ctrl_Dfull >= a17's 0.5622 - 0.005 = 0.5572 in the same harness, same folds and blackouts, plus real-match admissibility.
+
+**Amendment 3b** (11:45 IST, commit "docs: Plan 9 amendment 3b (S fine-tuning schedule corrected before any S score)") corrected the fine-tuning schedule of Amendment 3 before any S prediction was decoded or scored: the original schedule (windows with at least 30 labelled steps, 4 epochs) turned out to be a no-op, because the confident-control rule labels only about 2.6 % of steps and few windows qualified (about one gradient step per epoch). This was seen from label counts and job logs; the partial outputs were deleted unread. Variants, weights, bar and deadline did not change. The schedule of section 1 is the corrected one.
 
 **Simulator run** (6 folds, seeds 100 and 101, a17's decoding cell; `docs/s/lomo_summary.json`):
+
+*Table 6. Candidate S on the simulator (leave-one-match-out, spellF1): a17 against the self-training variants.*
 
 | system | ctrl_Dfull | raw_Dfull |
 |---|---|---|
@@ -124,6 +193,8 @@ V3 has the best ctrl_Dfull of V1 to V3 and clears the bar of 0.5572, so S passed
 
 **Offsets and admissibility on the real match** (label-free; `docs/s/calib_s.csv`). The offsets follow the usual rule (best simulator mean rank among admissible cells of a17's 21-cell grid): dead -4.0, stream-B D offset +0.5. The two cells that rank higher in the simulator, (-3.0, +0.5) and (-3.5, +0.5), were skipped because their visible-dead shares (0.1876, 0.1835) exceed 0.181. At the chosen cell the simulator gives 0.5665 / 0.5836; that gain comes from the offset rule, not from the stream (at the same cell S and a17 differ by less than 0.001).
 
+*Table 7. S and a17 on the real match (label-free statistics) against the admissibility bands.*
+
 | real match, label-free | S | a17 | band |
 |---|---|---|---|
 | visible-dead share | 0.1793 | 0.1778 | [0.116, 0.181]; **margin to the upper edge only 0.0017** |
@@ -133,15 +204,23 @@ V3 has the best ctrl_Dfull of V1 to V3 and clears the bar of 0.5572, so S passed
 | predicted D share | 0.415 | 0.404 | |
 | spells | 312 | 304 | |
 
-S changes **3.0 %** of graded frames against a17 (H1 2.6 %, H2 3.5 %; 3.4 % inside blackouts, 2.8 % outside). **Two things changed between a17 and S, not one:** stream B (self-training) and the offsets (dead-ball prior -3.0 to -4.0, stream-B D offset -0.5 to +0.5). The dead-ball prior offset is not a stream-B parameter, so the 3.0 % is a mix of both effects, and this document does not separate them. At equal cells S and a17 differ by under 0.001 on the simulator, so most of the real difference between the two files may come from the cell and not from the self-training. Because V3's pseudo-labels include a17's own decisions (about a third of them D), S is partly a self-distillation of a17 on the contest match.
+S changes **3.0 %** of graded frames against a17 (H1 2.6 %, H2 3.5 %; 3.4 % inside blackouts, 2.8 % outside).
+
+**Two things changed between a17 and S, not one:** stream B (self-training) and the offsets (dead-ball prior -3.0 to -4.0, stream-B D offset -0.5 to +0.5). The dead-ball prior offset is not a stream-B parameter, so the 3.0 % is a mix of both effects, and this document does not separate them. At equal cells S and a17 differ by under 0.001 on the simulator, so most of the real difference between the two files may come from the cell and not from the self-training.
+
+Because V3's pseudo-labels include a17's own decisions (about a third of them D), S is partly a self-distillation of a17 on the contest match.
 
 ### Candidate s_ko: S plus the kick-off rule (Amendment 4)
 
 **The bug.** The graded second half starts at video frame 110,808 and kicks off at 113,742; the organisers' FAQ says the 2,934 graded frames before the kick-off are all D, (the FAQ also gives the kick-off frame, 113,742, and the 2,934 pre-kick-off frames; we take both from the FAQ, not from the period data, which gives only the start of the graded block). `mtah/io/periods.py` carried the kick-off frames but the pipeline never used them, so S labelled 63.6 % of that block H or A (49.3 % H, 14.3 % A, 36.4 % D) and produced 10 whole spurious possessions there. In the first half the graded block starts at the kick-off (frame 11,185), so the rule is a no-op.
 
-**The rule and its status.** After decoding, every graded frame from a half's first graded frame up to, not including, its kick-off frame is set to D (`force_pre_kickoff_dead`, `make_candidate.py --kickoff-dead`, default off, so S and a17 still reproduce their md5s). It was written down as **Amendment 4** of the pre-registration (15 Nov 2026, 02:15 IST) before the rebuild. It was found by a label-free review of the predicted file against the FAQ, not by any window score; the public window (frames 11,185 to 18,685) is in the first half and unaffected. It is a period-handling (alignment) bug of the kind step 6 of the pre-registration allows. It is nevertheless a deviation from the team's own procedure: it came after the window reads 10 and 11 of 14 Nov (section 6, item 5) and after the pool froze, it applies to the selected candidate only, it is not a choice between candidates, and no other setting changed.
+**The rule and its status.** After decoding, every graded frame from a half's first graded frame up to, not including, its kick-off frame is set to D (`force_pre_kickoff_dead`, `make_candidate.py --kickoff-dead`, default off, so S and a17 still reproduce their md5s). It was written down as **Amendment 4** of the pre-registration (15 Nov 2026, 02:15 IST) before the rebuild. It was found by a label-free review of the predicted file against the FAQ, not by any window score; the public window (frames 11,185 to 18,685) is in the first half and unaffected. It is a period-handling (alignment) bug of the kind step 6 of the pre-registration allows.
+
+It is nevertheless a deviation from the team's own procedure: it came after the window reads 10 and 11 of 14 Nov (section 6, item 5) and after the pool froze, it applies to the selected candidate only, it is not a choice between candidates, and no other setting changed.
 
 **What changed (fresh laptop clone, label-free).** s_ko equals s.csv byte for byte outside the block: **1,867 frames differ, all inside frames 110,808 to 113,741; none outside** (1,067 of the 2,934 block frames were already D). The official validator passes (199,319 rows, 302 possessions). Spells: **312 in S, 302 in s_ko**. Predicted D share 0.4146 in S, 0.4263 in s_ko. md5 `2b908887901aad725558de040f3874b6` (S: `4c2184b6807ae6f2b0c110c3dc164388`).
+
+*Table 8. S and s_ko on the real match (label-free), literal and block-excluded versions of each statistic.*
 
 | real match, label-free | S | s_ko | band |
 |---|---|---|---|
@@ -151,13 +230,19 @@ S changes **3.0 %** of graded frames against a17 (H1 2.6 %, H2 3.5 %; 3.4 % insi
 | R / rho, literal (rho = 0.8921, S's simulator count ratio) | 3.302 | 3.197 | [2.28, 4.10] |
 | R / rho, block excluded (spells outside the block over graded minutes outside it) | 3.246 | 3.257 | [2.28, 4.10] |
 
-**Admissibility, both ways.** R / rho is inside its band in every version. The visible-dead share is inside the band for S and, with the block excluded, for s_ko (0.1769, identical to S because the files agree outside the block). **Under the literal definition s_ko is at 0.1959, above the upper edge 0.181**, because 81 % of the block's frames have a visible ball and forcing D there adds dead frames that the band, anchored on other-game halves that start at kick-off, never contained. We read the band as a plausibility device (it is anchored on SkillCorner, a different provider with a different dead definition) and the block as not play by the organisers' own statement, so the statistic should exclude it; but that is a judgement made after seeing the number, and we report both figures. The offset cell was not re-selected: the rule is the only change, and re-running the offset rule would be tuning.
+**Admissibility, both ways.** R / rho is inside its band in every version. The visible-dead share is inside the band for S and, with the block excluded, for s_ko (0.1769, identical to S because the files agree outside the block). **Under the literal definition s_ko is at 0.1959, above the upper edge 0.181**, because 81 % of the block's frames have a visible ball and forcing D there adds dead frames that the band, anchored on other-game halves that start at kick-off, never contained.
 
-**Reproducibility of S.** Candidate `models/s`; md5 `4c2184b6807ae6f2b0c110c3dc164388`, 199,319 rows, vendored official validator passes. The file was regenerated byte-identically from two fresh clones of the repository on the university server, using the PathCRF real-match posterior computed on the laptop (cache md5 equal on both machines); the same server environment rebuilds a17 byte-identically to its laptop-registered md5. On 14 Nov the laptop rebuilt S from a fresh clone (empty PathCRF cache, `scripts/reproduce.ps1`) and obtained md5 `4c2184b6807ae6f2b0c110c3dc164388`, equal to the expected value. Run logs and per-fold tables: `docs/s/REPORT.md`.
+We read the band as a plausibility device (it is anchored on SkillCorner, a different provider with a different dead definition) and the block as not play by the organisers' own statement, so the statistic should exclude it; but that is a judgement made after seeing the number, and we report both figures. The offset cell was not re-selected: the rule is the only change, and re-running the offset rule would be tuning.
+
+**Reproducibility of S.** Candidate `models/s`; md5 `4c2184b6807ae6f2b0c110c3dc164388`, 199,319 rows, vendored official validator passes. The file was regenerated byte-identically from two fresh clones of the repository on the university server, using the PathCRF real-match posterior computed on the laptop (cache md5 equal on both machines); the same server environment rebuilds a17 byte-identically to its laptop-registered md5.
+
+On 14 Nov the laptop rebuilt S from a fresh clone (empty PathCRF cache, `scripts/reproduce.ps1`) and obtained md5 `4c2184b6807ae6f2b0c110c3dc164388`, equal to the expected value. Run logs and per-fold tables: `docs/s/REPORT.md`.
 
 ### Test battery of 15 November 2026 (after the file was fixed)
 
 Run after s_ko was built, to see whether anything else was worth changing; nothing was changed. Mean spellF1 per set (ctrl_Dfull / raw_Dfull truth variants), with wins and losses per half against S = s_ko. s_ko equals S on all of these sets (they start at kick-off, so the kick-off rule is a no-op). Aggregates in `docs/battery/REPORT.md` and `docs/battery/csv/`; code `scripts/battery_set.py`, `battery_agg.py`, `battery_real.py`.
+
+*Table 9. Test battery of 15 November: mean spellF1 (ctrl_Dfull / raw_Dfull) per test set.*
 
 | set (halves) | S = s_ko | a17 | a5c_fx2 | organisers' smoother |
 |---|---|---|---|---|
@@ -179,6 +264,8 @@ The organisers published a 5-minute labelled window (7,500 frames, 17 possession
 
 **All reads of the window** (every entry is in `docs/reads/public.jsonl`; scores are aggregates only):
 
+*Table 10. Every read of the public window: date, candidate, score and recorded purpose.*
+
 | # | date | candidate | spellF1 / macroF1 | purpose as recorded |
 |---|---|---|---|---|
 | 1 | 20 Oct | organisers' baselines (smooth50) | 0.326 / 0.621 | pipeline check; our loader reproduced their number exactly (alignment) |
@@ -196,13 +283,20 @@ The organisers published a 5-minute labelled window (7,500 frames, 17 possession
 **What this means.**
 
 1. **Read 7 chose between two versions.** The rule above picked a5c over the learned family from the window. Reads 5 to 7 were taken after the organisers' clarification of 22 to 23 October (commits c073f29 and f8f2629 of the organisers' public repository), which we had not yet pulled; read 5 came 42 minutes after the clarification commit. Reads 5 and 6 were labelled report-only, but in practice "the learned family scored lower on the window twice" weighed in on the family choice. On 10 Nov, after pulling the rules, we discarded the read-7 decision and re-chose by the rule in section 5, committed before any new result was seen. From that commit on, until the two reads of 14 Nov (item 5), no spellF1 or macroF1 was shown or stored for the window; the final checks of reads 8 and 9 compute the window score of shifted copies internally and print only two booleans.
+
 2. **Both plausibility bands were originally anchored on window aggregates:** visible-dead share in [0.10, 0.18] (the window's 0.155) and spell rate in [2.7, 4.3] per graded minute (17 spells in 5 minutes x [0.8, 1.25]). They chose a3b's cell, the `long_rel` dead policy, a5c's offset of -2.0, a4's cell 41 (merge 0.7; the spell-rate band rejected the simulator's rank-1 cell, which gave 4.995 spells per minute) and the offsets of the later learned candidates. We re-anchored both on other-game data (section 5) and re-checked every band-dependent setting: all survive. The a5c offset of -2.0 survives with a margin of 0.003 and is set by the band's upper edge, not by simulator evidence (the simulator prefers a less negative offset because its dead prior is about 0.30 against about 0.15 on the real feed).
+
 3. **Other window-derived uses.** Window aggregates (dead shares, spells per minute, spell-length quantiles) were used to judge each candidate's gap and to set the goals of Plans 2c to 2e. The controlled-possession truth variant was motivated in part by the window's possession rate (3.4 per minute) as well as by the written "controlled possession" rule. The replay cue was cross-checked against window dead frames. Two designs built directly on the window were **not shipped**: the type-specific pre-restart dead prior of variant a6 (designed from two long visible-ball dead runs in the window; selected by the bands, then rejected because the sealed match and simulator preferred a5c; the variant's model, grid and sweep script are removed; the generic per-type window mechanism stays in `tag_prior.py`, inert at bonus 0, and is used only by the SkillCorner-fitted experiment of section 2) and the "Metrica-convention" truth calibrated to the window's spell-length quantiles (selection a9, rejected; its code is not in this repository). Some of our other-game reports quote the window's aggregates as context rows; none of those numbers was used for tuning after the re-anchoring.
+
 4. **An earlier version of this document said the window was "never used for tuning". That was wrong,** and is corrected here.
-6. **A window label statistic is a fitting target of the blackout simulator (found 15 Nov; an earlier version of this document said the simulator was "fitted label-free").** `configs/blackout_targets.json` holds `dead_share_inside` = 0.56 (tolerance 0.15), the share of ball-missing frames that are dead ball inside blackouts. The file's own note says it "is measured on only ~900 public-window frames". It was measured from the window's ground-truth labels on 20 Oct, it is one of the terms of the loss and one of the pass/fail gates in `scripts/fit_blackouts.py`, and the resulting `configs/blackout_sim.json` generates the blackouts on which the dead-ball model, the team model, stream B and every candidate selection run. The simulator was never refitted without it. **This is a disclosed deviation from the rule that the window is not a tuning set.** The effect on the submitted file cannot be removed without retraining everything; we did not measure it. There is evidence that the target is too low: on the real match S calls 85.8 % of blackout frames dead (`docs/s/s.drift.json`) against 0.56 in the simulator, and the simulator's range for that statistic is 27 to 59 %. So real blackouts look more like stoppages than the simulator makes them, and the simulator-based scores (including the K-sim and M rows) overstate how much live play is hidden.
+
 5. **Reads 10 and 11 (14 Nov 2026) deviate from our own pre-registration.** Plan 9 says "from this commit on, no spellF1 or macroF1 is computed on the public window". On 14 Nov, at a team member's request, a17 and S were scored on the window, report-only. The statement that S stays the final candidate whatever the numbers was written to the project ledger before the scoring, and S stayed. Results: a17 0.6061 / 0.8316, S 0.5765 / 0.7842, baseline unchanged. The difference of 0.03 is half of one possession out of 17 and the window ranks versions unreliably (section 6, items 1 and 2), so we do not read it as evidence. Neither number was used to choose or change anything. Amendment 4 (s_ko) was written after these reads; it is a bug fix found by a label-free review of the file against the organisers' FAQ and does not select between candidates (section 5). a17 itself was built after the pre-registered pool and signals (it repairs the PathCRF input problem, below), with a smoothing length chosen on the contest match's pseudo-labels; it is a post-registration candidate, not a pool member, and S is defined on top of it.
 
-**Final check and why the file was not changed.** As the last step of the pre-registered procedure we ran `scripts/final_check.py` once on a17. It validates the file (valid, 199,319 rows) and prints two booleans and no score (it computes window scores of 21 shifted copies and a swapped copy internally and discards them): whether the best frame offset among -50 to +50 frames (step 5) equals zero, and whether swapping H and A is worse. Result: **best_offset_is_zero = False; swap_HA_is_worse = True.** The orientation check passes. The offset boolean says that some shift scored at least marginally higher on the window than zero. We did not change the file: frame alignment is established independently (the organisers' smoother reproduces to the digit through the same loader and frame index, read 1), the window holds only 17 possessions so a shift of 0.2 to 2 s can flip one by chance, and choosing a shift from the window would be tuning, which the rules forbid. The size and sign of the best offset were not printed and are not known to us. The boolean was a badly designed test and we do not lean on it; the evidence for alignment is the organisers' smoother reproducing 0.3256 to the digit (reads 1 and 11).
+6. **A window label statistic is a fitting target of the blackout simulator (found 15 Nov; an earlier version of this document said the simulator was "fitted label-free").** `configs/blackout_targets.json` holds `dead_share_inside` = 0.56 (tolerance 0.15), the share of ball-missing frames that are dead ball inside blackouts. The file's own note says it "is measured on only ~900 public-window frames". It was measured from the window's ground-truth labels on 20 Oct, it is one of the terms of the loss and one of the pass/fail gates in `scripts/fit_blackouts.py`, and the resulting `configs/blackout_sim.json` generates the blackouts on which the dead-ball model, the team model, stream B and every candidate selection run. The simulator was never refitted without it. **This is a disclosed deviation from the rule that the window is not a tuning set.** The effect on the submitted file cannot be removed without retraining everything; we did not measure it. There is evidence that the target is too low: on the real match S calls 85.8 % of blackout frames dead (`docs/s/s.drift.json`) against 0.56 in the simulator, and the simulator's range for that statistic is 27 to 59 %. So real blackouts look more like stoppages than the simulator makes them, and the simulator-based scores (including the K-sim and M rows) overstate how much live play is hidden.
+
+**Final check and why the file was not changed.** As the last step of the pre-registered procedure we ran `scripts/final_check.py` once on a17. It validates the file (valid, 199,319 rows) and prints two booleans and no score (it computes window scores of 21 shifted copies and a swapped copy internally and discards them): whether the best frame offset among -50 to +50 frames (step 5) equals zero, and whether swapping H and A is worse. Result: **best_offset_is_zero = False; swap_HA_is_worse = True.** The orientation check passes. The offset boolean says that some shift scored at least marginally higher on the window than zero.
+
+We did not change the file: frame alignment is established independently (the organisers' smoother reproduces to the digit through the same loader and frame index, read 1), the window holds only 17 possessions so a shift of 0.2 to 2 s can flip one by chance, and choosing a shift from the window would be tuning, which the rules forbid. The size and sign of the best offset were not printed and are not known to us. The boolean was a badly designed test and we do not lean on it; the evidence for alignment is the organisers' smoother reproducing 0.3256 to the digit (reads 1 and 11).
 
 **Final check of S (read 9).** After S was accepted under Amendment 3, `scripts/final_check.py` was run once on `s.csv` (11 Nov, after the S registration; the public ground-truth copy was on the laptop, so it ran there). Result: file valid, 199,319 rows; **best_offset_is_zero = False; swap_HA_is_worse = True**; no score printed or logged. (With 17 possessions and 21 offsets, zero being the single best offset is unlikely even for a correct file, so a False here says little either way.) Same outcome as for a17, and the same decision: the file is not changed, for the reasons above. S was selected before this check; the check did not influence it.
 
@@ -261,6 +355,8 @@ S (`--name s`, without `--kickoff-dead`) and the predecessor (`--select models/a
 - Licences: this repository is MIT (`LICENSE`); the organisers' scorer vendored in `mtah/eval/official/` keeps its MIT notice (`mtah/eval/official/LICENSE-organisers`); PathCRF is MPL-2.0 and not copied (`THIRD_PARTY.md`); DFL open data CC BY 4.0; SkillCorner open data MIT.
 
 ## 9. Where the numbers come from
+
+*Table 11. Where each group of numbers in this document comes from.*
 
 | content | file |
 |---|---|

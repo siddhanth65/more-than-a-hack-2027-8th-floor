@@ -1,0 +1,76 @@
+/* Print stylesheet for docs/technical-document.md -> PDF (see scripts/build_pdf.py).
+   System fonts only; no network access is needed at render time. */
+:root{
+  --ink:#1b1f24; --muted:#5b636d; --rule:#d5d9de; --soft:#f3f5f7; --head:#e8ecf0;
+  --accent:#1f4e79;
+  --serif:Calibri,Carlito,"Segoe UI","Helvetica Neue",Arial,"Liberation Sans",sans-serif;
+  --sans:"Segoe UI",Calibri,Carlito,"Helvetica Neue",Arial,"Liberation Sans",sans-serif;
+  --mono:Consolas,"Cascadia Mono","DejaVu Sans Mono","Liberation Mono",monospace;
+}
+@page{
+  size:A4; margin:20mm 20mm 20mm 20mm;
+  @bottom-left{content:"More Than A Hack 2027 \2014  team 8th floor";font:8pt var(--sans);color:#6b727b}
+  @bottom-right{content:"Page " counter(page) " of " counter(pages);font:8pt var(--sans);color:#6b727b}
+}
+*{box-sizing:border-box}
+html{font-size:10pt}
+body{margin:0;font-family:var(--serif);line-height:1.38;color:var(--ink);
+  font-variant-numeric:lining-nums tabular-nums;hyphens:manual;orphans:3;widows:3;
+  text-align:left;overflow-wrap:break-word}
+p{margin:0 0 .5em}
+a{color:var(--accent);text-decoration:none;border-bottom:.5pt solid #9db4cc;overflow-wrap:anywhere}
+strong{font-weight:700}
+em{font-style:italic}
+
+/* headings */
+h1,h2,h3{font-family:var(--sans);color:var(--ink);line-height:1.2;break-after:avoid;break-inside:avoid}
+h1{font-size:21pt;font-weight:700;margin:0 0 .25em;letter-spacing:-.01em;color:var(--accent)}
+h2{font-size:13pt;font-weight:650;margin:1.2em 0 .45em;padding-bottom:.18em;border-bottom:1pt solid var(--accent);color:var(--accent)}
+h3{font-size:11pt;font-weight:650;margin:1.2em 0 .4em}
+h2+h3{margin-top:.6em}
+
+/* title block */
+.title{margin-bottom:1.1em}
+.title .subtitle{font:600 12pt var(--sans);color:var(--muted);margin:0 0 .9em}
+.title ul{list-style:none;margin:0 0 1em;padding:.5em 0;border-top:.6pt solid var(--rule);border-bottom:.6pt solid var(--rule);font-size:9.6pt}
+.title ul li{margin:.2em 0;padding:0 0 0 10.6em;text-indent:-10.6em}
+.title ul li strong{font-family:var(--sans);font-size:8.6pt;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);display:inline-block;width:10.6em;text-indent:0}
+
+/* at a glance box */
+blockquote.glance{margin:0 0 1em;padding:.7em 1em .5em;border:1pt solid var(--accent);border-left-width:4pt;background:var(--soft);
+  break-inside:avoid;font-size:9.6pt;line-height:1.38}
+blockquote.glance>p:first-child{font:700 10.5pt var(--sans);color:var(--accent);margin:0 0 .35em;text-transform:uppercase;letter-spacing:.05em}
+blockquote.glance ul{margin:0;padding-left:1.1em}
+blockquote.glance li{margin:0 0 .3em}
+
+/* lists */
+ul,ol{margin:.1em 0 .7em;padding-left:1.4em}
+li{margin:0 0 .25em}
+li>p{margin:0 0 .3em}
+ol>li{padding-left:.15em}
+
+/* code */
+code{font-family:var(--mono);font-size:.86em;background:var(--soft);padding:.03em .15em;border-radius:2pt;
+  overflow-wrap:anywhere;word-break:break-word;font-variant-numeric:normal}
+pre{font-family:var(--mono);font-size:8.6pt;line-height:1.38;background:var(--soft);border:.6pt solid var(--rule);
+  border-left:2.5pt solid #9aa5b1;border-radius:2pt;padding:.55em .8em;margin:.3em 0 .9em;
+  white-space:pre-wrap;overflow-wrap:anywhere;word-break:normal;break-inside:avoid}
+pre code{background:none;padding:0;font-size:inherit}
+
+/* tables */
+.tw{margin:.2em 0 1em}
+.tw.short{break-inside:avoid}
+table{width:100%;border-collapse:collapse;table-layout:auto;font-family:var(--sans);font-size:8.4pt;line-height:1.25;
+  font-variant-numeric:lining-nums tabular-nums}
+table.wide{font-size:8pt}
+th,td{padding:.2em .4em;vertical-align:top;text-align:left;border-bottom:.5pt solid var(--rule);overflow-wrap:break-word}
+th{background:var(--head);font-weight:650;border-bottom:.9pt solid #9aa5b1;border-top:.9pt solid #9aa5b1}
+td.num,th.num{text-align:right;white-space:nowrap}
+tr{break-inside:avoid}
+td code,th code{font-size:.9em;overflow-wrap:anywhere}
+p.caption{font:italic 8.8pt var(--sans);color:var(--muted);margin:.9em 0 .25em;break-after:avoid;break-inside:avoid}
+p.caption em{font-style:normal}
+p.caption em::first-line{font-weight:400}
+
+/* misc */
+hr{border:0;border-top:.6pt solid var(--rule);margin:1em 0}
