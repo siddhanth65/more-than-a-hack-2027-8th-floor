@@ -30,10 +30,9 @@ def basepred(a):
 def score(a):
     import pandas as pd
     import exp_seq_lomo as L
-    import exp_seq_lomo_gru as gl
     import s_selftrain as S
     if a.lomo:
-        L.L = Path(a.lomo); gl.L = Path(a.lomo)
+        L.L = Path(a.lomo)
     rows = []
     for F in MATCHES:
         for k in S.keys_of(F):
