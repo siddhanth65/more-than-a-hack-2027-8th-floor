@@ -91,6 +91,10 @@ def load_half_sim(d, key, seed):
     for c in ("team", "type", "half"):
         tags[c] = tags[c].astype(object).where(tags[c].notna(), None)
     events = pd.read_parquet(str(st) + ".events.parquet")
+    from mtah.io.tags import env_shift, shift_set_pieces
+    sh = env_shift("MTAH_SP_SHIFT")   # Amendment 5 stand-ins: opt-in, off by default
+    if sh:
+        tags = shift_set_pieces(tags, sh, meta["fps"])
     return SimHalf(key=key, seed=seed, match=m, tags=tags, blackout=z["blackout"], truth=truth, events=events)
 
 
